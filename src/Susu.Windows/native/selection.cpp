@@ -21,7 +21,16 @@ extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_
     ComPtr<IUIAutomation2> automation2;
     if(SUCCEEDED(automation.As(&automation2))){automation2->put_ConnectionTimeout(150);automation2->put_TransactionTimeout(300);}
     ComPtr<IUIAutomationElement> element;
-    hr=automation->ElementFromHandle(target,&element);
+    const bool foreground=target==GetForegroundWindow();
+    if(foreground){
+        hr=automation->GetFocusedElement(&element);
+        if(SUCCEEDED(hr)){
+            int processId=0;DWORD expected=0;
+            GetWindowThreadProcessId(target,&expected);
+            hr=element->get_CurrentProcessId(&processId);
+            if(SUCCEEDED(hr)&&static_cast<DWORD>(processId)!=expected){*reason=4;return S_OK;}
+        }
+    }else hr=automation->ElementFromHandle(target,&element);
     if(FAILED(hr))return hr;
     BOOL password=FALSE;
     hr=element->get_CurrentIsPassword(&password);
@@ -44,11 +53,20 @@ extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_
         BSTR value=nullptr;
         hr=range->GetText(static_cast<int>(capacity),&value);if(FAILED(hr))return hr;
         const auto length=SysStringLen(value);
+        if(length&&wmemchr(value,0,length)){SysFreeString(value);return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);}
         if(length>0){if(!selected.empty())selected+=L"\n";selected.append(value,length);}
         SysFreeString(value);
         if(selected.size()>=capacity)return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
     }
     if(selected.empty()){*reason=3;return S_OK;}
+    if(foreground){
+        ComPtr<IUIAutomationElement> current;
+        BOOL same=FALSE;
+        hr=automation->GetFocusedElement(&current);
+        if(SUCCEEDED(hr))hr=automation->CompareElements(element.Get(),current.Get(),&same);
+        if(FAILED(hr))return hr;
+        if(GetForegroundWindow()!=target||!same){*reason=4;return S_OK;}
+    }
     memcpy(text,selected.c_str(),(selected.size()+1)*sizeof(wchar_t));
     return S_OK;
 }

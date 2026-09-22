@@ -1,0 +1,97 @@
+{
+  "Timestamp": "2026-09-22T14:31:19.7386895+00:00",
+  "OS": "Microsoft Windows 10.0.26200",
+  "Architecture": "X64",
+  "Results": [
+    {
+      "Id": "NativeAOT",
+      "Status": "passed",
+      "Milliseconds": 0.0229,
+      "Error": null
+    },
+    {
+      "Id": "HWND-create-destroy",
+      "Status": "passed",
+      "Milliseconds": 20.6118,
+      "Error": null
+    },
+    {
+      "Id": "UIA-MTA-activation",
+      "Status": "passed",
+      "Milliseconds": 13.4782,
+      "Error": null
+    },
+    {
+      "Id": "SAPI-ISpVoice-activation",
+      "Status": "passed",
+      "Milliseconds": 26.2861,
+      "Error": null
+    },
+    {
+      "Id": "WASAPI-MMDeviceEnumerator-activation",
+      "Status": "passed",
+      "Milliseconds": 0.0458,
+      "Error": null
+    },
+    {
+      "Id": "MF-startup-shutdown",
+      "Status": "passed",
+      "Milliseconds": 3.5936,
+      "Error": null
+    },
+    {
+      "Id": "DPAPI-roundtrip-tamper",
+      "Status": "passed",
+      "Milliseconds": 15.9457,
+      "Error": null
+    },
+    {
+      "Id": "SQLite-parameters-online-backup",
+      "Status": "passed",
+      "Milliseconds": 7.362,
+      "Error": null
+    },
+    {
+      "Id": "YAML-low-level-parser",
+      "Status": "passed",
+      "Milliseconds": 0.3066,
+      "Error": null
+    },
+    {
+      "Id": "Ed25519-RFC8032-tamper",
+      "Status": "passed",
+      "Milliseconds": 3.1397,
+      "Error": null
+    },
+    {
+      "Id": "QuickJS-ESM-Promise-interrupt",
+      "Status": "passed",
+      "Milliseconds": 359.9253,
+      "Error": null
+    },
+    {
+      "Id": "ELS-language-detection",
+      "Status": "passed",
+      "Milliseconds": 880.1819,
+      "Error": null
+    },
+    {
+      "Id": "UIA-selected-empty-password-timeout",
+      "Status": "passed",
+      "Milliseconds": 1309.325,
+      "Error": null
+    },
+    {
+      "Id": "IA2-hand-vtable-synthetic-bounds",
+      "Status": "passed",
+      "Milliseconds": 0.0346,
+      "Error": null
+    },
+    {
+      "Id": "MSAA-password-unsupported-500ms",
+      "Status": "passed",
+      "Milliseconds": 453.648,
+      "Error": null
+    }
+  ]
+}

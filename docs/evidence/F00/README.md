@@ -39,11 +39,11 @@ The executable rejects JIT execution for its NativeAOT result. Individual activa
 
 | Cases | State | Remaining evidence |
 |---|---|---|
-| F00.1 | In progress | UI lockfile, remotely executed CI and complete redistribution-license audit |
-| F00.2 | In progress | WebView, ELS, IA2 and deeper COM behavior; 11 narrow AOT probes passed |
-| F00.3 / X01–X07 | Not executed | AppContainer/IPC access matrix; complete three-route comparison |
-| F00.4 / C01–C07 / SEL01–SEL03 | Not executed | Selection helper, clipboard transactions, ten actual applications |
-| F00.5 / PER01–PER05 | Not executed | Representative windows, thirty samples, idle/warm tree memory, capture backend |
+| F00.1 | In progress | UI lockfile complete; remote CI execution and complete redistribution-license audit remain |
+| F00.2 | In progress | AOT activation/library/ELS/WebView probes pass; IA2 synthetic hand-vtable probe passes, real provider text remains |
+| F00.3 / X01–X07 | In progress | Narrow AppContainer checks pass; authenticated IPC/full access matrix and three-route comparison remain |
+| F00.4 / C01–C07 / SEL01–SEL03 | In progress | Bounded UIA helper/IA2 ABI tests; clipboard transactions and ten actual applications remain |
+| F00.5 / PER01–PER05 | In progress | Eight-window UI memory results recorded; full plugin workload, latency distributions and capture backend remain |
 
 F01–F03 remain pending the documented hard dependencies. No product entry point is registered and no fake service is shipped.
 
@@ -55,4 +55,6 @@ The Vue fixture toolchain is now locked and builds successfully. Browser inspect
 
 `selection-probes.json` records published AOT UIA helper tests against a synthetic Win32 Edit control: selected text, empty selection, password field and stalled-helper termination all passed. It does not establish real-app coverage or IA2/clipboard readiness.
 
-`windows-smoke.jsonl` proves the eight-window fixture opens, hides, closes controllers and observes browser process exit. `tools/measure-windows.ps1` is collecting the full process tree at warm/idle timepoints. Early raw samples exceed the 60 MiB target; review the final sample file and keep G0 unpassed unless the actual required budgets and other gates are met.
+`windows-smoke.jsonl` proves the eight-window fixture opens, hides, closes controllers and observes browser process exit. Completed baseline and suspension measurements are analyzed in [window-memory-analysis.md](window-memory-analysis.md). Baseline warm PWS fails; suspension passes the narrow fixture's warm/idle memory and sampled CPU targets. The full required workload and latency are still missing, so G0 remains open.
+
+`ia2-selection-probes.json` adds the hand-written IA2 vtable selection reader's synthetic range/bounds checks to published AOT coverage. The helper now resolves the foreground UIA focused element and rejects a changed foreground/focused element before returning selected text. UIA unsupported-pattern results can fall back to MSAA/IServiceProvider/IAccessibleText. Password/empty results do not fall through. This is not yet full focus-race or real-app matrix acceptance. Desktop app discovery succeeded, but the computer-use tool's Notepad launch returned `Computer Use app approval timed out`; a read-only follow-up confirmed no Notepad window, so no app input or real-app success is claimed.

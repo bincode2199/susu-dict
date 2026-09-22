@@ -5,6 +5,12 @@ using Susu.Windows;
 internal sealed record SelectionResult(string Text,string Reason);
 internal static class SelectionTests
 {
+    internal static string ReadExternal(string window,bool ia2Only)
+    {
+        var timer=Stopwatch.StartNew();
+        using var helper=Start(ia2Only?"--ia2-child":"--selection-child",window);
+        return ReadBounded(helper,Math.Max(1,500-(int)timer.ElapsedMilliseconds));
+    }
     private static Process Start(params string[] args)
     {
         var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
@@ -38,6 +44,29 @@ internal static class SelectionTests
         catch(TimeoutException){if(!slow.HasExited||watch.ElapsedMilliseconds>1500)throw new InvalidOperationException("Stalled helper cleanup was not bounded.");}
     }
 
+    internal static void RunMsaa(int helperDeadline)
+    {
+        foreach(string mode in new[]{"text","empty","password"})
+        {
+            using var target=Start("--selection-target",mode);
+            try
+            {
+                using var startup=new CancellationTokenSource(3000);
+                string? window=target.StandardOutput.ReadLineAsync(startup.Token).AsTask().GetAwaiter().GetResult();
+                if(!long.TryParse(window,out long hwnd)||hwnd==0)throw new InvalidOperationException("MSAA target startup failed.");
+                var timer=Stopwatch.StartNew();
+                using var helper=Start("--ia2-child",window!);
+                string output;
+                try{output=ReadBounded(helper,Math.Max(1,helperDeadline-(int)timer.ElapsedMilliseconds));}
+                catch(TimeoutException){throw new TimeoutException($"MSAA {mode} exceeded {helperDeadline} ms; helper terminated.");}
+                var result=JsonSerializer.Deserialize(output,ProbeJson.Default.SelectionResult) ?? throw new InvalidOperationException("Missing MSAA/IA2 result.");
+                Console.Error.WriteLine($"MSAA {mode}: {result.Reason}, {timer.Elapsed.TotalMilliseconds:F3} ms, deadline {helperDeadline} ms");
+                if(result.Text.Length!=0||result.Reason!=(mode=="password"?"password":"unsupported"))throw new InvalidOperationException($"MSAA {mode}: {result.Reason}");
+            }
+            finally{if(!target.HasExited){target.Kill();target.WaitForExit(2000);}}
+        }
+    }
+
     private static string ReadBounded(Process helper,int milliseconds)
     {
         using var timeout=new CancellationTokenSource(milliseconds);
@@ -54,7 +83,7 @@ internal static class SelectionTests
             if(total==buffer.Length){if(!helper.HasExited)helper.Kill();helper.WaitForExit(1000);throw new InvalidOperationException("Selection frame exceeded limit.");}
             string output=new(buffer,0,total);
             helper.WaitForExitAsync(timeout.Token).GetAwaiter().GetResult();
-            if(helper.ExitCode!=0)throw new InvalidOperationException($"Selection helper exit {helper.ExitCode}.");
+            if(helper.ExitCode!=0){char[] diagnostic=new char[512];int read=helper.StandardError.Read(diagnostic,0,diagnostic.Length);throw new InvalidOperationException($"Selection helper exit {helper.ExitCode}: {new string(diagnostic,0,read).Trim()}");}
             return output;
         }
         catch(OperationCanceledException)

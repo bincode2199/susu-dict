@@ -55,3 +55,19 @@ The work is saved as files on the requested branch. No git commit was made: the 
 - Next actions: finish analyzing that measurement, record the architecture gate result, investigate a policy-compatible memory improvement, complete remaining F00 matrices and then proceed through F01–F03. No remote push or rate-limit reset-credit redemption occurred.
 
 Do not mark modules complete based on a source skeleton or JIT builds. Preserve the original design files.
+
+## Continuation — 13:15 UTC onward
+
+- Initial local checkpoint commit `353ba77` now preserves the supplied design baseline and F00 source/evidence on `work/f00-f03-foundation`. Command-local author is Codex; no user Git identity configuration changed. No remote push.
+- Earlier baseline measurement completed successfully: full tree private working set at 300.047 seconds was **186.75 MiB** (60 MiB target failed), and at 899.125 seconds **2.95 MiB** after browser exit (25 MiB idle target passed for this fixture). Raw results remain at `F00/windows-memory-samples.json`. Hardware/runtime details captured in `F00/environment.json`.
+- Isolated strict Jint NativeAOT publication reproduced IL2026/IL2104/IL3053 failure; diagnostics retained in `F00/jint-aot-build.txt`. No warning suppression or Jint performance claim.
+- Added separate WebView TrySuspend/Resume and MemoryUsageTargetLevel Low/Normal experiments. They are not combined. Suspension smoke restored DOM in all eight views and observed browser exit. The full suspension attempt exposed a message-pump timing bug: it slept after its completion predicate had already become true, and started the ten-minute timer after suspending. Fixed both before restarting. Interrupted evidence is retained under `F00/memory-suspend-invalid-timing`; it is not acceptance evidence.
+- Five-hour usage had reset naturally (2% used at this continuation's start), weekly usage 79%. No reset credits consumed. G0 is still open; F01–F03 remain pending.
+
+## Checkpoint — 14:31 UTC
+
+- Corrected full suspension measurement completed successfully; no measurement process remains running. Warm (300.016 s) tree PWS 31.87 MiB; idle (899.125 s) 2.80 MiB. Warm private bytes remain 316.30 MiB. Sampled warm/idle CPU approximately 0.0261%/0.0272% of one core, below 0.1%. See `F00/window-memory-analysis.md` for scope, raw links and comparison caveats. This excludes the plugin host/full package workloads and is not PER02 acceptance.
+- Added explicit native IA2 text vtable calls, MSAA focus/protected-state traversal, UIA focused-element matching, bounded external helper CLI and embedded-NUL rejection. Synthetic vtable checks cover multi/empty selection, malformed offsets/counts, overflow and native failure. Standard Win32 Edit out-of-process MSAA checks cover password/unsupported results.
+- A new MSAA fixture initially hit the 500 ms deadline because an unsupported QueryService HRESULT became an unhandled helper exception. Isolated diagnostics found `E_INVALIDARG` at IA2 QueryService. That exact unsupported-service case now returns unsupported; other failures remain errors. Helper exceptions now produce bounded content-free diagnostics. Earlier failure and diagnostic reports are preserved. Final strict AOT report `F00/ia2-selection-probes.json` passes 15 probes, including MSAA under the original 500 ms deadline. Real IA2 provider text and full focus-race tests remain unverified.
+- Computer-use app discovery worked, but Notepad launch returned `Computer Use app approval timed out`. A read-only window check confirmed no Notepad window. No app input occurred; ten-app coverage remains unexecuted.
+- Latest usage checkpoint before these last fixes: five-hour 47%, weekly 86%. No reset credit consumed and no remote push. F01/F02/F03 have not begun because G0 is still open.

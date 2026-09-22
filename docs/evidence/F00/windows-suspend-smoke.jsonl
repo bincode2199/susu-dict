@@ -1,0 +1,8 @@
+{"event":"start","tick":137652562}
+{"event":"all-visible","tick":137672750}
+{"event":"all-hidden","tick":137672781}
+{"event":"all-suspended","tick":137712828}
+{"event":"all-resumed-dom-verified","tick":137726421}
+{"event":"controllers-closed","tick":137726937}
+{"event":"browser-exited","tick":137727421}
+{"event":"finished","tick":137732953}

@@ -8,6 +8,7 @@
 #include <functional>
 #include <cstdio>
 #include <thread>
+#include <algorithm>
 
 using Microsoft::WRL::ComPtr;
 using Microsoft::WRL::Callback;
@@ -34,6 +35,7 @@ static void Pump(const std::function<bool()>& stop, int milliseconds) {
     while (!stop() && Clock::now() < deadline) {
         MSG message{};
         while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
+        if(stop())break;
         const auto remaining=std::chrono::duration_cast<std::chrono::milliseconds>(deadline-Clock::now()).count();
         if(remaining>0)MsgWaitForMultipleObjectsEx(0,nullptr,static_cast<DWORD>(remaining),QS_ALLINPUT,MWMO_INPUTAVAILABLE);
     }
@@ -106,6 +108,7 @@ static HRESULT MeasureWindows(const wchar_t* folder, const wchar_t* userData, in
         Event("all-visible");
         for (auto& window:windows) {window->controller->put_IsVisible(FALSE);ShowWindow(window->hwnd,SW_HIDE);}
         Event("all-hidden");
+        const auto hiddenAt=Clock::now();
         for(auto& window:windows){
             if(memoryMode==1){
                 ComPtr<ICoreWebView2_3> view3;hr=window->view.As(&view3);if(FAILED(hr))break;
@@ -120,7 +123,11 @@ static HRESULT MeasureWindows(const wchar_t* folder, const wchar_t* userData, in
                 hr=view19->put_MemoryUsageTargetLevel(COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW);if(FAILED(hr))break;
             }
         }
-        if(SUCCEEDED(hr)){Event(memoryMode==1?"all-suspended":memoryMode==2?"low-memory-requested":"baseline-hidden");Pump([]{return false;},warmMilliseconds);}
+        if(SUCCEEDED(hr)){
+            Event(memoryMode==1?"all-suspended":memoryMode==2?"low-memory-requested":"baseline-hidden");
+            const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-hiddenAt).count();
+            Pump([]{return false;},static_cast<int>(std::max<int64_t>(0,warmMilliseconds-elapsed)));
+        }
         if(SUCCEEDED(hr)&&warmMilliseconds<10000&&memoryMode!=0){
             for(auto& window:windows){
                 if(memoryMode==1){ComPtr<ICoreWebView2_3> view3;hr=window->view.As(&view3);if(SUCCEEDED(hr))hr=view3->Resume();}

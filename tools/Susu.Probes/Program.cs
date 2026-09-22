@@ -9,11 +9,20 @@ if (args.Length == 3 && args[0] == "--sandbox-child") return SandboxChild.Run(ar
 if (args.Length == 1 && args[0] == "--sandbox-grandchild") return 0;
 if (args.Length == 1 && args[0] == "--selection-stall") { Thread.Sleep(10000); return 0; }
 if (args.Length == 2 && args[0] == "--selection-target") { SelectionProbe.RunTarget(args[1] == "password" ? 1 : 0,args[1] == "empty" ? 1 : 0); return 0; }
-if (args.Length == 2 && args[0] == "--selection-child")
+if(args.Length==2 && args[0] is "--read-selection" or "--read-ia2")
 {
-    var result = SelectionProbe.ReadWindow((nint)long.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture));
-    Console.WriteLine(JsonSerializer.Serialize(new SelectionResult(result.Text,result.Reason),ProbeJson.Default.SelectionResult));
-    return 0;
+    try{Console.WriteLine(SelectionTests.ReadExternal(args[1],args[0]=="--read-ia2"));return 0;}
+    catch(Exception error){Console.Error.WriteLine(error.Message);return 1;}
+}
+if (args.Length == 2 && args[0] is "--selection-child" or "--ia2-child")
+{
+    try
+    {
+        var result = SelectionProbe.ReadWindow((nint)long.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture),args[0]=="--ia2-child");
+        Console.WriteLine(JsonSerializer.Serialize(new SelectionResult(result.Text,result.Reason),ProbeJson.Default.SelectionResult));
+        return 0;
+    }
+    catch(Exception error){Console.Error.WriteLine($"Selection native error {error.GetType().Name} 0x{error.HResult:X8}");return 1;}
 }
 if (args.Length is 2 or 3 && args[0] is "--measure-windows" or "--smoke-windows")
 {
@@ -43,6 +52,9 @@ Run("Ed25519-RFC8032-tamper", LibraryProbes.Ed25519);
 Run("QuickJS-ESM-Promise-interrupt", QuickJsProbe.Run);
 Run("ELS-language-detection", ExtendedPlatformProbes.LanguageDetection);
 if(args.Contains("--selection")) Run("UIA-selected-empty-password-timeout", SelectionTests.Run);
+if(args.Contains("--selection")) Run("IA2-hand-vtable-synthetic-bounds", SelectionProbe.VerifyIa2Abi);
+if(args.Contains("--selection")) Run("MSAA-password-unsupported-500ms",()=>SelectionTests.RunMsaa(500));
+if(args.Contains("--msaa-diagnostic")) Run("MSAA-diagnostic-3s-not-acceptance",()=>SelectionTests.RunMsaa(3000));
 if (args.Contains("--sandbox")) Run("AppContainer-token-resource-boundary", () =>
 {
     string secret = Path.GetFullPath("artifacts/probe-data/synthetic-secret.txt");

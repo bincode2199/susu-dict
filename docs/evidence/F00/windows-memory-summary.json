@@ -1,0 +1,34 @@
+{
+  "scope": "F00 eight-window UI fixture only; excludes plugin host, services and full production state",
+  "logicalProcessors": 8,
+  "warm": {
+    "secondsAfterHidden": 300.047,
+    "privateWorkingSetMiB": 186.74609375,
+    "privateBytesMiB": 322.51171875,
+    "processCount": 15,
+    "withinFixtureMemoryTarget": false
+  },
+  "idle": {
+    "secondsAfterHidden": 899.125,
+    "privateWorkingSetMiB": 2.94921875,
+    "privateBytesMiB": 6.5,
+    "processCount": 2,
+    "withinFixtureMemoryTarget": true
+  },
+  "warmCpu": {
+    "from": 240.0,
+    "to": 300.047,
+    "elapsedSeconds": 59.7831817,
+    "cpuSeconds": 0.640625,
+    "percentOneCore": 1.071580638204808,
+    "percentMachine": 0.133947579775601
+  },
+  "idleCpu": {
+    "from": 840.016,
+    "to": 899.125,
+    "elapsedSeconds": 58.938659,
+    "cpuSeconds": 0.390625,
+    "percentOneCore": 0.6627653337005852,
+    "percentMachine": 0.08284566671257315
+  }
+}

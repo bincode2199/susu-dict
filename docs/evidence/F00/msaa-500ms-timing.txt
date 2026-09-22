@@ -1,0 +1,3 @@
+MSAA text: unsupported, 89.774 ms, deadline 500 ms
+MSAA empty: unsupported, 50.393 ms, deadline 500 ms
+MSAA password: password, 55.842 ms, deadline 500 ms
