@@ -1,0 +1,11 @@
+{
+  "quickjs": {
+    "repository": "https://github.com/quickjs-ng/quickjs",
+    "tag": "v0.17.0",
+    "commit": "6d46d07d04041b40f4f49eaa7fdebe44c314c699",
+    "license": "MIT"
+  },
+  "msvc": "14.44.35207",
+  "windowsSdk": "10.0.26100.0",
+  "architecture": "x64"
+}

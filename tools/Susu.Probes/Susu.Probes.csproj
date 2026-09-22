@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><PublishAot>true</PublishAot><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Susu.Windows/Susu.Windows.csproj" /></ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="NSec.Cryptography" />
+    <PackageReference Include="Microsoft.Web.WebView2" ExcludeAssets="all" />
+  </ItemGroup>
+</Project>

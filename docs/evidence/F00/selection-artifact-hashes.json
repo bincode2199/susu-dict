@@ -1,0 +1,12 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "0E02DC32B21A9FD1F8C55AFDA59A82572484C0DB407FBC2F9FD0472C0979F82D",
+    "Path": "C:\\workspace\\susu-dict\\artifacts\\selection-probes\\Susu.Probes.exe"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "3513E63416D071691BE82BCBA4FE59295632B759D230333AE64C16BFC917FF7E",
+    "Path": "C:\\workspace\\susu-dict\\artifacts\\selection-probes\\susu_windows_probe.dll"
+  }
+]

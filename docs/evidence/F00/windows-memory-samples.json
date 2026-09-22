@@ -1,0 +1,676 @@
+[
+  {
+    "timestamp": "2026-09-22T07:01:07.1015529+00:00",
+    "secondsAfterHidden": 0.141,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 1933312,
+        "privateBytes": 4931584,
+        "cpuTicks": 4375000
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#9",
+        "privateWorkingSet": 1085440,
+        "privateBytes": 1748992,
+        "cpuTicks": 781250
+      },
+      {
+        "pid": 18184,
+        "name": "msedgewebview2#12",
+        "privateWorkingSet": 57511936,
+        "privateBytes": 70782976,
+        "cpuTicks": 29843750
+      },
+      {
+        "pid": 11116,
+        "name": "msedgewebview2#13",
+        "privateWorkingSet": 1134592,
+        "privateBytes": 2465792,
+        "cpuTicks": 312500
+      },
+      {
+        "pid": 972,
+        "name": "msedgewebview2#14",
+        "privateWorkingSet": 8265728,
+        "privateBytes": 16596992,
+        "cpuTicks": 4218750
+      },
+      {
+        "pid": 16060,
+        "name": "msedgewebview2#15",
+        "privateWorkingSet": 6631424,
+        "privateBytes": 13881344,
+        "cpuTicks": 3593750
+      },
+      {
+        "pid": 13936,
+        "name": "msedgewebview2#16",
+        "privateWorkingSet": 2764800,
+        "privateBytes": 8597504,
+        "cpuTicks": 937500
+      },
+      {
+        "pid": 10672,
+        "name": "msedgewebview2#17",
+        "privateWorkingSet": 13406208,
+        "privateBytes": 26447872,
+        "cpuTicks": 2812500
+      },
+      {
+        "pid": 7788,
+        "name": "msedgewebview2#18",
+        "privateWorkingSet": 13811712,
+        "privateBytes": 25919488,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 6480,
+        "name": "msedgewebview2#19",
+        "privateWorkingSet": 13352960,
+        "privateBytes": 25268224,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 18256,
+        "name": "msedgewebview2#20",
+        "privateWorkingSet": 12660736,
+        "privateBytes": 24547328,
+        "cpuTicks": 2656250
+      },
+      {
+        "pid": 4892,
+        "name": "msedgewebview2#21",
+        "privateWorkingSet": 12574720,
+        "privateBytes": 25468928,
+        "cpuTicks": 2343750
+      },
+      {
+        "pid": 18008,
+        "name": "msedgewebview2#22",
+        "privateWorkingSet": 17362944,
+        "privateBytes": 29908992,
+        "cpuTicks": 1875000
+      },
+      {
+        "pid": 2308,
+        "name": "msedgewebview2#23",
+        "privateWorkingSet": 16891904,
+        "privateBytes": 27971584,
+        "cpuTicks": 2187500
+      },
+      {
+        "pid": 9348,
+        "name": "msedgewebview2#24",
+        "privateWorkingSet": 15273984,
+        "privateBytes": 26415104,
+        "cpuTicks": 3437500
+      }
+    ],
+    "totalPrivateWorkingSet": 194662400,
+    "totalPrivateBytes": 330952704
+  },
+  {
+    "timestamp": "2026-09-22T07:01:59.3605526+00:00",
+    "secondsAfterHidden": 60.203,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 1912832,
+        "privateBytes": 4894720,
+        "cpuTicks": 6718750
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#9",
+        "privateWorkingSet": 1069056,
+        "privateBytes": 1720320,
+        "cpuTicks": 781250
+      },
+      {
+        "pid": 18184,
+        "name": "msedgewebview2#12",
+        "privateWorkingSet": 59977728,
+        "privateBytes": 75157504,
+        "cpuTicks": 36093750
+      },
+      {
+        "pid": 11116,
+        "name": "msedgewebview2#13",
+        "privateWorkingSet": 1519616,
+        "privateBytes": 3174400,
+        "cpuTicks": 312500
+      },
+      {
+        "pid": 972,
+        "name": "msedgewebview2#14",
+        "privateWorkingSet": 8179712,
+        "privateBytes": 16437248,
+        "cpuTicks": 4375000
+      },
+      {
+        "pid": 16060,
+        "name": "msedgewebview2#15",
+        "privateWorkingSet": 6246400,
+        "privateBytes": 13271040,
+        "cpuTicks": 4062500
+      },
+      {
+        "pid": 13936,
+        "name": "msedgewebview2#16",
+        "privateWorkingSet": 2727936,
+        "privateBytes": 8486912,
+        "cpuTicks": 1093750
+      },
+      {
+        "pid": 10672,
+        "name": "msedgewebview2#17",
+        "privateWorkingSet": 14938112,
+        "privateBytes": 26808320,
+        "cpuTicks": 2968750
+      },
+      {
+        "pid": 7788,
+        "name": "msedgewebview2#18",
+        "privateWorkingSet": 15376384,
+        "privateBytes": 26284032,
+        "cpuTicks": 3437500
+      },
+      {
+        "pid": 6480,
+        "name": "msedgewebview2#19",
+        "privateWorkingSet": 14962688,
+        "privateBytes": 25722880,
+        "cpuTicks": 2812500
+      },
+      {
+        "pid": 18256,
+        "name": "msedgewebview2#20",
+        "privateWorkingSet": 14200832,
+        "privateBytes": 24887296,
+        "cpuTicks": 2812500
+      },
+      {
+        "pid": 4892,
+        "name": "msedgewebview2#21",
+        "privateWorkingSet": 14233600,
+        "privateBytes": 25931776,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 18008,
+        "name": "msedgewebview2#22",
+        "privateWorkingSet": 18862080,
+        "privateBytes": 30187520,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 2308,
+        "name": "msedgewebview2#23",
+        "privateWorkingSet": 18219008,
+        "privateBytes": 28426240,
+        "cpuTicks": 2656250
+      },
+      {
+        "pid": 9348,
+        "name": "msedgewebview2#24",
+        "privateWorkingSet": 16003072,
+        "privateBytes": 26341376,
+        "cpuTicks": 3593750
+      }
+    ],
+    "totalPrivateWorkingSet": 208429056,
+    "totalPrivateBytes": 337731584
+  },
+  {
+    "timestamp": "2026-09-22T07:04:59.3893113+00:00",
+    "secondsAfterHidden": 240.0,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 1888256,
+        "privateBytes": 4837376,
+        "cpuTicks": 19843750
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#9",
+        "privateWorkingSet": 1069056,
+        "privateBytes": 1720320,
+        "cpuTicks": 781250
+      },
+      {
+        "pid": 18184,
+        "name": "msedgewebview2#12",
+        "privateWorkingSet": 60207104,
+        "privateBytes": 75169792,
+        "cpuTicks": 41093750
+      },
+      {
+        "pid": 11116,
+        "name": "msedgewebview2#13",
+        "privateWorkingSet": 1400832,
+        "privateBytes": 2990080,
+        "cpuTicks": 468750
+      },
+      {
+        "pid": 972,
+        "name": "msedgewebview2#14",
+        "privateWorkingSet": 8155136,
+        "privateBytes": 16343040,
+        "cpuTicks": 4375000
+      },
+      {
+        "pid": 16060,
+        "name": "msedgewebview2#15",
+        "privateWorkingSet": 6205440,
+        "privateBytes": 13168640,
+        "cpuTicks": 4531250
+      },
+      {
+        "pid": 13936,
+        "name": "msedgewebview2#16",
+        "privateWorkingSet": 2736128,
+        "privateBytes": 8486912,
+        "cpuTicks": 1093750
+      },
+      {
+        "pid": 10672,
+        "name": "msedgewebview2#17",
+        "privateWorkingSet": 12750848,
+        "privateBytes": 26234880,
+        "cpuTicks": 2968750
+      },
+      {
+        "pid": 7788,
+        "name": "msedgewebview2#18",
+        "privateWorkingSet": 12877824,
+        "privateBytes": 25698304,
+        "cpuTicks": 3750000
+      },
+      {
+        "pid": 6480,
+        "name": "msedgewebview2#19",
+        "privateWorkingSet": 12779520,
+        "privateBytes": 25161728,
+        "cpuTicks": 2812500
+      },
+      {
+        "pid": 18256,
+        "name": "msedgewebview2#20",
+        "privateWorkingSet": 12644352,
+        "privateBytes": 25370624,
+        "cpuTicks": 3593750
+      },
+      {
+        "pid": 4892,
+        "name": "msedgewebview2#21",
+        "privateWorkingSet": 12677120,
+        "privateBytes": 25358336,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 18008,
+        "name": "msedgewebview2#22",
+        "privateWorkingSet": 16408576,
+        "privateBytes": 29560832,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 2308,
+        "name": "msedgewebview2#23",
+        "privateWorkingSet": 16576512,
+        "privateBytes": 27856896,
+        "cpuTicks": 2656250
+      },
+      {
+        "pid": 9348,
+        "name": "msedgewebview2#24",
+        "privateWorkingSet": 14020608,
+        "privateBytes": 26226688,
+        "cpuTicks": 3750000
+      }
+    ],
+    "totalPrivateWorkingSet": 192397312,
+    "totalPrivateBytes": 334184448
+  },
+  {
+    "timestamp": "2026-09-22T07:05:59.172493+00:00",
+    "secondsAfterHidden": 300.047,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 1925120,
+        "privateBytes": 4907008,
+        "cpuTicks": 24062500
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#9",
+        "privateWorkingSet": 1105920,
+        "privateBytes": 1781760,
+        "cpuTicks": 781250
+      },
+      {
+        "pid": 18184,
+        "name": "msedgewebview2#12",
+        "privateWorkingSet": 60579840,
+        "privateBytes": 75530240,
+        "cpuTicks": 42968750
+      },
+      {
+        "pid": 11116,
+        "name": "msedgewebview2#13",
+        "privateWorkingSet": 1421312,
+        "privateBytes": 3026944,
+        "cpuTicks": 468750
+      },
+      {
+        "pid": 972,
+        "name": "msedgewebview2#14",
+        "privateWorkingSet": 8216576,
+        "privateBytes": 16437248,
+        "cpuTicks": 4375000
+      },
+      {
+        "pid": 16060,
+        "name": "msedgewebview2#15",
+        "privateWorkingSet": 6266880,
+        "privateBytes": 13320192,
+        "cpuTicks": 4531250
+      },
+      {
+        "pid": 13936,
+        "name": "msedgewebview2#16",
+        "privateWorkingSet": 2813952,
+        "privateBytes": 8609792,
+        "cpuTicks": 1093750
+      },
+      {
+        "pid": 10672,
+        "name": "msedgewebview2#17",
+        "privateWorkingSet": 13144064,
+        "privateBytes": 26664960,
+        "cpuTicks": 3125000
+      },
+      {
+        "pid": 7788,
+        "name": "msedgewebview2#18",
+        "privateWorkingSet": 13262848,
+        "privateBytes": 26140672,
+        "cpuTicks": 3750000
+      },
+      {
+        "pid": 6480,
+        "name": "msedgewebview2#19",
+        "privateWorkingSet": 13156352,
+        "privateBytes": 25579520,
+        "cpuTicks": 2812500
+      },
+      {
+        "pid": 18256,
+        "name": "msedgewebview2#20",
+        "privateWorkingSet": 13021184,
+        "privateBytes": 25788416,
+        "cpuTicks": 3593750
+      },
+      {
+        "pid": 4892,
+        "name": "msedgewebview2#21",
+        "privateWorkingSet": 13058048,
+        "privateBytes": 25780224,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 18008,
+        "name": "msedgewebview2#22",
+        "privateWorkingSet": 16781312,
+        "privateBytes": 29978624,
+        "cpuTicks": 2656250
+      },
+      {
+        "pid": 2308,
+        "name": "msedgewebview2#23",
+        "privateWorkingSet": 16932864,
+        "privateBytes": 28266496,
+        "cpuTicks": 2656250
+      },
+      {
+        "pid": 9348,
+        "name": "msedgewebview2#24",
+        "privateWorkingSet": 14131200,
+        "privateBytes": 26365952,
+        "cpuTicks": 3750000
+      }
+    ],
+    "totalPrivateWorkingSet": 195817472,
+    "totalPrivateBytes": 338178048
+  },
+  {
+    "timestamp": "2026-09-22T07:09:59.5978812+00:00",
+    "secondsAfterHidden": 540.172,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 1888256,
+        "privateBytes": 4837376,
+        "cpuTicks": 37187500
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#9",
+        "privateWorkingSet": 1069056,
+        "privateBytes": 1720320,
+        "cpuTicks": 781250
+      },
+      {
+        "pid": 18184,
+        "name": "msedgewebview2#12",
+        "privateWorkingSet": 60436480,
+        "privateBytes": 75431936,
+        "cpuTicks": 46718750
+      },
+      {
+        "pid": 11116,
+        "name": "msedgewebview2#13",
+        "privateWorkingSet": 1359872,
+        "privateBytes": 2932736,
+        "cpuTicks": 468750
+      },
+      {
+        "pid": 972,
+        "name": "msedgewebview2#14",
+        "privateWorkingSet": 8151040,
+        "privateBytes": 16338944,
+        "cpuTicks": 4375000
+      },
+      {
+        "pid": 16060,
+        "name": "msedgewebview2#15",
+        "privateWorkingSet": 6180864,
+        "privateBytes": 13090816,
+        "cpuTicks": 5000000
+      },
+      {
+        "pid": 13936,
+        "name": "msedgewebview2#16",
+        "privateWorkingSet": 2752512,
+        "privateBytes": 8499200,
+        "cpuTicks": 1093750
+      },
+      {
+        "pid": 10672,
+        "name": "msedgewebview2#17",
+        "privateWorkingSet": 13090816,
+        "privateBytes": 26570752,
+        "cpuTicks": 3125000
+      },
+      {
+        "pid": 7788,
+        "name": "msedgewebview2#18",
+        "privateWorkingSet": 13172736,
+        "privateBytes": 26042368,
+        "cpuTicks": 3750000
+      },
+      {
+        "pid": 6480,
+        "name": "msedgewebview2#19",
+        "privateWorkingSet": 13107200,
+        "privateBytes": 25493504,
+        "cpuTicks": 2968750
+      },
+      {
+        "pid": 18256,
+        "name": "msedgewebview2#20",
+        "privateWorkingSet": 12963840,
+        "privateBytes": 25698304,
+        "cpuTicks": 3750000
+      },
+      {
+        "pid": 4892,
+        "name": "msedgewebview2#21",
+        "privateWorkingSet": 12996608,
+        "privateBytes": 25686016,
+        "cpuTicks": 2500000
+      },
+      {
+        "pid": 18008,
+        "name": "msedgewebview2#22",
+        "privateWorkingSet": 16728064,
+        "privateBytes": 29888512,
+        "cpuTicks": 2656250
+      },
+      {
+        "pid": 2308,
+        "name": "msedgewebview2#23",
+        "privateWorkingSet": 16855040,
+        "privateBytes": 28180480,
+        "cpuTicks": 2656250
+      },
+      {
+        "pid": 9348,
+        "name": "msedgewebview2#24",
+        "privateWorkingSet": 14340096,
+        "privateBytes": 26554368,
+        "cpuTicks": 3750000
+      }
+    ],
+    "totalPrivateWorkingSet": 195092480,
+    "totalPrivateBytes": 336965632
+  },
+  {
+    "timestamp": "2026-09-22T07:10:59.3211322+00:00",
+    "secondsAfterHidden": 600.063,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 1888256,
+        "privateBytes": 4866048,
+        "cpuTicks": 41718750
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#9",
+        "privateWorkingSet": 1101824,
+        "privateBytes": 1777664,
+        "cpuTicks": 781250
+      },
+      {
+        "pid": 18184,
+        "name": "msedgewebview2#12",
+        "privateWorkingSet": 48197632,
+        "privateBytes": 60882944,
+        "cpuTicks": null
+      },
+      {
+        "pid": 11116,
+        "name": "msedgewebview2#13",
+        "privateWorkingSet": 1392640,
+        "privateBytes": 2998272,
+        "cpuTicks": null
+      },
+      {
+        "pid": 972,
+        "name": "msedgewebview2#14",
+        "privateWorkingSet": 5652480,
+        "privateBytes": 12365824,
+        "cpuTicks": null
+      }
+    ],
+    "totalPrivateWorkingSet": 58232832,
+    "totalPrivateBytes": 82890752
+  },
+  {
+    "timestamp": "2026-09-22T07:11:59.1850961+00:00",
+    "secondsAfterHidden": 660.0,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 2187264,
+        "privateBytes": 5189632,
+        "cpuTicks": 45312500
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#9",
+        "privateWorkingSet": 1069056,
+        "privateBytes": 1720320,
+        "cpuTicks": 781250
+      }
+    ],
+    "totalPrivateWorkingSet": 3256320,
+    "totalPrivateBytes": 6909952
+  },
+  {
+    "timestamp": "2026-09-22T07:14:59.3903973+00:00",
+    "secondsAfterHidden": 840.016,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 2170880,
+        "privateBytes": 5156864,
+        "cpuTicks": 56250000
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#8",
+        "privateWorkingSet": 1069056,
+        "privateBytes": 1720320,
+        "cpuTicks": 781250
+      }
+    ],
+    "totalPrivateWorkingSet": 3239936,
+    "totalPrivateBytes": 6877184
+  },
+  {
+    "timestamp": "2026-09-22T07:15:58.3290563+00:00",
+    "secondsAfterHidden": 899.125,
+    "processes": [
+      {
+        "pid": 9104,
+        "name": "Susu.Probes",
+        "privateWorkingSet": 2093056,
+        "privateBytes": 5095424,
+        "cpuTicks": 60156250
+      },
+      {
+        "pid": 5844,
+        "name": "conhost#8",
+        "privateWorkingSet": 999424,
+        "privateBytes": 1720320,
+        "cpuTicks": 781250
+      }
+    ],
+    "totalPrivateWorkingSet": 3092480,
+    "totalPrivateBytes": 6815744
+  }
+]

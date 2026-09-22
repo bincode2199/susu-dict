@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; background: #111316;
+      font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+    textarea { font: inherit; color: inherit; background: none; border: 0; padding: 0; resize: none; outline: none; }
+    svg { display: block; }
+    a { color: #6C9BFF; } a:hover { color: #8FB4FF; }
+  </style>
+</helmet>
+
+<div style="width: 520px; height: 700px; box-sizing: border-box; background: #1C1E23; border: 1px solid #3A3F47; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; color: #E6E8EB;">
+
+  <!-- 标题栏 -->
+  <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; border-bottom: 1px solid #2F333A;">
+    <div style="display: flex; align-items: center; gap: 8px; padding-left: 12px;">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E6E8EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 4h5a2 2 0 0 1 0 4H7a2 2 0 0 0 0 4h5"/>
+      </svg>
+      <span style="font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;">Su-Su</span>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <button type="button" aria-label="置顶窗口" style="width: 36px; height: 32px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6.2 2.5h3.6"/><path d="M8.6 2.5v3.3c0 .6.3 1.1.8 1.4l1.4.9H5.2l1.4-.9c.5-.3.8-.8.8-1.4V2.5"/><path d="M8 8.1v5.4"/>
+      </svg>
+    </button>
+    <button type="button" aria-label="设置" style="width: 36px; height: 32px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2.5 5.2h5.3"/><path d="M11.6 5.2h1.9"/><path d="M2.5 10.8h2.1"/><path d="M8.4 10.8h5.1"/>
+        <circle cx="9.7" cy="5.2" r="1.85"/><circle cx="6.5" cy="10.8" r="1.85"/>
+      </svg>
+    </button>
+    <div style="width: 8px;"></div>
+    <button type="button" aria-label="最小化" style="width: 46px; height: 39px; display: flex; align-items: center; justify-content: center; color: #E6E8EB;">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M1.5 6h9"/></svg>
+    </button>
+    <button type="button" aria-label="最大化" style="width: 46px; height: 39px; display: flex; align-items: center; justify-content: center; color: #E6E8EB;">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="0.5"/></svg>
+    </button>
+    <button type="button" aria-label="关闭" style="width: 46px; height: 39px; display: flex; align-items: center; justify-content: center; color: #E6E8EB;">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+    </button>
+  </div>
+
+  <!-- 内容区 -->
+  <div style="flex-grow: 1; min-height: 0; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;">
+
+    <!-- 原文卡片 -->
+    <div style="flex-shrink: 0; border: 1px solid #4B5058; border-radius: 8px; overflow: hidden;">
+      <div style="height: 38px; padding: 0 8px 0 10px; display: flex; align-items: center; gap: 2px; border-bottom: 1px solid #2F333A;">
+        <button type="button" style="height: 26px; padding: 0 8px; border-radius: 5px; display: flex; align-items: center; gap: 5px; font-size: 12px; color: #E6E8EB;">
+          <span>自动检测 · 英语</span>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#8E939C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg>
+        </button>
+        <button type="button" aria-label="交换语言" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2.8 5.6h10.4"/><path d="M10.9 3.3 13.2 5.6l-2.3 2.3"/><path d="M13.2 10.4H2.8"/><path d="M5.1 8.1 2.8 10.4l2.3 2.3"/>
+          </svg>
+        </button>
+        <button type="button" style="height: 26px; padding: 0 8px; border-radius: 5px; display: flex; align-items: center; gap: 5px; font-size: 12px; color: #E6E8EB;">
+          <span>简体中文</span>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#8E939C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg>
+        </button>
+        <div style="flex-grow: 1;"></div>
+        <span style="font-size: 11px; color: #8E939C; padding-right: 4px;">原文</span>
+      </div>
+
+      <div style="padding: 12px 12px 4px 12px;">
+        <label for="src" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;">原文</label>
+        <textarea id="src" rows="3" style="width: 100%; height: 78px; font-size: 15.5px; line-height: 1.62; color: #E6E8EB;">A good translation should feel like it was written in the target language from the start.</textarea>
+      </div>
+
+      <div style="height: 40px; padding: 0 6px 0 12px; display: flex; align-items: center; gap: 2px; border-top: 1px solid #2F333A;">
+        <span style="font-size: 11px; color: #8E939C;">88 字符</span>
+        <div style="flex-grow: 1;"></div>
+        <button type="button" aria-label="朗读原文" style="width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8.6 3.2 5.4 6H3v4h2.4l3.2 2.8V3.2Z"/><path d="M11.1 6.1a2.7 2.7 0 0 1 0 3.8"/>
+          </svg>
+        </button>
+        <button type="button" aria-label="复制原文" style="width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/>
+          </svg>
+        </button>
+        <button type="button" aria-label="清空" style="width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.2 9.8 9.8"/><path d="M9.8 6.2 6.2 9.8"/>
+          </svg>
+        </button>
+        <div style="width: 1px; height: 16px; background: #2F333A; margin: 0 6px;"></div>
+        <button type="button" style="height: 28px; padding: 0 12px; border: 1px solid {{accent}}; border-radius: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: {{accent}};">
+          <span>翻译</span>
+          <span style="font-size: 10.5px; font-weight: 400; opacity: 0.75;">Ctrl+↵</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 译文卡片：DeepL，展开 -->
+    <div style="flex-shrink: 0; border: 1px solid #2F333A; border-radius: 8px; overflow: hidden;">
+      <div style="height: 38px; padding: 0 6px 0 6px; display: flex; align-items: center; gap: 6px;">
+        <button type="button" aria-label="折叠 MyMemory 结果" style="width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg>
+        </button>
+        <span style="font-size: 12.5px; font-weight: 600;">MyMemory</span>
+        <div style="flex-grow: 1;"></div>
+        <span style="font-size: 10.5px; color: #8E939C; padding-right: 2px;">已分段翻译 · 0.9s</span>
+        <button type="button" aria-label="朗读译文" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8.6 3.2 5.4 6H3v4h2.4l3.2 2.8V3.2Z"/><path d="M11.1 6.1a2.7 2.7 0 0 1 0 3.8"/>
+          </svg>
+        </button>
+        <button type="button" aria-label="复制译文" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/>
+          </svg>
+        </button>
+        <button type="button" aria-label="收藏为生词" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 2.6 9.7 6l3.8.6-2.75 2.68.65 3.78L8 11.28 4.6 13.06l.65-3.78L2.5 6.6 6.3 6 8 2.6Z"/>
+          </svg>
+        </button>
+      </div>
+      <div style="padding: 0 14px 14px 38px; font-size: 14.5px; line-height: 1.75; color: #E6E8EB;">好的翻译应该让人觉得它从一开始就是用目标语言写的。</div>
+    </div>
+
+    <!-- 译文卡片：AI 引擎，展开，带水平标签 -->
+    <div style="flex-shrink: 0; border: 1px solid #2F333A; border-radius: 8px; overflow: hidden;">
+      <div style="height: 38px; padding: 0 6px 0 6px; display: flex; align-items: center; gap: 6px;">
+        <button type="button" aria-label="折叠 Claude 结果" style="width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg>
+        </button>
+        <span style="font-size: 12.5px; font-weight: 600;">Claude</span>
+        <span style="height: 18px; padding: 0 6px; border: 1px solid #444951; border-radius: 4px; display: flex; align-items: center; font-size: 10.5px; color: #A6ABB3;">雅思 7.0</span>
+        <div style="flex-grow: 1;"></div>
+        <span style="font-size: 10.5px; color: #8E939C; padding-right: 2px;">1.4s</span>
+        <button type="button" aria-label="重新生成" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13.1 8a5.1 5.1 0 1 1-1.6-3.7"/><path d="M13.3 2.9v2.6h-2.6"/>
+          </svg>
+        </button>
+        <button type="button" aria-label="朗读译文" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8.6 3.2 5.4 6H3v4h2.4l3.2 2.8V3.2Z"/><path d="M11.1 6.1a2.7 2.7 0 0 1 0 3.8"/>
+          </svg>
+        </button>
+        <button type="button" aria-label="复制译文" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/>
+          </svg>
+        </button>
+        <button type="button" aria-label="收藏为生词" style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 2.6 9.7 6l3.8.6-2.75 2.68.65 3.78L8 11.28 4.6 13.06l.65-3.78L2.5 6.6 6.3 6 8 2.6Z"/>
+          </svg>
+        </button>
+      </div>
+      <div style="padding: 0 14px 14px 38px; font-size: 14.5px; line-height: 1.75; color: #E6E8EB;">一篇好的译文，读来应当仿佛它本就是用目标语言写就的。</div>
+    </div>
+
+    <!-- 译文卡片：折叠 -->
+    <div style="flex-shrink: 0; border: 1px solid #2F333A; border-radius: 8px;">
+      <div style="height: 38px; padding: 0 12px 0 6px; display: flex; align-items: center; gap: 6px;">
+        <button type="button" aria-label="展开 DeepL 结果" style="width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 4 10.2 8l-4 4"/></svg>
+        </button>
+        <span style="font-size: 12.5px; font-weight: 600; color: #A6ABB3;">DeepL</span>
+        <div style="flex-grow: 1;"></div>
+        <span style="font-size: 10.5px; color: #8E939C;">展开后翻译</span>
+      </div>
+    </div>
+
+    <!-- 译文卡片：折叠 -->
+    <div style="flex-shrink: 0; border: 1px solid #2F333A; border-radius: 8px;">
+      <div style="height: 38px; padding: 0 12px 0 6px; display: flex; align-items: center; gap: 6px;">
+        <button type="button" aria-label="展开 Google 翻译结果" style="width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 4 10.2 8l-4 4"/></svg>
+        </button>
+        <span style="font-size: 12.5px; font-weight: 600; color: #A6ABB3;">Google 翻译</span>
+        <div style="flex-grow: 1;"></div>
+        <span style="font-size: 10.5px; color: #8E939C;">展开后翻译</span>
+      </div>
+    </div>
+
+    <!-- 译文卡片：折叠 -->
+    <div style="flex-shrink: 0; border: 1px solid #2F333A; border-radius: 8px;">
+      <div style="height: 38px; padding: 0 12px 0 6px; display: flex; align-items: center; gap: 6px;">
+        <button type="button" aria-label="展开有道翻译结果" style="width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #A6ABB3;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 4 10.2 8l-4 4"/></svg>
+        </button>
+        <span style="font-size: 12.5px; font-weight: 600; color: #A6ABB3;">有道翻译</span>
+        <div style="flex-grow: 1;"></div>
+        <span style="font-size: 10.5px; color: #8E939C;">展开后翻译</span>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1;"></div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div style="height: 32px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; border-top: 1px solid #2F333A;">
+    <span style="font-size: 11px; color: #8E939C;">Ctrl+↵ 翻译 · Esc 收起</span>
+    <div style="flex-grow: 1;"></div>
+    <a href="#engines" style="font-size: 11px; text-decoration: none;">管理引擎</a>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#6C9BFF","options":["#6C9BFF","#E6E8EB","#3FB8A5","#E08A5A"]},"$preview":{"width":520,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#6C9BFF' };
+  }
+}
+</script>
+</body>
+</html>

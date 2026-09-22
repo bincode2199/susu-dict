@@ -1,0 +1,85 @@
+{
+  "Timestamp": "2026-09-22T06:44:36.2301605+00:00",
+  "OS": "Microsoft Windows 10.0.26200",
+  "Architecture": "X64",
+  "Results": [
+    {
+      "Id": "NativeAOT",
+      "Status": "passed",
+      "Milliseconds": 0.0224,
+      "Error": null
+    },
+    {
+      "Id": "HWND-create-destroy",
+      "Status": "passed",
+      "Milliseconds": 22.4198,
+      "Error": null
+    },
+    {
+      "Id": "UIA-MTA-activation",
+      "Status": "passed",
+      "Milliseconds": 14.7674,
+      "Error": null
+    },
+    {
+      "Id": "SAPI-ISpVoice-activation",
+      "Status": "passed",
+      "Milliseconds": 31.2618,
+      "Error": null
+    },
+    {
+      "Id": "WASAPI-MMDeviceEnumerator-activation",
+      "Status": "passed",
+      "Milliseconds": 0.0579,
+      "Error": null
+    },
+    {
+      "Id": "MF-startup-shutdown",
+      "Status": "passed",
+      "Milliseconds": 6.5626,
+      "Error": null
+    },
+    {
+      "Id": "DPAPI-roundtrip-tamper",
+      "Status": "passed",
+      "Milliseconds": 13.3001,
+      "Error": null
+    },
+    {
+      "Id": "SQLite-parameters-online-backup",
+      "Status": "passed",
+      "Milliseconds": 7.29,
+      "Error": null
+    },
+    {
+      "Id": "YAML-low-level-parser",
+      "Status": "passed",
+      "Milliseconds": 0.2599,
+      "Error": null
+    },
+    {
+      "Id": "Ed25519-RFC8032-tamper",
+      "Status": "passed",
+      "Milliseconds": 2.9922,
+      "Error": null
+    },
+    {
+      "Id": "QuickJS-ESM-Promise-interrupt",
+      "Status": "passed",
+      "Milliseconds": 143.9218,
+      "Error": null
+    },
+    {
+      "Id": "ELS-language-detection",
+      "Status": "passed",
+      "Milliseconds": 501.6521,
+      "Error": null
+    },
+    {
+      "Id": "AppContainer-token-resource-boundary",
+      "Status": "failed",
+      "Milliseconds": 48.2163,
+      "Error": "InvalidOperationException: AppContainer stage 2, HRESULT 0x80070005"
+    }
+  ]
+}

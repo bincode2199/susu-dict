@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; background: #FFFFFF;
+      font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+    svg { display: block; }
+    a { color: #2D64E0; } a:hover { color: #1F4CB4; }
+  </style>
+</helmet>
+
+<div style="width: 1000px; height: 760px; box-sizing: border-box; background: #FFFFFF; padding: 40px 44px; display: flex; flex-direction: column; gap: 26px; color: #16181D;">
+
+  <div style="display: flex; align-items: flex-end; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid #16181D;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <h1 style="margin: 0; font-size: 27px; font-weight: 600; letter-spacing: -0.015em;">Su-Su · 设计基础</h1>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #5C6169;">扁平、极简、以线条构形。无投影、无渐变、无色块填充；层级由 1px 发丝线、字重与三级灰阶建立，强调色全局只出现在焦点与主操作上。</p>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <span style="font-size: 11.5px; color: #757B84; white-space: nowrap;">Windows 11 · 浅色</span>
+  </div>
+
+  <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px;">
+
+    <!-- 左列 -->
+    <div style="display: flex; flex-direction: column; gap: 26px;">
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #757B84;">色彩</h2>
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 4px; border: 1px solid #E4E6E9; background: #16181D;"></div>
+            <span style="width: 78px; flex-shrink: 0; font-size: 12.5px;">墨黑</span>
+            <span style="width: 70px; flex-shrink: 0; font-size: 12px; color: #5C6169;">#16181D</span>
+            <span style="font-size: 12px; color: #757B84;">正文、标题、原文</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 4px; border: 1px solid #E4E6E9; background: #5C6169;"></div>
+            <span style="width: 78px; flex-shrink: 0; font-size: 12.5px;">次级灰</span>
+            <span style="width: 70px; flex-shrink: 0; font-size: 12px; color: #5C6169;">#5C6169</span>
+            <span style="font-size: 12px; color: #757B84;">图标、折叠态标题</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 4px; border: 1px solid #E4E6E9; background: #757B84;"></div>
+            <span style="width: 78px; flex-shrink: 0; font-size: 12.5px;">提示灰</span>
+            <span style="width: 70px; flex-shrink: 0; font-size: 12px; color: #5C6169;">#757B84</span>
+            <span style="font-size: 12px; color: #757B84;">字数、耗时、状态</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 4px; border: 1px solid #E4E6E9; background: #C9CDD3;"></div>
+            <span style="width: 78px; flex-shrink: 0; font-size: 12.5px;">强调线</span>
+            <span style="width: 70px; flex-shrink: 0; font-size: 12px; color: #5C6169;">#C9CDD3</span>
+            <span style="font-size: 12px; color: #757B84;">原文卡片边框、次按钮</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 4px; border: 1px solid #E4E6E9; background: #E4E6E9;"></div>
+            <span style="width: 78px; flex-shrink: 0; font-size: 12.5px;">发丝线</span>
+            <span style="width: 70px; flex-shrink: 0; font-size: 12px; color: #5C6169;">#E4E6E9</span>
+            <span style="font-size: 12px; color: #757B84;">卡片边框、分隔线</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 4px; border: 1px solid #C9CDD3; background: #FFFFFF;"></div>
+            <span style="width: 78px; flex-shrink: 0; font-size: 12.5px;">纸白</span>
+            <span style="width: 70px; flex-shrink: 0; font-size: 12px; color: #5C6169;">#FFFFFF</span>
+            <span style="font-size: 12px; color: #757B84;">窗口与卡片底色（同色）</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 4px; border: 1px solid #E4E6E9; background: {{accent}};"></div>
+            <span style="width: 78px; flex-shrink: 0; font-size: 12.5px;">强调色</span>
+            <span style="width: 70px; flex-shrink: 0; font-size: 12px; color: #5C6169;">#2D64E0</span>
+            <span style="font-size: 12px; color: #757B84;">焦点、主操作、链接</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #757B84;">字阶</h2>
+        <p style="margin: 0; font-size: 12px; line-height: 1.6; color: #5C6169;">Segoe UI Variable Text / Microsoft YaHei UI —— Windows 11 系统字，中英文混排时基线一致，无需额外字体。</p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: baseline; gap: 14px;">
+            <span style="width: 92px; flex-shrink: 0; font-size: 11px; color: #757B84;">21 / 600</span>
+            <span style="font-size: 21px; font-weight: 600;">界面标题</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 14px;">
+            <span style="width: 92px; flex-shrink: 0; font-size: 11px; color: #757B84;">15.5 / 1.62</span>
+            <span style="font-size: 15.5px;">原文输入 Source text</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 14px;">
+            <span style="width: 92px; flex-shrink: 0; font-size: 11px; color: #757B84;">14.5 / 1.75</span>
+            <span style="font-size: 14.5px;">译文正文，行距更松</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 14px;">
+            <span style="width: 92px; flex-shrink: 0; font-size: 11px; color: #757B84;">12.5 / 600</span>
+            <span style="font-size: 12.5px; font-weight: 600;">引擎名称 DeepL</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 14px;">
+            <span style="width: 92px; flex-shrink: 0; font-size: 11px; color: #757B84;">11 / 400</span>
+            <span style="font-size: 11px; color: #757B84;">字数、耗时、快捷键提示</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 右列 -->
+    <div style="display: flex; flex-direction: column; gap: 26px;">
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #757B84;">线条与圆角</h2>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 120px; flex-shrink: 0; height: 1px; background: #E4E6E9;"></div>
+            <span style="font-size: 12px; color: #5C6169;">1px 发丝线 —— 卡片、分隔</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 120px; flex-shrink: 0; height: 1px; background: #C9CDD3;"></div>
+            <span style="font-size: 12px; color: #5C6169;">1px 强调线 —— 焦点承载区</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 120px; flex-shrink: 0; height: 1.5px; background: #16181D;"></div>
+            <span style="font-size: 12px; color: #5C6169;">1.5px 图标描边 · 圆头圆角</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; padding-top: 4px;">
+          <div style="display: flex; flex-direction: column; gap: 6px; align-items: center;">
+            <div style="width: 44px; height: 34px; border: 1px solid #C9CDD3; border-radius: 8px;"></div>
+            <span style="font-size: 11px; color: #757B84;">8 卡片</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; align-items: center;">
+            <div style="width: 44px; height: 34px; border: 1px solid #C9CDD3; border-radius: 6px;"></div>
+            <span style="font-size: 11px; color: #757B84;">6 按钮</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; align-items: center;">
+            <div style="width: 44px; height: 34px; border: 1px solid #C9CDD3; border-radius: 5px;"></div>
+            <span style="font-size: 11px; color: #757B84;">5 图标键</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; align-items: center;">
+            <div style="width: 44px; height: 34px; border: 1px solid #C9CDD3; border-radius: 4px;"></div>
+            <span style="font-size: 11px; color: #757B84;">4 标签</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #757B84;">图标 · 16px / 1.5 描边</h2>
+        <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap; color: #16181D;">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="展开"><path d="M4 6.5 8 10.5l4-4"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="折叠"><path d="M6.2 4 10.2 8l-4 4"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="交换语言"><path d="M2.8 5.6h10.4"/><path d="M10.9 3.3 13.2 5.6l-2.3 2.3"/><path d="M13.2 10.4H2.8"/><path d="M5.1 8.1 2.8 10.4l2.3 2.3"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="朗读"><path d="M8.6 3.2 5.4 6H3v4h2.4l3.2 2.8V3.2Z"/><path d="M11.1 6.1a2.7 2.7 0 0 1 0 3.8"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="复制"><rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="收藏"><path d="M8 2.6 9.7 6l3.8.6-2.75 2.68.65 3.78L8 11.28 4.6 13.06l.65-3.78L2.5 6.6 6.3 6 8 2.6Z"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="清空"><circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.2 9.8 9.8"/><path d="M9.8 6.2 6.2 9.8"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="重试"><path d="M13.1 8a5.1 5.1 0 1 1-1.6-3.7"/><path d="M13.3 2.9v2.6h-2.6"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="置顶"><path d="M6.2 2.5h3.6"/><path d="M8.6 2.5v3.3c0 .6.3 1.1.8 1.4l1.4.9H5.2l1.4-.9c.5-.3.8-.8.8-1.4V2.5"/><path d="M8 8.1v5.4"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="设置"><path d="M2.5 5.2h5.3"/><path d="M11.6 5.2h1.9"/><path d="M2.5 10.8h2.1"/><path d="M8.4 10.8h5.1"/><circle cx="9.7" cy="5.2" r="1.85"/><circle cx="6.5" cy="10.8" r="1.85"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="截图 OCR"><path d="M2.5 5.5v-3h3"/><path d="M10.5 2.5h3v3"/><path d="M13.5 10.5v3h-3"/><path d="M5.5 13.5h-3v-3"/><path d="M5.5 8h5"/></svg>
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="语音"><path d="M8 2.5a1.9 1.9 0 0 1 1.9 1.9v3.2a1.9 1.9 0 0 1-3.8 0V4.4A1.9 1.9 0 0 1 8 2.5Z"/><path d="M4.2 7.6a3.8 3.8 0 0 0 7.6 0"/><path d="M8 11.4v2.1"/></svg>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #757B84;">控件</h2>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <button type="button" style="height: 28px; padding: 0 12px; border: 1px solid {{accent}}; border-radius: 6px; display: flex; align-items: center; font-size: 12px; font-weight: 600; color: {{accent}};">主操作</button>
+          <button type="button" style="height: 28px; padding: 0 12px; border: 1px solid #D0D3D8; border-radius: 6px; display: flex; align-items: center; font-size: 12px; color: #16181D;">次操作</button>
+          <button type="button" disabled style="height: 28px; padding: 0 12px; border: 1px solid #E4E6E9; border-radius: 6px; display: flex; align-items: center; font-size: 12px; color: #A7ACB3; cursor: default;">禁用</button>
+          <button type="button" style="height: 28px; padding: 0 8px; border-radius: 5px; display: flex; align-items: center; gap: 5px; font-size: 12px;">
+            <span>下拉选择</span>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#757B84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg>
+          </button>
+          <button type="button" aria-label="图标按钮" style="width: 28px; height: 28px; border-radius: 5px; border: 1px solid #E4E6E9; display: flex; align-items: center; justify-content: center; color: #5C6169;">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/></svg>
+          </button>
+          <span style="height: 20px; padding: 0 7px; border: 1px solid #D0D3D8; border-radius: 4px; display: flex; align-items: center; font-size: 10.5px; color: #5C6169;">雅思 7.0</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #757B84;">间距节奏</h2>
+        <div style="display: flex; align-items: flex-end; gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;"><div style="width: 4px; height: 24px; background: #E4E6E9;"></div><span style="font-size: 10.5px; color: #757B84;">4</span></div>
+          <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;"><div style="width: 6px; height: 24px; background: #E4E6E9;"></div><span style="font-size: 10.5px; color: #757B84;">6</span></div>
+          <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;"><div style="width: 10px; height: 24px; background: #E4E6E9;"></div><span style="font-size: 10.5px; color: #757B84;">10</span></div>
+          <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;"><div style="width: 14px; height: 24px; background: #E4E6E9;"></div><span style="font-size: 10.5px; color: #757B84;">14</span></div>
+          <div style="display: flex; flex-direction: column; gap: 5px; align-items: center;"><div style="width: 26px; height: 24px; background: #E4E6E9;"></div><span style="font-size: 10.5px; color: #757B84;">26</span></div>
+          <span style="font-size: 12px; color: #757B84; padding-bottom: 20px;">卡片内 14 · 卡片间 10 · 分组 26</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#2D64E0","options":["#2D64E0","#16181D","#0F7A6B","#B4531F"]},"$preview":{"width":1000,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#2D64E0' };
+  }
+}
+</script>
+</body>
+</html>

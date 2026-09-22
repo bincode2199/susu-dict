@@ -1,0 +1,73 @@
+{
+  "Timestamp": "2026-09-22T05:03:11.7384168+00:00",
+  "OS": "Microsoft Windows 10.0.26200",
+  "Architecture": "X64",
+  "Results": [
+    {
+      "Id": "NativeAOT",
+      "Status": "passed",
+      "Milliseconds": 0.0119,
+      "Error": null
+    },
+    {
+      "Id": "HWND-create-destroy",
+      "Status": "passed",
+      "Milliseconds": 9.6533,
+      "Error": null
+    },
+    {
+      "Id": "UIA-MTA-activation",
+      "Status": "passed",
+      "Milliseconds": 14.6246,
+      "Error": null
+    },
+    {
+      "Id": "SAPI-ISpVoice-activation",
+      "Status": "passed",
+      "Milliseconds": 33.053,
+      "Error": null
+    },
+    {
+      "Id": "WASAPI-MMDeviceEnumerator-activation",
+      "Status": "passed",
+      "Milliseconds": 0.0383,
+      "Error": null
+    },
+    {
+      "Id": "MF-startup-shutdown",
+      "Status": "passed",
+      "Milliseconds": 3.5049,
+      "Error": null
+    },
+    {
+      "Id": "DPAPI-roundtrip-tamper",
+      "Status": "failed",
+      "Milliseconds": 2.4605,
+      "Error": "Win32Exception: The system cannot find the file specified."
+    },
+    {
+      "Id": "SQLite-parameters-online-backup",
+      "Status": "passed",
+      "Milliseconds": 478.0029,
+      "Error": null
+    },
+    {
+      "Id": "YAML-low-level-parser",
+      "Status": "passed",
+      "Milliseconds": 0.2519,
+      "Error": null
+    },
+    {
+      "Id": "Ed25519-RFC8032-tamper",
+      "Status": "failed",
+      "Milliseconds": 0.0448,
+      "Error": "FormatException: The input is not a valid hex string as its length is not a multiple of 2."
+    },
+    {
+      "Id": "QuickJS-ESM-Promise-interrupt",
+      "Status": "passed",
+      "Milliseconds": 623.2476,
+      "Error": null
+    }
+  ]
+}

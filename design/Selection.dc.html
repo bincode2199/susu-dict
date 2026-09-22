@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; background: #EDEEF0;
+      font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+    textarea, input { font: inherit; color: inherit; background: none; border: 0; padding: 0; outline: none; }
+    textarea { resize: none; }
+    svg { display: block; }
+    a { color: #2D64E0; } a:hover { color: #1F4CB4; }
+
+    /* —— 窗口 —— */
+    .win { box-sizing: border-box; background: #FFFFFF; border: 1px solid #D9DCE0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; color: #16181D; }
+    .tbar { height: 40px; flex-shrink: 0; display: flex; align-items: center; border-bottom: 1px solid #E4E6E9; }
+    .app { display: flex; align-items: center; gap: 8px; padding-left: 12px; }
+    .appname { font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; }
+    .g { flex-grow: 1; }
+    .sys { width: 46px; height: 39px; display: flex; align-items: center; justify-content: center; color: #16181D; }
+    .tb { width: 36px; height: 32px; display: flex; align-items: center; justify-content: center; color: #5C6169; }
+    .sbar { height: 32px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; border-top: 1px solid #E4E6E9; }
+
+    /* —— 图标按钮 —— */
+    .ib { width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #5C6169; flex-shrink: 0; }
+    .ib26 { width: 26px; height: 26px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #5C6169; flex-shrink: 0; }
+    .ib30 { width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #5C6169; flex-shrink: 0; }
+
+    /* —— 卡片 —— */
+    .card { border: 1px solid #E4E6E9; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+    .card.src { border-color: #C9CDD3; }
+    .chd { height: 38px; padding: 0 6px; display: flex; align-items: center; gap: 6px; }
+    .cbody { padding: 0 14px 14px 38px; font-size: 14.5px; line-height: 1.75; }
+    .eng { font-size: 12.5px; font-weight: 600; }
+
+    /* —— 文字 —— */
+    .h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+    .h2 { margin: 0; font-size: 12.5px; font-weight: 600; }
+    .sub { margin: 0; font-size: 12.5px; line-height: 1.6; color: #5C6169; }
+    .sec { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: #757B84; }
+    .m { font-size: 11px; color: #757B84; }
+    .ms { font-size: 10.5px; color: #757B84; }
+    .t { font-size: 12px; }
+    .t125 { font-size: 12.5px; }
+    .err { font-size: 12.5px; color: #A03A2C; }
+
+    /* —— 控件 —— */
+    .btn { height: 28px; padding: 0 12px; border: 1px solid #D0D3D8; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: #16181D; flex-shrink: 0; }
+    .btn.sm { height: 26px; padding: 0 10px; }
+    .btn.dis { border-color: #E4E6E9; color: #A7ACB3; cursor: default; }
+    .tag { height: 20px; padding: 0 7px; border: 1px solid #D0D3D8; border-radius: 4px; display: inline-flex; align-items: center; font-size: 10.5px; color: #5C6169; flex-shrink: 0; }
+    .sel { height: 28px; padding: 0 8px; border-radius: 5px; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; flex-shrink: 0; }
+    .field { height: 28px; padding: 0 9px; border: 1px solid #D0D3D8; border-radius: 6px; display: flex; align-items: center; gap: 8px; font-size: 12px; box-sizing: border-box; }
+    .kbd { height: 26px; padding: 0 9px; border: 1px solid #D0D3D8; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; flex-shrink: 0; }
+    .sw { width: 34px; height: 18px; box-sizing: border-box; border: 1px solid #C9CDD3; border-radius: 9px; display: flex; align-items: center; padding: 0 2px; flex-shrink: 0; }
+    .sw i { width: 12px; height: 12px; border-radius: 50%; background: #C9CDD3; display: block; }
+    .sw.on { justify-content: flex-end; }
+    .ck { width: 14px; height: 14px; box-sizing: border-box; border: 1px solid #C9CDD3; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .rd { width: 14px; height: 14px; box-sizing: border-box; border: 1px solid #C9CDD3; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .rd i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+
+    /* —— 设置 —— */
+    .nav { width: 190px; flex-shrink: 0; border-right: 1px solid #E4E6E9; padding: 8px 0; display: flex; flex-direction: column; gap: 1px; }
+    .navi { height: 32px; padding: 0 12px 0 14px; display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: #5C6169; border-left: 2px solid transparent; box-sizing: border-box; }
+    .navi.on { color: #16181D; font-weight: 600; }
+    .pane { flex-grow: 1; min-width: 0; padding: 20px 26px; display: flex; flex-direction: column; gap: 22px; overflow: hidden; }
+    .grp { display: flex; flex-direction: column; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid #E4E6E9; }
+    .rowd { font-size: 11px; color: #757B84; margin-top: 3px; line-height: 1.5; }
+
+    /* —— 菜单 / 浮层 —— */
+    .pop { box-sizing: border-box; background: #FFFFFF; border: 1px solid #D9DCE0; border-radius: 8px; color: #16181D; }
+    .mi { height: 32px; padding: 0 10px; border-radius: 5px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: #16181D; }
+    .hr { height: 1px; background: #E4E6E9; }
+  </style>
+</helmet>
+
+<div style="width:620px; height:840px; box-sizing:border-box; padding:28px; display:flex; flex-direction:column; gap:26px; color:#16181D;"><div style="display:flex; flex-direction:column; gap:4px;"><h1 class="h1">划词翻译 · 剪贴板翻译</h1><p class="sub">与输入翻译共用同一套卡片下拉列表，只是换了一个更小、无系统按钮的悬浮窗壳。只由快捷键触发：选中文本后不出现任何浮标。窗口不贴鼠标弹出——每次关闭时记住位置，下次在同一位置出现；首次居中于当前屏幕。三者可共享同一快捷键。</p></div><section style="display:flex; flex-direction:column; gap:10px;"><div style="display:flex; align-items:baseline; gap:10px;"><span class="sec">01　悬浮窗 · 有结果</span><span class="ms">380px 宽 · 在上次关闭的位置弹出</span></div><div class="win" style="width:380px;"><div style="height:34px; flex-shrink:0; padding:0 4px 0 6px; display:flex; align-items:center; gap:2px; border-bottom:1px solid #E4E6E9;"><button type="button" class="sel" style="color:#16181D"><span>自动检测 · 英语</span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#757B84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg></button><button type="button" class="ib26" aria-label="交换语言"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.8 5.6h10.4"/><path d="M10.9 3.3 13.2 5.6l-2.3 2.3"/><path d="M13.2 10.4H2.8"/><path d="M5.1 8.1 2.8 10.4l2.3 2.3"/></svg></button><button type="button" class="sel" style="color:#16181D"><span>简体中文</span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#757B84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg></button><div class="g"></div><button type="button" class="ib26" aria-label="置顶"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 2.5h3.6"/><path d="M8.6 2.5v3.3c0 .6.3 1.1.8 1.4l1.4.9H5.2l1.4-.9c.5-.3.8-.8.8-1.4V2.5"/><path d="M8 8.1v5.4"/></svg></button><button type="button" class="ib26" aria-label="在主窗口打开"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.4 2.8h3.8v3.8"/><path d="M13.2 2.8 7.8 8.2"/><path d="M12.2 9.6v2.6a1.2 1.2 0 0 1-1.2 1.2H3.8a1.2 1.2 0 0 1-1.2-1.2V4.9a1.2 1.2 0 0 1 1.2-1.2h2.6"/></svg></button><button type="button" class="ib26" aria-label="关闭"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 3.8 12.2 12.2"/><path d="M12.2 3.8 3.8 12.2"/></svg></button></div><div style="flex-shrink:0; border-bottom:1px solid #E4E6E9;"><div style="padding:10px 12px 6px 12px; font-size:15.5px; line-height:1.62;">A good translation should feel like it was written in the target language from the start.</div><div style="height:34px; padding:0 4px 0 12px; display:flex; align-items:center; gap:2px;"><span class="m">88 字符 · 划词</span><div class="g"></div><button type="button" class="ib26" aria-label="朗读原文"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.6 3.2 5.4 6H3v4h2.4l3.2 2.8V3.2Z"/><path d="M11.1 6.1a2.7 2.7 0 0 1 0 3.8"/></svg></button><button type="button" class="ib26" aria-label="复制原文"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/></svg></button><button type="button" class="ib26" aria-label="收藏为生词"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.6 9.7 6l3.8.6-2.75 2.68.65 3.78L8 11.28 4.6 13.06l.65-3.78L2.5 6.6 6.3 6 8 2.6Z"/></svg></button></div></div><div style="flex-grow:1; min-height:0; padding:10px; display:flex; flex-direction:column; gap:10px;"><div class="card"><div class="chd"><button type="button" class="ib26" aria-label="折叠 DeepL 结果"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg></button><span class="eng">DeepL</span><div class="g"></div><span class="ms" style="padding-right:2px">已分段翻译 · 0.6s</span><button type="button" class="ib" aria-label="朗读译文"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.6 3.2 5.4 6H3v4h2.4l3.2 2.8V3.2Z"/><path d="M11.1 6.1a2.7 2.7 0 0 1 0 3.8"/></svg></button><button type="button" class="ib" aria-label="复制译文"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/></svg></button><button type="button" class="ib" aria-label="收藏为生词"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.6 9.7 6l3.8.6-2.75 2.68.65 3.78L8 11.28 4.6 13.06l.65-3.78L2.5 6.6 6.3 6 8 2.6Z"/></svg></button></div><div class="cbody">好的译文，读起来应当像是一开始就用目标语言写成的。</div></div><div class="card"><div class="chd"><button type="button" class="ib26" aria-label="折叠 Claude 结果"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg></button><span class="eng">Claude</span><span class="tag">雅思 7.0</span><div class="g"></div><span class="ms" style="padding-right:2px">1.4s</span><button type="button" class="ib" aria-label="重新生成"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.1 8a5.1 5.1 0 1 1-1.6-3.7"/><path d="M13.3 2.9v2.6h-2.6"/></svg></button><button type="button" class="ib" aria-label="朗读译文"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.6 3.2 5.4 6H3v4h2.4l3.2 2.8V3.2Z"/><path d="M11.1 6.1a2.7 2.7 0 0 1 0 3.8"/></svg></button><button type="button" class="ib" aria-label="复制译文"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.6" y="5.6" width="7.9" height="7.9" rx="1.6"/><path d="M10.4 2.5H4.1a1.6 1.6 0 0 0-1.6 1.6v6.3"/></svg></button><button type="button" class="ib" aria-label="收藏为生词"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.6 9.7 6l3.8.6-2.75 2.68.65 3.78L8 11.28 4.6 13.06l.65-3.78L2.5 6.6 6.3 6 8 2.6Z"/></svg></button></div><div class="cbody">一篇好的译文，读来应当仿佛它本就是用目标语言写就的。</div></div><div class="card"><div class="chd" style="padding-right:12px"><button type="button" class="ib26" aria-label="展开 Google 翻译 结果"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 4 10.2 8l-4 4"/></svg></button><span class="eng" style="color:#5C6169">Google 翻译</span><div class="g"></div><span class="ms">展开后翻译</span></div></div></div><div class="sbar"><span class="m">Esc 收起 · 关闭时记住位置</span><div class="g"></div><a href="#pin" style="font-size:11px; text-decoration:none;">固定</a></div></div></section><section style="display:flex; flex-direction:column; gap:10px;"><div style="display:flex; align-items:baseline; gap:10px;"><span class="sec">02　悬浮窗 · 空态</span><span class="ms">剪贴板内容非文本或为空时</span></div><div class="win" style="width:380px;"><div style="height:34px; flex-shrink:0; padding:0 4px 0 6px; display:flex; align-items:center; gap:2px; border-bottom:1px solid #E4E6E9;"><button type="button" class="sel" style="color:#16181D"><span>自动检测 · 英语</span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#757B84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg></button><button type="button" class="ib26" aria-label="交换语言"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.8 5.6h10.4"/><path d="M10.9 3.3 13.2 5.6l-2.3 2.3"/><path d="M13.2 10.4H2.8"/><path d="M5.1 8.1 2.8 10.4l2.3 2.3"/></svg></button><button type="button" class="sel" style="color:#16181D"><span>简体中文</span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#757B84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4"/></svg></button><div class="g"></div><button type="button" class="ib26" aria-label="置顶"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 2.5h3.6"/><path d="M8.6 2.5v3.3c0 .6.3 1.1.8 1.4l1.4.9H5.2l1.4-.9c.5-.3.8-.8.8-1.4V2.5"/><path d="M8 8.1v5.4"/></svg></button><button type="button" class="ib26" aria-label="在主窗口打开"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.4 2.8h3.8v3.8"/><path d="M13.2 2.8 7.8 8.2"/><path d="M12.2 9.6v2.6a1.2 1.2 0 0 1-1.2 1.2H3.8a1.2 1.2 0 0 1-1.2-1.2V4.9a1.2 1.2 0 0 1 1.2-1.2h2.6"/></svg></button><button type="button" class="ib26" aria-label="关闭"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 3.8 12.2 12.2"/><path d="M12.2 3.8 3.8 12.2"/></svg></button></div><div style="flex-shrink:0; border-bottom:1px solid #E4E6E9;"><div style="padding:10px 12px 6px 12px; font-size:15.5px; line-height:1.62; color:#A7ACB3;">输入或粘贴要翻译的内容…</div><div style="height:34px; padding:0 6px 0 12px; display:flex; align-items:center; gap:2px;"><span class="m">0 字符</span><div class="g"></div><button type="button" class="ib26" aria-label="清空"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.2 9.8 9.8"/><path d="M9.8 6.2 6.2 9.8"/></svg></button><div style="width:1px; height:16px; background:#E4E6E9; margin:0 6px;"></div><button type="button" class="btn dis"><span>翻译</span></button></div></div><div style="padding:10px; display:flex; flex-direction:column; gap:10px;"><div class="card"><div class="chd" style="padding-right:12px"><button type="button" class="ib26" aria-label="展开 DeepL 结果"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 4 10.2 8l-4 4"/></svg></button><span class="eng" style="color:#5C6169">DeepL</span><div class="g"></div><span class="ms">展开后翻译</span></div></div><div class="card"><div class="chd" style="padding-right:12px"><button type="button" class="ib26" aria-label="展开 Claude 结果"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.2 4 10.2 8l-4 4"/></svg></button><span class="eng" style="color:#5C6169">Claude</span><div class="g"></div><span class="ms">展开后翻译</span></div></div></div></div></section></div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#2D64E0","options":["#2D64E0","#16181D","#0F7A6B","#B4531F"]},"$preview":{"width":620,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#2D64E0' };
+  }
+}
+</script>
+</body>
+</html>

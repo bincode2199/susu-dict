@@ -1,0 +1,57 @@
+# F00–F03 implementation checkpoint
+
+Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundation`.
+
+Scope follows the four explicit IDs F00, F01, F02, F03 in the request. The repository initially had only untracked planning/design documents and no commits or implementation.
+
+## Current state
+
+- F00: in progress. .NET SDK 10.0.401 installed locally; VS 2022 Build Tools installed successfully, including MSVC 14.44.35207, Windows SDK 10.0.26100.0 and CMake. Node 24.19.0 and pnpm 11.19.0 available. Solution and initial Windows/library/QuickJS probes implemented; see [F00 evidence](F00/README.md).
+- F01: pending F00/G0.
+- F02: pending F01.
+- F03: pending F02.
+- G0: not passed. Solution compilation passed; strict Jint AOT compatibility failed and has an isolated reproducer. Native build environment issue diagnosed and fixed in a child-process wrapper. Full acceptance matrices remain unexecuted.
+
+The branch was created successfully using the environment's required escalation for protected `.git` writes. Project edits are authorized by the user.
+
+Initial usage snapshot: 47% of five-hour allocation consumed; 54% of weekly allocation consumed. Checkpoints must be updated before usage exhaustion; no reset credits are authorized for consumption.
+
+## Checkpoint at 93% five-hour usage (2026-09-22)
+
+Native bridge built successfully after environment normalization. Strict NativeAOT publication of the primary probe executable succeeded. Final published execution at 05:06 UTC passed all 11 narrow probes, including NativeAOT detection, HWND create/destroy, UIA/SAPI/WASAPI activation, MF, SQLite online backup, YAML parser, Ed25519 RFC 8032/tamper, DPAPI roundtrip/tamper, and QuickJS modules/promises/dynamic-compiler removal/infinite-loop interruption. DPAPI passed outside the restricted sandbox; its sandbox failure is preserved as evidence. The first Ed25519 fixture had a hex typo, corrected before the final passing run.
+
+Build instructions: `BUILD.md`. Local output: `artifacts/probes/Susu.Probes.exe` plus native DLLs. CI workflow added but not run remotely. No production host/UI exists yet; the eleven src projects other than Windows are dependency scaffolds. Do not report F01/F02/F03 implemented.
+
+Resume with the final probe report and F00 ledger, then WebView2/ELS/IA2 probes, AppContainer/IPC matrix, selection and performance experiments. Jint strict AOT failure needs investigation or a documented disqualification, not hidden warning suppression. No engine route is accepted and G0 remains open.
+
+The work is saved as files on the requested branch. No git commit was made: the repository began without commits, and no Git author identity is configured. The initial planning/design files remain present. No rate-limit reset credit was consumed; the goal remains incomplete.
+
+## Next steps
+
+1. Finish and run the eight-window lifecycle measurement (`tools/measure-windows.ps1`).
+2. Complete selection/UIA/IA2/clipboard probes and ten-program matrix, plus the remaining sandbox/IPC matrix.
+3. Complete same-workload engine comparison, record G0 outcomes and route decisions without silently changing budgets.
+4. Implement downstream modules once their gates are satisfied, with deterministic tests and per-module evidence.
+
+## Continuation checkpoint (2026-09-22, 07:00 UTC vicinity)
+
+- User clarified all four modules, explicitly authorized dependencies from official sources, and prohibited remote pushes. No push performed.
+- Extended native bridge adds real ELS language detection and WebView controller/script/BrowserProcessExited tests. 14 narrow probes passed in `F00/extended-probes.json`.
+- Disposable AppContainer profile, scoped read/execute binary ACL, 128 MiB process Job, one-process limit, explicit stdout inheritance. Synthetic secret read and resource write are denied. A bounded loopback test uses successful parent TCP/UDP controls; container TCP times out without receiver connection, UDP produces no received packet, child creation is denied. See `F00/sandbox-network-probes.json` and `F00/sandbox-result.txt`. These do not close the full X01–X07 matrix.
+- Mixed sandbox-account ownership prevented changing the build directory ACL. Fixed by staging disposable copies owned by the actual test user, not taking ownership or granting broad access.
+- QuickJS probe now also tests the memory cap and infinite microtask-chain interruption.
+- Vue 3.5.43 / Vite 8.3.0 / TypeScript 5.9.3 / vue-tsc 3.3.11 / plugin-vue 6.0.9 pinned with pnpm lockfile. TypeScript 7.0.2 was incompatible with vue-tsc exports; fixed by pinning compatible 5.9.3. `pnpm run build:probe` passes.
+- `ui/` contains only clearly labeled F00 synthetic Vue fixtures for eight window types, shared tokens/cards, and Chinese/English resources. No production host or fake production provider. Browser inspection confirmed settings/network controls, English main at 520×700, card collapse and no console warnings/errors. It is not F03 acceptance.
+- Native eight-window memory harness is being validated. Initial call on the default .NET thread failed RPC_E_CHANGED_MODE; moved to a dedicated native STA thread. Full 5/15-minute measurement not yet completed at this checkpoint.
+- Current preview process: exec session 25083, loopback `http://127.0.0.1:4173/`. Revalidate before reuse. Browser handles in Node session: agent/browser/tab.
+- Latest usage check: 73% five-hour used, 74% weekly used. Progress saved before exhaustion. G0 remains unpassed and F01–F03 pending.
+
+## Latest checkpoint — 07:05 UTC, 97% five-hour / 78% weekly used
+
+- UIA selection helper implemented with native MTA, UIA connection/transaction limits, password rejection, bounded multi-range text and no empty-selection whole-field fallback. AOT subprocess tests of selected text/empty/password and a stalled-helper kill passed (`F00/selection-probes.json`). This is a controlled Win32 Edit fixture, not the required ten-app matrix. IA2, focus-change races and clipboard borrowing are still missing.
+- The selection runner includes a 500 ms helper deadline and bounded output. Latest executable: `artifacts/selection-probes/Susu.Probes.exe`; its DLLs are alongside it. The older `artifacts/probes` binary is intentionally untouched while the measurement runs. To rebuild into a separate output, `tools/build-native.ps1 -OutputDirectory artifacts/selection-probes` and dotnet publish with that output directory.
+- Eight-window native smoke passed with actual Vue assets, one environment, eight controllers, hide/close and BrowserProcessExited (`F00/windows-smoke.jsonl`). An STA worker fixes the earlier COM mode failure.
+- **Full memory measurement is live**: exec session **35929**, parent probe PID **9104**, run directory `artifacts/window-measure-332859317e2a46378829bb0adbf49606`. Revalidate these handles/processes before deciding it stopped; do not launch a duplicate. It runs for about 15 minutes after all-hidden and autonomously saves `F00/windows-memory-samples.json`, lifecycle and error files. Expected finish around 07:16 UTC. At the checkpoint, samples at 0/60/240 seconds were 185.64/198.77/183.48 MiB PWS, each 15 processes. The 300-second and post-release samples are still pending. This fixture already exceeds the 60 MiB target; do not relabel the target or claim G0 passed.
+- Next actions: finish analyzing that measurement, record the architecture gate result, investigate a policy-compatible memory improvement, complete remaining F00 matrices and then proceed through F01–F03. No remote push or rate-limit reset-credit redemption occurred.
+
+Do not mark modules complete based on a source skeleton or JIT builds. Preserve the original design files.

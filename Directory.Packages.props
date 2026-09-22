@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="Jint" Version="4.16.3" />
+    <PackageVersion Include="NSec.Cryptography" Version="26.4.0" />
+    <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+</Project>

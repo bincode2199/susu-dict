@@ -1,0 +1,2 @@
+container=True; resourceRead=True; secretDenied=True; resourceWriteDenied=True; tcpBlocked=True; tcpOutcome=deadline-no-connection; udpSubmittedOrDenied=True; childDenied=True
+receiverTcpAccepted=False; receiverUdpDelivered=False

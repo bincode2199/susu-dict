@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Susu.Windows/Susu.Windows.csproj" />
+    <ProjectReference Include="../Susu.Ui/Susu.Ui.csproj" />
+    <ProjectReference Include="../Susu.Storage/Susu.Storage.csproj" />
+    <ProjectReference Include="../Susu.Net/Susu.Net.csproj" />
+    <ProjectReference Include="../Susu.Plugins/Susu.Plugins.csproj" />
+    <ProjectReference Include="../Susu.Runtime/Susu.Runtime.csproj" />
+  </ItemGroup>
+</Project>

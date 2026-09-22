@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Susu.Abstractions/Susu.Abstractions.csproj" />
+    <Project Path="src/Susu.Contracts/Susu.Contracts.csproj" />
+    <Project Path="src/Susu.Domain/Susu.Domain.csproj" />
+    <Project Path="src/Susu.Host/Susu.Host.csproj" />
+    <Project Path="src/Susu.Jobs/Susu.Jobs.csproj" />
+    <Project Path="src/Susu.Net/Susu.Net.csproj" />
+    <Project Path="src/Susu.Plugins/Susu.Plugins.csproj" />
+    <Project Path="src/Susu.Runtime/Susu.Runtime.csproj" />
+    <Project Path="src/Susu.Storage/Susu.Storage.csproj" />
+    <Project Path="src/Susu.Ui/Susu.Ui.csproj" />
+    <Project Path="src/Susu.Windows/Susu.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Susu.Probes/Susu.Probes.csproj" />
+  </Folder>
+</Solution>

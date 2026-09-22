@@ -1,0 +1,91 @@
+{
+  "Timestamp": "2026-09-22T06:46:08.8224998+00:00",
+  "OS": "Microsoft Windows 10.0.26200",
+  "Architecture": "X64",
+  "Results": [
+    {
+      "Id": "NativeAOT",
+      "Status": "passed",
+      "Milliseconds": 0.0118,
+      "Error": null
+    },
+    {
+      "Id": "HWND-create-destroy",
+      "Status": "passed",
+      "Milliseconds": 46.149,
+      "Error": null
+    },
+    {
+      "Id": "UIA-MTA-activation",
+      "Status": "passed",
+      "Milliseconds": 12.3404,
+      "Error": null
+    },
+    {
+      "Id": "SAPI-ISpVoice-activation",
+      "Status": "passed",
+      "Milliseconds": 26.4851,
+      "Error": null
+    },
+    {
+      "Id": "WASAPI-MMDeviceEnumerator-activation",
+      "Status": "passed",
+      "Milliseconds": 0.032,
+      "Error": null
+    },
+    {
+      "Id": "MF-startup-shutdown",
+      "Status": "passed",
+      "Milliseconds": 2.8336,
+      "Error": null
+    },
+    {
+      "Id": "DPAPI-roundtrip-tamper",
+      "Status": "passed",
+      "Milliseconds": 2.668,
+      "Error": null
+    },
+    {
+      "Id": "SQLite-parameters-online-backup",
+      "Status": "passed",
+      "Milliseconds": 3.7918,
+      "Error": null
+    },
+    {
+      "Id": "YAML-low-level-parser",
+      "Status": "passed",
+      "Milliseconds": 0.1586,
+      "Error": null
+    },
+    {
+      "Id": "Ed25519-RFC8032-tamper",
+      "Status": "passed",
+      "Milliseconds": 2.4152,
+      "Error": null
+    },
+    {
+      "Id": "QuickJS-ESM-Promise-interrupt",
+      "Status": "passed",
+      "Milliseconds": 302.4724,
+      "Error": null
+    },
+    {
+      "Id": "ELS-language-detection",
+      "Status": "passed",
+      "Milliseconds": 7.9364,
+      "Error": null
+    },
+    {
+      "Id": "AppContainer-token-resource-boundary",
+      "Status": "passed",
+      "Milliseconds": 240.9464,
+      "Error": null
+    },
+    {
+      "Id": "WebView-controller-script-exit",
+      "Status": "passed",
+      "Milliseconds": 2203.1936,
+      "Error": null
+    }
+  ]
+}

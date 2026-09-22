@@ -1,0 +1,10 @@
+.tools/
+artifacts/
+**/bin/
+**/obj/
+**/node_modules/
+ui/dist/
+.vs/
+*.user
+*.log
+

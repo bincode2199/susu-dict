@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Susu.Jobs/Susu.Jobs.csproj" />
+    <ProjectReference Include="../Susu.Abstractions/Susu.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
