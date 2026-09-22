@@ -57,6 +57,7 @@ static HRESULT MeasureWindows(const wchar_t* folder, const wchar_t* userData, in
             return S_OK;
         }).Get());
     if (SUCCEEDED(hr)) { Pump([&]{return environment->ready;},15000); hr = environment->ready ? environment->status : HRESULT_FROM_WIN32(WAIT_TIMEOUT); }
+    if(SUCCEEDED(hr))Event("environment-ready");
     ComPtr<ICoreWebView2Environment5> env5;
     EventRegistrationToken exitToken{};
     bool exitRegistered = false;
@@ -101,7 +102,7 @@ static HRESULT MeasureWindows(const wchar_t* folder, const wchar_t* userData, in
                 return S_OK;
             }).Get());
         if (SUCCEEDED(hr)) {Pump([&]{return window->ready;},15000);hr=window->ready?window->status:HRESULT_FROM_WIN32(WAIT_TIMEOUT);}
-        if (SUCCEEDED(hr)) ShowWindow(window->hwnd,SW_SHOWNOACTIVATE);
+        if (SUCCEEDED(hr)) {Event("window-ready");ShowWindow(window->hwnd,SW_SHOWNOACTIVATE);}
     }
     if (SUCCEEDED(hr)) {
         Pump([]{return false;},1000);

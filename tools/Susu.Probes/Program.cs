@@ -7,6 +7,23 @@ using Susu.Windows;
 
 if (args.Length == 3 && args[0] == "--sandbox-child") return SandboxChild.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));
 if (args.Length == 1 && args[0] == "--sandbox-grandchild") return 0;
+if(args.Length==2&&args[0]=="--sandbox-lifecycle")
+{
+    if(!SandboxProbe.IsAppContainer())return 2;
+    if(args[1]=="memory")
+    {
+        int error=SandboxProbe.CheckMemoryLimit();
+        bool denied=error is 8 or 1455 or 1816;
+        Console.WriteLine($"memoryLimitDenied={denied}; win32Error={error}; requestedMiB=256; jobLimitMiB=128");return denied?0:1;
+    }
+    if(args[1]=="job-close"){Console.WriteLine("containerReady=True");Console.Out.Flush();Thread.Sleep(30000);return 3;}
+    if(args[1]=="own-storage")
+    {
+        try{string folder=SandboxProbe.CheckOwnStorage();Console.WriteLine($"ownStorageWrite=True; registryRoundTrip=True; fileRoundTrip=True; folder={folder}");return 0;}
+        catch(Exception error){Console.WriteLine($"ownStorageWrite=False; error={error.GetType().Name}; HRESULT=0x{error.HResult:X8}");return 1;}
+    }
+    return 4;
+}
 if (args.Length == 1 && args[0] == "--selection-stall") { Thread.Sleep(10000); return 0; }
 if (args.Length == 2 && args[0] == "--selection-target") { SelectionProbe.RunTarget(args[1] == "password" ? 1 : 0,args[1] == "empty" ? 1 : 0); return 0; }
 if(args.Length==2 && args[0] is "--read-selection" or "--read-ia2")

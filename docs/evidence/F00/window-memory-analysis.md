@@ -17,6 +17,8 @@ The completed suspension lifecycle hid all windows at tick 138138234, finished s
 
 The earlier suspension smoke verified resume and nonempty Vue DOM in all eight views. It did not measure resume-to-interactive latency or validate all application state. The initial full suspension attempt exposed a pump predicate/deadline bug and was interrupted; `memory-suspend-invalid-timing/` is diagnostic evidence only. `windows-suspend-smoke.jsonl` predates that timing fix and is not latency evidence.
 
+The corrected [smoke](windows-suspend-corrected-smoke.jsonl) also passes resume/DOM/browser exit. A later [readiness diagnostic](windows-readiness-diagnostic.jsonl) reports environment readiness in the initial tick and controller/page navigation readiness taking 2.766 seconds for the first window, then approximately 2.2–2.4 seconds per later window. These are sequential fresh-controller fixture measurements; their cause remains unresolved and they do not establish the cold/hot interactive-frame targets.
+
 Reproduce from a built fixture/executable:
 
 ```powershell
