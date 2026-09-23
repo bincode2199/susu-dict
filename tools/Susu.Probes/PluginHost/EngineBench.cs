@@ -29,6 +29,127 @@ internal static partial class EngineBench
 
     private static double Round(double v) => Math.Round(v, 3);
 
+    /// <summary>PER01 WebView2 fallback route with the same plugins, broker fixture and sample counts.</summary>
+    public static int RunWebView(string evidencePath, int samples)
+    {
+        string staged = XMatrix.Stage("bench-webview");
+        string hostFolder = Path.Combine(AppContext.BaseDirectory, "webview-host");
+        string pluginFolder = Path.Combine(staged, "plugins");
+        for (int i = 1; i <= 21; i++)
+        {
+            string target = Path.Combine(pluginFolder, $"p{i:00}");
+            Directory.CreateDirectory(Path.Combine(target, "lib"));
+            File.Copy(Path.Combine(pluginFolder, "bench", "main.js"), Path.Combine(target, "main.js"));
+            File.Copy(Path.Combine(pluginFolder, "bench", "lib", "shape.js"), Path.Combine(target, "lib", "shape.js"));
+        }
+        string userData = Path.Combine(Path.GetDirectoryName(staged)!, "webview-user-data");
+        var notes = new List<string>
+        {
+            "Network responses are the same synthetic broker fixture as the embedded-engine routes.",
+            "Cold start = WebView2 environment + hidden controller + host page + sandboxed iframe ready + bench module loaded in a new Worker; one user-data folder reused; browser process exit awaited (process handle) between samples.",
+            "Budget: sandbox iframe watchdog terminates a worker that does not return to its event loop within 250 ms (same slice as the engine routes).",
+            "Security properties of this route (fetch/import removal, CSP, request interception) are not what PER01 measures; see RECORD 3.6.",
+        };
+        List<double> cold = [], environment = [], controller = [], navigation = [], load = [], roundTrip = [], cancel = [], spin = [], rebuild = [], microtask = [];
+        var memory = new List<Memory>();
+        int exitedCount = 0, browserStuck = 0;
+        var browserExit = new List<double>();
+        string[] origins = ["https://api.bench.example"];
+        for (int i = 0; i < samples + 2; i++)
+        {
+            var timer = Stopwatch.StartNew();
+            using var host = new WebViewHost(userData, hostFolder, pluginFolder);
+            var loaded = host.Load("bench");
+            double total = timer.Elapsed.TotalMilliseconds;
+            if (!loaded.Ok) throw new InvalidOperationException($"WebView bench load failed: {loaded.Error?.Detail}");
+            using (var browser = Process.GetProcessById(host.BrowserPid))
+            {
+                var exitTimer = Stopwatch.StartNew();
+                if (host.Close()) exitedCount++;
+                // Wait for the actual browser process so the next sample is a true cold start.
+                bool exited = browser.WaitForExit(30000);
+                if (i >= 2) { if (exited) browserExit.Add(exitTimer.Elapsed.TotalMilliseconds); else browserStuck++; }
+                if (!exited) throw new InvalidOperationException("WebView2 browser process did not exit within 30 s of close; cold samples would not be cold.");
+            }
+            if (i < 2) continue;
+            cold.Add(total); environment.Add(host.Timings[0]); controller.Add(host.Timings[1] - host.Timings[0]);
+            navigation.Add(host.Timings[3] - host.Timings[1]); load.Add(loaded.Ms);
+        }
+        var exitStat = Summarize(browserExit);
+        notes.Add($"Browser process exit after controller close + environment release: p50 {exitStat.P50} ms, p95 {exitStat.P95} ms, max {exitStat.Max} ms over {browserExit.Count} samples (host-side 5 s wait satisfied in {exitedCount} of {samples + 2}; next sample started only after the process exited).");
+        using (var host = new WebViewHost(userData, hostFolder, pluginFolder))
+        {
+            if (!host.Load("bench").Ok) throw new InvalidOperationException("bench load failed");
+            for (int i = 0; i < samples + 5; i++)
+            {
+                var timer = Stopwatch.StartNew();
+                var call = host.Invoke("bench", "translate", $"{{\"text\":\"sample {i} 中文\"}}", origins);
+                var m = WaitWeb(call.Result, 5000);
+                double ms = timer.Elapsed.TotalMilliseconds;
+                if (m.Type != "Completed") throw new InvalidOperationException($"translate failed: {m.Error?.Detail}");
+                if (i >= 5) roundTrip.Add(ms);
+            }
+            for (int i = 0; i < samples; i++)
+            {
+                var call = host.Invoke("bench", "wait", "{}", origins);
+                Thread.Sleep(20);
+                var timer = Stopwatch.StartNew();
+                host.Cancel("bench", call.CallId);
+                var m = WaitWeb(call.Result, 5000);
+                cancel.Add(timer.Elapsed.TotalMilliseconds);
+                if (m.Error?.Kind != "cancelled") throw new InvalidOperationException($"wait cancel returned {m.Error?.Kind}");
+            }
+            foreach (var (capability, list) in new[] { ("spin", spin), ("microtasks", microtask) })
+            {
+                for (int i = 0; i < samples; i++)
+                {
+                    while (host.Faults.TryDequeue(out _)) { }
+                    var timer = Stopwatch.StartNew();
+                    var call = host.Invoke("bench", capability, "{}", origins);
+                    var m = WaitWeb(call.Result, 10000);
+                    list.Add(timer.Elapsed.TotalMilliseconds);
+                    if (m.Error?.Kind != "timeout") throw new InvalidOperationException($"{capability} returned {m.Error?.Kind}");
+                    var deadline = Stopwatch.StartNew();
+                    WebViewHost.Message? fault = null;
+                    while (fault is null && deadline.ElapsedMilliseconds < 5000) { if (!host.Faults.TryDequeue(out fault)) Thread.Sleep(5); }
+                    if (fault is null) throw new TimeoutException("No worker rebuild event.");
+                    if (capability == "spin") rebuild.Add(fault.RebuildMs);
+                    var check = host.Invoke("bench", "translate", "{\"text\":\"after\"}", origins);
+                    if (WaitWeb(check.Result, 5000).Type != "Completed") throw new InvalidOperationException("worker unusable after rebuild");
+                }
+            }
+        }
+        using (var host = new WebViewHost(userData, hostFolder, pluginFolder))
+        {
+            Thread.Sleep(1000);
+            var m0 = host.Memory();
+            memory.Add(new Memory(0, Round(m0.PwsMiB), Round(m0.PrivateMiB), 0, 0));
+            host.Load("bench");
+            WaitWeb(host.Invoke("bench", "translate", "{\"text\":\"warm\"}", origins).Result, 5000);
+            Thread.Sleep(1000);
+            var m1 = host.Memory();
+            memory.Add(new Memory(1, Round(m1.PwsMiB), Round(m1.PrivateMiB), 0, 0));
+            for (int i = 1; i <= 21; i++)
+            {
+                if (!host.Load($"p{i:00}").Ok) throw new InvalidOperationException($"p{i:00} load failed");
+                WaitWeb(host.Invoke($"p{i:00}", "translate", "{\"text\":\"warm\"}", origins).Result, 5000);
+            }
+            Thread.Sleep(2000);
+            var m22 = host.Memory();
+            memory.Add(new Memory(22, Round(m22.PwsMiB), Round(m22.PrivateMiB), 0, 0));
+            notes.Add($"Memory is the WebView2 process tree (browser + renderers + GPU/utility): {m22.Processes} processes read, {m22.Unreadable} unreadable at 22 plugins; peak private bytes not collected for this route (reported as 0).");
+        }
+        var report = new Report(DateTimeOffset.UtcNow, "webview2-worker", "WebView2 runtime (Evergreen)", "F00 PER01 WebView2 fallback route; synthetic plugin and broker fixture; NativeAOT host driving WebView2", samples,
+            0, Summarize(cold), Summarize(environment), Summarize(controller), Summarize(navigation), Summarize(load), Summarize(roundTrip), Summarize(cancel),
+            Summarize(spin), Summarize(rebuild), Summarize(microtask), [.. memory], [.. notes, "Stat mapping for this route: launch=environment created, connect=controller created (after environment), hello=host page + sandboxed iframe script ready (after controller), load=worker creation + plugin module import."]);
+        File.WriteAllText(evidencePath, JsonSerializer.Serialize(report, BenchJson.Default.Report));
+        Console.WriteLine(JsonSerializer.Serialize(report, BenchJson.Default.Report));
+        return 0;
+    }
+
+    private static WebViewHost.Message WaitWeb(Task<WebViewHost.Message> task, int ms, [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
+        => task.Wait(ms) ? task.Result : throw new TimeoutException($"WebView call did not finish (EngineBench.cs line {line}).");
+
     public static int Run(string engine, string childExecutable, string evidencePath, int samples)
     {
         string staged = XMatrix.Stage($"bench-{engine}");

@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://susu-plugin-host.example; frame-src https://susu-plugin-host.example">
+<title>Su-Su F00 WebView plugin host (fallback-route benchmark)</title>
+</head>
+<body>
+<!-- sandbox without allow-same-origin: opaque origin, out-of-process on WebView2 >= 132 -->
+<iframe id="sandbox" sandbox="allow-scripts" src="https://susu-plugin-host.example/sandbox.html"></iframe>
+<script src="https://susu-plugin-host.example/host.js"></script>
+</body>
+</html>

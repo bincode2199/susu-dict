@@ -1,4 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><PublishAot>true</PublishAot></PropertyGroup>
-  <ItemGroup><PackageReference Include="Jint" /></ItemGroup>
+  <!-- PER01 comparison build. Jint's NativeAOT trim/AOT analysis warnings (IL2026/IL2104/IL3053)
+       are NOT suppressed: they are downgraded from errors only in this separate executable and
+       recorded in docs/evidence/F00 as the reason Jint is not AOT-clean. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <WarningsNotAsErrors>IL2026;IL2104;IL3053;IL2072;IL2075;IL2070;IL2067;IL3050</WarningsNotAsErrors>
+  </PropertyGroup>
+  <ItemGroup><AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute"><_Parameter1>windows</_Parameter1></AssemblyAttribute></ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Jint" />
+    <ProjectReference Include="../../src/Susu.Windows/Susu.Windows.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Susu.Probes/PluginHost/Protocol.cs" Link="Shared/Protocol.cs" />
+    <Compile Include="../Susu.Probes/PluginHost/Runtime.cs" Link="Shared/Runtime.cs" />
+    <Compile Include="../Susu.Probes/PluginHost/ChildHost.cs" Link="Shared/ChildHost.cs" />
+  </ItemGroup>
 </Project>

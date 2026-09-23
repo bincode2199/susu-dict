@@ -1,0 +1,120 @@
+{
+  "timestamp": "2026-09-23T20:00:37.6004702+00:00",
+  "engine": "webview2-worker",
+  "executable": "WebView2 runtime (Evergreen)",
+  "scope": "F00 PER01 WebView2 fallback route; synthetic plugin and broker fixture; NativeAOT host driving WebView2",
+  "samples": 30,
+  "profileCreateMs": 0,
+  "coldStartToReady": {
+    "samples": 30,
+    "p50": 715.76,
+    "p95": 4668.379,
+    "max": 4712.118,
+    "min": 629.352,
+    "mean": 1119.546
+  },
+  "launch": {
+    "samples": 30,
+    "p50": 21.982,
+    "p95": 25.139,
+    "max": 25.688,
+    "min": 12.755,
+    "mean": 20.983
+  },
+  "connect": {
+    "samples": 30,
+    "p50": 490.378,
+    "p95": 545.845,
+    "max": 571.547,
+    "min": 415.288,
+    "mean": 489.003
+  },
+  "hello": {
+    "samples": 30,
+    "p50": 173.844,
+    "p95": 4109.476,
+    "max": 4120.546,
+    "min": 158.453,
+    "mean": 584.695
+  },
+  "load": {
+    "samples": 30,
+    "p50": 18,
+    "p95": 30,
+    "max": 32,
+    "min": 14,
+    "mean": 19.4
+  },
+  "roundTrip": {
+    "samples": 30,
+    "p50": 6.048,
+    "p95": 7.351,
+    "max": 7.708,
+    "min": 5.385,
+    "mean": 6.236
+  },
+  "cancelAwaitingHost": {
+    "samples": 30,
+    "p50": 3.488,
+    "p95": 4.232,
+    "max": 4.911,
+    "min": 2.125,
+    "mean": 3.456
+  },
+  "spinToFailure": {
+    "samples": 30,
+    "p50": 260.96,
+    "p95": 265.786,
+    "max": 266.638,
+    "min": 250.319,
+    "mean": 259.75
+  },
+  "spinRebuild": {
+    "samples": 30,
+    "p50": 16,
+    "p95": 22,
+    "max": 27,
+    "min": 10,
+    "mean": 15.3
+  },
+  "microtaskToFailure": {
+    "samples": 30,
+    "p50": 261.393,
+    "p95": 269.353,
+    "max": 1266.673,
+    "min": 249.617,
+    "mean": 294.14
+  },
+  "memory": [
+    {
+      "plugins": 0,
+      "privateWorkingSetMiB": 69.066,
+      "privateBytesMiB": 115.16,
+      "peakPrivateBytesMiB": 0,
+      "engineHeapMiB": 0
+    },
+    {
+      "plugins": 1,
+      "privateWorkingSetMiB": 71.715,
+      "privateBytesMiB": 120.281,
+      "peakPrivateBytesMiB": 0,
+      "engineHeapMiB": 0
+    },
+    {
+      "plugins": 22,
+      "privateWorkingSetMiB": 124.539,
+      "privateBytesMiB": 208.832,
+      "peakPrivateBytesMiB": 0,
+      "engineHeapMiB": 0
+    }
+  ],
+  "notes": [
+    "Network responses are the same synthetic broker fixture as the embedded-engine routes.",
+    "Cold start = WebView2 environment \u002B hidden controller \u002B host page \u002B sandboxed iframe ready \u002B bench module loaded in a new Worker; one user-data folder reused; browser process exit awaited (process handle) between samples.",
+    "Budget: sandbox iframe watchdog terminates a worker that does not return to its event loop within 250 ms (same slice as the engine routes).",
+    "Security properties of this route (fetch/import removal, CSP, request interception) are not what PER01 measures; see RECORD 3.6.",
+    "Browser process exit after controller close \u002B environment release: p50 6349.468 ms, p95 6460.631 ms, max 6566.349 ms over 30 samples (host-side 5 s wait satisfied in 0 of 32; next sample started only after the process exited).",
+    "Memory is the WebView2 process tree (browser \u002B renderers \u002B GPU/utility): 7 processes read, 0 unreadable at 22 plugins; peak private bytes not collected for this route (reported as 0).",
+    "Stat mapping for this route: launch=environment created, connect=controller created (after environment), hello=host page \u002B sandboxed iframe script ready (after controller), load=worker creation \u002B plugin module import."
+  ]
+}
