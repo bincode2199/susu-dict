@@ -6,6 +6,8 @@ Scope follows the four explicit IDs F00, F01, F02, F03 in the request. The repos
 
 ## Current state
 
+Latest handoff (2026-09-22): F00 is incomplete; G0 has not passed; F01–F03 remain pending their hard dependencies. Branch `work/f00-f03-foundation`; latest successful local commit `0f0f9cf`. No remote push. The latest WebView hostname fix and its evidence are saved on disk but **not committed**. See the final checkpoint below before resuming; earlier entries are historical snapshots.
+
 - F00: in progress. .NET SDK 10.0.401 installed locally; VS 2022 Build Tools installed successfully, including MSVC 14.44.35207, Windows SDK 10.0.26100.0 and CMake. Node 24.19.0 and pnpm 11.19.0 available. Solution and initial Windows/library/QuickJS probes implemented; see [F00 evidence](F00/README.md).
 - F01: pending F00/G0.
 - F02: pending F01.
@@ -84,3 +86,30 @@ Do not mark modules complete based on a source skeleton or JIT builds. Preserve 
 - Corrected suspension smoke restored all eight Vue DOMs and observed BrowserProcessExited (`F00/windows-suspend-corrected-smoke.jsonl`). Startup to all-visible is approximately twenty seconds for the sequential eight-page harness; this is not a measured hotkey/interactive-first-frame latency and does not pass PER03. Per-stage readiness events are being added to diagnose that harness timing next.
 - Remaining G0 work remains substantial: authenticated IPC/host authorization and complete access matrix; 10 actual applications including Firefox/old Electron; clipboard transaction cases; engine comparison and 30-sample latency tests; full plugin memory workload; capture/multi-monitor checks and license/CI completion. Do not begin downstream production modules or mark the goal complete based on the narrow passing suite.
 - Per-stage diagnostic completed: environment callback returned in the same clock tick; first window navigation-ready took 2.766 s, subsequent windows approximately 2.2–2.4 s each. The sequential readiness delay is therefore in controller/page readiness, not a fifteen-second environment timeout. Root cause and actual first-interactive-frame metrics remain unresolved. Raw timestamps: `F00/windows-readiness-diagnostic.jsonl`. No measurement/test process from this continuation remains running.
+
+## Continuation checkpoint — virtual hostname delay fixed
+
+- Worktree was clean at continuation start; previous turn classified as progress. Usage was already 96% five-hour / 94% weekly. No reset credit redeemed.
+- Microsoft documents navigation delays for `.local` virtual hosts. Changed the fixture mapping and navigation origin together to reserved `susu-probe.example`, retaining the existing cross-origin restriction. Source: https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.setvirtualhostnametofoldermapping
+- Native rebuild and identical eight-window suspension/resume smoke passed. Raw `F00/windows-example-host-smoke.jsonl`: first navigation-ready 750 ms; subsequent windows 234–344 ms; all-visible 3.704 s including the intentional one-second display wait, versus approximately 20 s before. All eight DOMs resumed and browser exit was observed. These are one-run navigation timings, not 30-sample interactive-frame acceptance. Cold latency remains above target; G0 and F01–F03 remain incomplete.
+- Full memory results still belong to the earlier `.local` build; do not relabel those measurements as results from this change. Current native DLL in `artifacts/selection-probes` has changed since `latest-probe-artifact-hashes.json`; that earlier hash manifest still identifies its original report's build. No test process remains live.
+
+## Saved handoff — requested progress documentation
+
+The latest source and evidence were rechecked on disk. The attempted Git staging/commit command did **not execute**: automatic approval review could not complete because the usage limit had been reached. This was a review-service failure, not a finding that the operation was unsafe. The preceding document edits succeeded. No approval bypass, remote push, or reset-credit redemption occurred.
+
+Uncommitted files at this checkpoint:
+
+- `src/Susu.Windows/native/windows_measure.cpp`: `.local` → `.example` mapping/navigation change.
+- `docs/evidence/F00/windows-example-host-smoke.jsonl`: passing smoke and raw readiness timestamps.
+- `docs/evidence/F00/window-memory-analysis.md`: comparison and limitations.
+- `docs/evidence/PROGRESS.md`: latest progress and handoff.
+
+Resume sequence:
+
+1. Preserve/review these changes and create the deferred local checkpoint when approval review is available. Do not push.
+2. Complete F00's authenticated IPC and broker authorization, remaining sandbox/network cases, real ten-application selection matrix, and clipboard transaction cases.
+3. Complete the same-workload engine comparison, thirty-sample cold/hot latency tests, full plugin-host memory workload, capture/multi-monitor checks, and license/CI evidence. The latest hostname change improves navigation but does not prove the latency gate.
+4. Record the G0 route decision against the original budgets. Only after G0 passes, implement and verify F01, then F02, then F03 against `DEV-PLAN.md` and `TEST-PLAN.md`.
+
+The full four-module goal remains active and unfinished. This document is a recovery checkpoint, not a completion report.

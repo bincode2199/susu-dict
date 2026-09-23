@@ -19,6 +19,8 @@ The earlier suspension smoke verified resume and nonempty Vue DOM in all eight v
 
 The corrected [smoke](windows-suspend-corrected-smoke.jsonl) also passes resume/DOM/browser exit. A later [readiness diagnostic](windows-readiness-diagnostic.jsonl) reports environment readiness in the initial tick and controller/page navigation readiness taking 2.766 seconds for the first window, then approximately 2.2–2.4 seconds per later window. These are sequential fresh-controller fixture measurements; their cause remains unresolved and they do not establish the cold/hot interactive-frame targets.
 
+Follow-up: replacing the virtual `.local` origin with `.example` reduced the same [smoke](windows-example-host-smoke.jsonl) to first-page readiness at 750 ms and later pages at 234–344 ms, with all-visible at 3.704 seconds including the intentional one-second wait. Microsoft explicitly warns about `.local` navigation delay in its [mapping documentation](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.setvirtualhostnametofoldermapping). This addresses the large delay; the latency acceptance matrix remains unexecuted. The full memory measurements above predate the hostname change and have not been rerun.
+
 Reproduce from a built fixture/executable:
 
 ```powershell

@@ -79,7 +79,7 @@ static HRESULT MeasureWindows(const wchar_t* folder, const wchar_t* userData, in
         window->hwnd = CreateWindowExW(WS_EX_NOACTIVATE,L"STATIC",L"Su-Su F00 representative window",WS_OVERLAPPEDWINDOW,
             80,80,width,700,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
         if (!window->hwnd) { hr = HRESULT_FROM_WIN32(GetLastError()); break; }
-        const std::wstring url = L"https://susu-probe.local/index.html?kind=" + std::wstring(kind);
+        const std::wstring url = L"https://susu-probe.example/index.html?kind=" + std::wstring(kind);
         hr = environment->environment->CreateCoreWebView2Controller(window->hwnd,
             Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([window,folder,url,width](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT {
                 if (window->stopped) {if(controller)controller->Close();return S_OK;}
@@ -88,7 +88,7 @@ static HRESULT MeasureWindows(const wchar_t* folder, const wchar_t* userData, in
                 window->status=controller->get_CoreWebView2(&window->view);
                 ComPtr<ICoreWebView2_3> view3;
                 if (SUCCEEDED(window->status)) window->status=window->view.As(&view3);
-                if (SUCCEEDED(window->status)) window->status=view3->SetVirtualHostNameToFolderMapping(L"susu-probe.local",folder,COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS);
+                if (SUCCEEDED(window->status)) window->status=view3->SetVirtualHostNameToFolderMapping(L"susu-probe.example",folder,COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS);
                 if (FAILED(window->status)) {window->ready=true;return S_OK;}
                 ComPtr<ICoreWebView2Settings> settings;
                 if (SUCCEEDED(window->view->get_Settings(&settings))) {settings->put_AreHostObjectsAllowed(FALSE);settings->put_AreDevToolsEnabled(FALSE);}
@@ -170,3 +170,4 @@ extern "C" __declspec(dllexport) HRESULT susu_measure_windows(const wchar_t* fol
     sta.join();
     return result;
 }
+

@@ -1,0 +1,17 @@
+{"event":"start","tick":142868546}
+{"event":"environment-ready","tick":142868546}
+{"event":"window-ready","tick":142869296}
+{"event":"window-ready","tick":142869640}
+{"event":"window-ready","tick":142869906}
+{"event":"window-ready","tick":142870140}
+{"event":"window-ready","tick":142870406}
+{"event":"window-ready","tick":142870703}
+{"event":"window-ready","tick":142870953}
+{"event":"window-ready","tick":142871234}
+{"event":"all-visible","tick":142872250}
+{"event":"all-hidden","tick":142872312}
+{"event":"all-suspended","tick":142872328}
+{"event":"all-resumed-dom-verified","tick":142873500}
+{"event":"controllers-closed","tick":142873875}
+{"event":"browser-exited","tick":142874421}
+{"event":"finished","tick":142875437}
