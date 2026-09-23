@@ -4,6 +4,14 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Susu.Windows;
+if (args.Length == 4 && args[0] == "--plugin-host") return Susu.Probes.PluginHost.ChildHost.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), Susu.Probes.PluginHost.QuickJsRuntime.Create, "quickjs");
+if (args.Length == 4 && args[0] == "--plugin-host-adversarial") return Susu.Probes.PluginHost.AdversarialChild.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));
+if (args.Length >= 1 && args[0] == "--x-probe") return Susu.Probes.PluginHost.XProbeChild.Run(args[1..]);
+if (args.Length == 1 && args[0] == "--x-probe-idle") { Thread.Sleep(60000); return 0; }
+if (args.Length == 3 && args[0] == "--x06-parent") return Susu.Probes.PluginHost.XMatrix.CrashParent(args[1], args[2]);
+if (args.Length == 2 && args[0] == "--x-matrix") return Susu.Probes.PluginHost.XMatrix.Run(args[1]);
+if (args.Length == 5 && args[0] == "--engine-bench") return Susu.Probes.PluginHost.EngineBench.Run(args[1], args[2], args[3], int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture));
+if (args.Length == 2 && args[0] == "--calibrate-budget") return Susu.Probes.PluginHost.EngineBench.Calibrate(args[1]);
 
 if (args.Length == 3 && args[0] == "--sandbox-child") return SandboxChild.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));
 if (args.Length == 1 && args[0] == "--sandbox-grandchild") return 0;

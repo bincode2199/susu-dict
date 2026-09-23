@@ -1,10 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><PublishAot>true</PublishAot><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/Susu.Windows/Susu.Windows.csproj" /></ItemGroup>
+  <ItemGroup><AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute"><_Parameter1>windows</_Parameter1></AssemblyAttribute></ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="NSec.Cryptography" />
     <PackageReference Include="Microsoft.Web.WebView2" ExcludeAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="fixtures/plugins/**/*" Link="plugins/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

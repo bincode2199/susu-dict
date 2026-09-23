@@ -1,0 +1,117 @@
+{
+  "timestamp": "2026-09-23T19:27:04.7936935+00:00",
+  "engine": "quickjs",
+  "executable": "Susu.Probes.exe",
+  "scope": "F00 PER01 engine route comparison; synthetic plugin and broker fixture; AppContainer child; NativeAOT unless stated",
+  "samples": 30,
+  "profileCreateMs": 68.226,
+  "coldStartToReady": {
+    "samples": 30,
+    "p50": 131.288,
+    "p95": 150.472,
+    "max": 151.076,
+    "min": 91.907,
+    "mean": 130.526
+  },
+  "launch": {
+    "samples": 30,
+    "p50": 64.748,
+    "p95": 76.278,
+    "max": 79.522,
+    "min": 44.051,
+    "mean": 64.769
+  },
+  "connect": {
+    "samples": 30,
+    "p50": 49.282,
+    "p95": 57.712,
+    "max": 57.869,
+    "min": 34.715,
+    "mean": 48.636
+  },
+  "hello": {
+    "samples": 30,
+    "p50": 9.013,
+    "p95": 11.177,
+    "max": 11.241,
+    "min": 5.786,
+    "mean": 8.852
+  },
+  "load": {
+    "samples": 30,
+    "p50": 6.018,
+    "p95": 7.761,
+    "max": 8.443,
+    "min": 3.165,
+    "mean": 5.616
+  },
+  "roundTrip": {
+    "samples": 30,
+    "p50": 1.946,
+    "p95": 2.189,
+    "max": 2.301,
+    "min": 1.698,
+    "mean": 1.96
+  },
+  "cancelAwaitingHost": {
+    "samples": 30,
+    "p50": 1.207,
+    "p95": 1.66,
+    "max": 2.095,
+    "min": 0.996,
+    "mean": 1.278
+  },
+  "spinToFailure": {
+    "samples": 30,
+    "p50": 251.456,
+    "p95": 251.844,
+    "max": 251.916,
+    "min": 251.17,
+    "mean": 251.467
+  },
+  "spinRebuild": {
+    "samples": 30,
+    "p50": 4.106,
+    "p95": 4.859,
+    "max": 6.143,
+    "min": 2.103,
+    "mean": 4.041
+  },
+  "microtaskToFailure": {
+    "samples": 30,
+    "p50": 251.334,
+    "p95": 251.736,
+    "max": 251.884,
+    "min": 250.901,
+    "mean": 251.319
+  },
+  "memory": [
+    {
+      "plugins": 0,
+      "privateWorkingSetMiB": 1.629,
+      "privateBytesMiB": 3.781,
+      "peakPrivateBytesMiB": 3.789,
+      "engineHeapMiB": 0
+    },
+    {
+      "plugins": 1,
+      "privateWorkingSetMiB": 2.246,
+      "privateBytesMiB": 4.562,
+      "peakPrivateBytesMiB": 4.562,
+      "engineHeapMiB": 0.13
+    },
+    {
+      "plugins": 22,
+      "privateWorkingSetMiB": 7.148,
+      "privateBytesMiB": 9.543,
+      "peakPrivateBytesMiB": 9.543,
+      "engineHeapMiB": 2.854
+    }
+  ],
+  "notes": [
+    "Network responses are a synthetic in-process broker fixture; round trips measure IPC \u002B engine \u002B broker, not the Internet.",
+    "Cold start reuses one pre-created AppContainer profile (production creates it once at first run); profile creation is reported separately.",
+    "Cold start discards two warm-up launches; all later samples are separate processes.",
+    "Memory: bench plus 21 copies of the same synthetic plugin, each invoked once; real plugins are larger and are measured again in F19."
+  ]
+}
