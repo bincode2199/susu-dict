@@ -1,0 +1,1534 @@
+{
+  "timestamp": "2026-09-23T20:28:47.2471814+00:00",
+  "os": "Microsoft Windows NT 10.0.26200.0",
+  "scope": "F00 SEL01 prototype matrix (not F08 acceptance)",
+  "apps": [
+    {
+      "id": "notepad",
+      "program": "Notepad (Windows 11)",
+      "version": "Microsoft.WindowsNotepad (Store)",
+      "framework": "WinUI/RichEdit",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 186.7,
+        "reason": "selected",
+        "source": "uia",
+        "matched": true,
+        "uiaMs": 109.7,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+      },
+      "warm": [
+        {
+          "helperMs": 165.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 94.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 173.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 109.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 155.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 97.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 170.7,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 102.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 158.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 97.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 178.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 106.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 173.4,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 103.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 171.4,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 101.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 164.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 92.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        },
+        {
+          "helperMs": 159.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 92.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (Notepad)"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 118.9,
+        "reason": "unsupported",
+        "source": "none",
+        "matched": false,
+        "uiaMs": 0,
+        "ia2Ms": 46.8,
+        "error": null,
+        "excerpt": ""
+      },
+      "password": null,
+      "empty": {
+        "helperMs": 182.6,
+        "reason": "empty",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 93.4,
+        "ia2Ms": 19.9,
+        "error": null,
+        "excerpt": ""
+      },
+      "rect": [
+        74,
+        127,
+        504,
+        163
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "charmap",
+      "program": "Character Map",
+      "version": "5.2.3668.0",
+      "framework": "Win32 Edit/RichEdit",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 201.1,
+        "reason": "selected",
+        "source": "uia",
+        "matched": true,
+        "uiaMs": 123.8,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta (charmap)"
+      },
+      "warm": [
+        {
+          "helperMs": 157.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 85.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 145.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 88.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 161.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 99.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 159.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 104.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 169.4,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 105.5,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 170.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 105.3,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 176.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 108.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 168.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 99.5,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 173.7,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 107.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        },
+        {
+          "helperMs": 149.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 87.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (charmap)"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 104.1,
+        "reason": "unsupported",
+        "source": "none",
+        "matched": false,
+        "uiaMs": 0,
+        "ia2Ms": 43.4,
+        "error": null,
+        "excerpt": ""
+      },
+      "password": null,
+      "empty": {
+        "helperMs": 174.1,
+        "reason": "empty",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 87.7,
+        "ia2Ms": 19.3,
+        "error": null,
+        "excerpt": ""
+      },
+      "rect": [
+        161,
+        408,
+        320,
+        421
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "wpf",
+      "program": "WPF TextBox fixture (.NET 10)",
+      "version": "1.0.0\u002B905aca70b8cee894ef45661f8b130a16ee1081e4",
+      "framework": "WPF",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 190.7,
+        "reason": "selected",
+        "source": "uia",
+        "matched": true,
+        "uiaMs": 130.8,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+      },
+      "warm": [
+        {
+          "helperMs": 183.4,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 116.5,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 179.7,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 111.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 180.7,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 115.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 174.7,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 106.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 163.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 107.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 178.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 113.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 170.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 104.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 125,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 70.3,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 108.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 68.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        },
+        {
+          "helperMs": 159.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 106.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WPF)"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 102.4,
+        "reason": "unsupported",
+        "source": "none",
+        "matched": false,
+        "uiaMs": 0,
+        "ia2Ms": 44.3,
+        "error": null,
+        "excerpt": ""
+      },
+      "password": {
+        "helperMs": 156.6,
+        "reason": "password",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 88.9,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": ""
+      },
+      "empty": {
+        "helperMs": 191.5,
+        "reason": "empty",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 96.5,
+        "ia2Ms": 32.7,
+        "error": null,
+        "excerpt": ""
+      },
+      "rect": [
+        123,
+        144,
+        504,
+        165
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "winforms",
+      "program": "WinForms RichTextBox fixture (.NET 10)",
+      "version": "1.0.0\u002B905aca70b8cee894ef45661f8b130a16ee1081e4",
+      "framework": "WinForms/RichEdit",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 245,
+        "reason": "selected",
+        "source": "uia",
+        "matched": true,
+        "uiaMs": 182.1,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+      },
+      "warm": [
+        {
+          "helperMs": 140.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 96.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 202.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 133.3,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 192.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 127.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 188,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 124.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 182.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 119.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 168.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 108,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 191.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 130.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 207.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 132.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 138.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 78.5,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        },
+        {
+          "helperMs": 175.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 120.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 113.9,
+        "reason": "unsupported",
+        "source": "none",
+        "matched": false,
+        "uiaMs": 0,
+        "ia2Ms": 44.9,
+        "error": null,
+        "excerpt": ""
+      },
+      "password": {
+        "helperMs": 180.4,
+        "reason": "password",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 108.8,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": ""
+      },
+      "empty": {
+        "helperMs": 174.6,
+        "reason": "empty",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 95.6,
+        "ia2Ms": 19.3,
+        "error": null,
+        "excerpt": ""
+      },
+      "rect": [
+        111,
+        134,
+        587,
+        161
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "edge",
+      "program": "Microsoft Edge",
+      "version": "153.0.4234.48",
+      "framework": "Chromium",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 142.1,
+        "reason": "selected",
+        "source": "uia",
+        "matched": true,
+        "uiaMs": 87.2,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+      },
+      "warm": [
+        {
+          "helperMs": 183.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 111.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 182.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 109.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 165.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 106.5,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 172.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 108.5,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 150.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 85.3,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 192.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 116,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 165.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 102,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 178,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 112.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 183.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 110.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 160.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 96.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 123.9,
+        "reason": "selected",
+        "source": "ia2",
+        "matched": true,
+        "uiaMs": 0,
+        "ia2Ms": 58.2,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+      },
+      "password": {
+        "helperMs": 148.3,
+        "reason": "password",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 79.1,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": ""
+      },
+      "empty": null,
+      "rect": [
+        46,
+        114,
+        516,
+        178
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "firefox",
+      "program": "Mozilla Firefox",
+      "version": "156.0.1",
+      "framework": "Gecko",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 265.8,
+        "reason": "empty",
+        "source": "none",
+        "matched": false,
+        "uiaMs": 134.2,
+        "ia2Ms": 52.1,
+        "error": null,
+        "excerpt": ""
+      },
+      "warm": [
+        {
+          "helperMs": 185.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 133.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 122.4,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 76.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 134.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 82.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 120.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 74.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 143.4,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 90.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 177,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 119.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 195.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 128.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 391.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 339.3,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 226.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 162.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        },
+        {
+          "helperMs": 189.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 135.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 161.1,
+        "reason": "selected",
+        "source": "ia2",
+        "matched": true,
+        "uiaMs": 0,
+        "ia2Ms": 110.4,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF\u25CF"
+      },
+      "password": {
+        "helperMs": 124.6,
+        "reason": "password",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 70.4,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": ""
+      },
+      "empty": null,
+      "rect": [
+        36,
+        113,
+        506,
+        177
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "electron-22",
+      "program": "Electron 22 (old Chromium 108)",
+      "version": "22.3.27",
+      "framework": "Electron/Chromium",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 221.2,
+        "reason": "selected",
+        "source": "ia2",
+        "matched": true,
+        "uiaMs": 116,
+        "ia2Ms": 33.9,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+      },
+      "warm": [
+        {
+          "helperMs": 229,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 156.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 194.7,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 127.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 190.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 135,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 204.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 135.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 143.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 88.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 209.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 142.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 203.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 129.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 199.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 134.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 189.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 133.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        },
+        {
+          "helperMs": 192.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 127,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 142.8,
+        "reason": "selected",
+        "source": "ia2",
+        "matched": true,
+        "uiaMs": 0,
+        "ia2Ms": 66.4,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+      },
+      "password": {
+        "helperMs": 162,
+        "reason": "password",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 91.2,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": ""
+      },
+      "empty": null,
+      "rect": [
+        132,
+        175,
+        602,
+        199
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "electron-44",
+      "program": "Electron 44 (current)",
+      "version": "44.4.5",
+      "framework": "Electron/Chromium",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 253.3,
+        "reason": "selected",
+        "source": "ia2",
+        "matched": true,
+        "uiaMs": 152.4,
+        "ia2Ms": 33.7,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+      },
+      "warm": [
+        {
+          "helperMs": 177.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 108.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 183.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 111.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 177.7,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 107.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 169.8,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 100.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 165.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 106.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 184.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 110.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 179.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 114.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 167.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 103.1,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 174.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 110.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        },
+        {
+          "helperMs": 159.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 93.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)\n\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 98.6,
+        "reason": "selected",
+        "source": "ia2",
+        "matched": true,
+        "uiaMs": 0,
+        "ia2Ms": 39.7,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (web page)"
+      },
+      "password": {
+        "helperMs": 162.3,
+        "reason": "password",
+        "source": "uia",
+        "matched": false,
+        "uiaMs": 90.5,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": ""
+      },
+      "empty": null,
+      "rect": [
+        132,
+        181,
+        602,
+        245
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "terminal",
+      "program": "Windows Terminal",
+      "version": "Microsoft.WindowsTerminal (Store)",
+      "framework": "WinUI/DirectX terminal",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 206.8,
+        "reason": "selected",
+        "source": "uia",
+        "matched": true,
+        "uiaMs": 135.1,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+      },
+      "warm": [
+        {
+          "helperMs": 165.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 99.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 168.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 98.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 171.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 100.8,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 177.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 108.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 176.4,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 104.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 168.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 103.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 157.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 97,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 160.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 96.3,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 166.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 98.3,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        },
+        {
+          "helperMs": 164.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 97,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (terminal)                                              "
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 142.7,
+        "reason": "unsupported",
+        "source": "none",
+        "matched": false,
+        "uiaMs": 0,
+        "ia2Ms": 69.2,
+        "error": null,
+        "excerpt": ""
+      },
+      "password": null,
+      "empty": null,
+      "rect": [
+        34,
+        75,
+        1114,
+        645
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    },
+    {
+      "id": "conhost",
+      "program": "Console Host (conhost)",
+      "version": "10.0.26100.1",
+      "framework": "Win32 console",
+      "mode": "input",
+      "windowFound": true,
+      "activated": true,
+      "cold": {
+        "helperMs": 167.4,
+        "reason": "selected",
+        "source": "uia",
+        "matched": true,
+        "uiaMs": 95.2,
+        "ia2Ms": 0,
+        "error": null,
+        "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+      },
+      "warm": [
+        {
+          "helperMs": 81.2,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 43.4,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 84.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 45.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 113.5,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 62.5,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 96.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 48.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 123.3,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 68.6,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 116.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 60.7,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 128.1,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 67,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 149.6,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 81.9,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 104.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 47,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        },
+        {
+          "helperMs": 125.9,
+          "reason": "selected",
+          "source": "uia",
+          "matched": true,
+          "uiaMs": 69.2,
+          "ia2Ms": 0,
+          "error": null,
+          "excerpt": "Su-Su selection marker alpha beta (console)                                               "
+        }
+      ],
+      "ia2Only": {
+        "helperMs": 59.5,
+        "reason": "unsupported",
+        "source": "none",
+        "matched": false,
+        "uiaMs": 0,
+        "ia2Ms": 11,
+        "error": null,
+        "excerpt": ""
+      },
+      "password": null,
+      "empty": null,
+      "rect": [
+        60,
+        83,
+        1020,
+        131
+      ],
+      "note": null,
+      "selectMethod": null,
+      "providers": 0,
+      "passwordElements": 0
+    }
+  ],
+  "notes": [
+    "Marker text is synthetic; programs were launched by the driver with isolated profiles/files and closed afterwards.",
+    "Selection is made with real SendInput (Ctrl\u002BA, Ctrl\u002BShift\u002BA for Windows Terminal); browser pages are first clicked to focus the document.",
+    "Cold = first helper query after the program started (accessibility tree may be built lazily), 5 s diagnostic deadline; the text is then selected again and warm = product 500 ms helper deadline including helper process start.",
+    "IA2-only row forces the second level on the same selection to show whether IA2 would work where UIA already does.",
+    "Password row: Tab moves focus to the fixture\u0027s password field; expected reason \u0027password\u0027 with no text."
+  ]
+}

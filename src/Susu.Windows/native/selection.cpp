@@ -6,11 +6,12 @@
 #include <string>
 #include <cstdio>
 #include <thread>
+#include <algorithm>
 
 using Microsoft::WRL::ComPtr;
 struct Apartment { HRESULT status=CoInitializeEx(nullptr,COINIT_MULTITHREADED); ~Apartment(){if(SUCCEEDED(status))CoUninitialize();} };
 
-extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_t* text, unsigned int capacity, int* reason) {
+static HRESULT ReadSelection(HWND target, wchar_t* text, unsigned int capacity, int* reason, double* rect) {
     if(!target||!text||capacity<2||capacity>65537||!reason)return E_INVALIDARG;
     text[0]=0;*reason=0;
     Apartment apartment;
@@ -25,10 +26,14 @@ extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_
     if(foreground){
         hr=automation->GetFocusedElement(&element);
         if(SUCCEEDED(hr)){
-            int processId=0;DWORD expected=0;
-            GetWindowThreadProcessId(target,&expected);
-            hr=element->get_CurrentProcessId(&processId);
-            if(SUCCEEDED(hr)&&static_cast<DWORD>(processId)!=expected){*reason=4;return S_OK;}
+            // Compare with the target window's UIA provider process, not GetWindowThreadProcessId:
+            // console windows report the attached client (cmd.exe) while conhost provides UIA.
+            int processId=0,expected=0;
+            ComPtr<IUIAutomationElement> windowElement;
+            hr=automation->ElementFromHandle(target,&windowElement);
+            if(SUCCEEDED(hr))hr=windowElement->get_CurrentProcessId(&expected);
+            if(SUCCEEDED(hr))hr=element->get_CurrentProcessId(&processId);
+            if(SUCCEEDED(hr)&&processId!=expected){*reason=4;return S_OK;}
         }
     }else hr=automation->ElementFromHandle(target,&element);
     if(FAILED(hr))return hr;
@@ -38,7 +43,26 @@ extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_
     if(password){*reason=1;return S_OK;}
     ComPtr<IUIAutomationTextPattern> pattern;
     hr=element->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&pattern));
-    if(FAILED(hr)){*reason=2;return S_OK;}
+    if(FAILED(hr)||!pattern){
+        // PLAN 3.1: walk up from the focused element to the nearest TextPattern provider
+        // (e.g. a browser document around a focused link), bounded and within the same window.
+        ComPtr<IUIAutomationTreeWalker> walker;
+        pattern.Reset();
+        if(SUCCEEDED(automation->get_ControlViewWalker(&walker))){
+            ComPtr<IUIAutomationElement> current=element;
+            for(int depth=0;depth<8&&!pattern;++depth){
+                ComPtr<IUIAutomationElement> parent;
+                if(FAILED(walker->GetParentElement(current.Get(),&parent))||!parent)break;
+                UIA_HWND native=nullptr;
+                parent->get_CurrentNativeWindowHandle(&native);
+                if(native&&GetAncestor(static_cast<HWND>(native),GA_ROOT)!=GetAncestor(target,GA_ROOT))break;
+                ComPtr<IUIAutomationTextPattern> candidate;
+                if(SUCCEEDED(parent->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&candidate)))&&candidate)pattern=candidate;
+                current=parent;
+            }
+        }
+        if(!pattern){*reason=2;return S_OK;}
+    }
     ComPtr<IUIAutomationTextRangeArray> ranges;
     hr=pattern->GetSelection(&ranges);
     if(FAILED(hr))return hr;
@@ -57,6 +81,22 @@ extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_
         if(length>0){if(!selected.empty())selected+=L"\n";selected.append(value,length);}
         SysFreeString(value);
         if(selected.size()>=capacity)return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+        // Union of the selection's bounding rectangles (physical screen pixels) for the float anchor.
+        SAFEARRAY* boxes=nullptr;
+        if(rect&&SUCCEEDED(range->GetBoundingRectangles(&boxes))&&boxes){
+            double* values=nullptr;
+            LONG upper=-1;
+            if(SUCCEEDED(SafeArrayGetUBound(boxes,1,&upper))&&SUCCEEDED(SafeArrayAccessData(boxes,reinterpret_cast<void**>(&values)))){
+                for(LONG k=0;k+3<=upper;k+=4){
+                    const double l=values[k],t=values[k+1],r=l+values[k+2],b=t+values[k+3];
+                    if(values[k+2]<=0||values[k+3]<=0)continue;
+                    if(rect[2]<=rect[0]){rect[0]=l;rect[1]=t;rect[2]=r;rect[3]=b;}
+                    else{rect[0]=std::min(rect[0],l);rect[1]=std::min(rect[1],t);rect[2]=std::max(rect[2],r);rect[3]=std::max(rect[3],b);}
+                }
+                SafeArrayUnaccessData(boxes);
+            }
+            SafeArrayDestroy(boxes);
+        }
     }
     if(selected.empty()){*reason=3;return S_OK;}
     if(foreground){
@@ -89,3 +129,14 @@ static void Target(bool password,bool empty){
     if(IsWindow(parent))DestroyWindow(parent);
 }
 extern "C" __declspec(dllexport) void susu_selection_target(int password,int empty){std::thread worker([&]{Target(password!=0,empty!=0);});worker.join();}
+
+extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_t* text, unsigned int capacity, int* reason) {
+    return ReadSelection(target, text, capacity, reason, nullptr);
+}
+
+// rect: left, top, right, bottom in physical screen pixels; all zero when unavailable.
+extern "C" __declspec(dllexport) HRESULT susu_read_selection_ex(HWND target, wchar_t* text, unsigned int capacity, int* reason, double* rect) {
+    if (!rect) return E_POINTER;
+    rect[0] = rect[1] = rect[2] = rect[3] = 0;
+    return ReadSelection(target, text, capacity, reason, rect);
+}

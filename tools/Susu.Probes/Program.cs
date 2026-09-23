@@ -12,6 +12,8 @@ if (args.Length == 3 && args[0] == "--x06-parent") return Susu.Probes.PluginHost
 if (args.Length == 2 && args[0] == "--x-matrix") return Susu.Probes.PluginHost.XMatrix.Run(args[1]);
 if (args.Length == 5 && args[0] == "--engine-bench") return Susu.Probes.PluginHost.EngineBench.Run(args[1], args[2], args[3], int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture));
 if (args.Length == 3 && args[0] == "--webview-bench") return Susu.Probes.PluginHost.EngineBench.RunWebView(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));
+if (args.Length == 4 && args[0] == "--sel-provider") return Susu.Probes.Selection.ProviderProbe.Run(args[1], (nint)long.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), args[3]);
+if (args.Length is 3 or 4 && args[0] == "--sel-matrix") return Susu.Probes.Selection.SelMatrix.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), args.Length == 4 ? args[3] : null);
 if (args.Length == 2 && args[0] == "--calibrate-budget") return Susu.Probes.PluginHost.EngineBench.Calibrate(args[1]);
 
 if (args.Length == 3 && args[0] == "--sandbox-child") return SandboxChild.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));
@@ -45,7 +47,7 @@ if (args.Length == 2 && args[0] is "--selection-child" or "--ia2-child")
     try
     {
         var result = SelectionProbe.ReadWindow((nint)long.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture),args[0]=="--ia2-child");
-        Console.WriteLine(JsonSerializer.Serialize(new SelectionResult(result.Text,result.Reason),ProbeJson.Default.SelectionResult));
+        Console.WriteLine(JsonSerializer.Serialize(new SelectionResult(result.Text,result.Reason,result.Source,result.Rect,result.UiaMs,result.Ia2Ms),ProbeJson.Default.SelectionResult));
         return 0;
     }
     catch(Exception error){Console.Error.WriteLine($"Selection native error {error.GetType().Name} 0x{error.HResult:X8}");return 1;}

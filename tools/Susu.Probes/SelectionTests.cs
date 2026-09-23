@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Susu.Windows;
 
-internal sealed record SelectionResult(string Text,string Reason);
+internal sealed record SelectionResult(string Text,string Reason,string Source="none",double[]? Rect=null,double UiaMs=0,double Ia2Ms=0);
 internal static class SelectionTests
 {
     internal static string ReadExternal(string window,bool ia2Only)
@@ -11,7 +11,7 @@ internal static class SelectionTests
         using var helper=Start(ia2Only?"--ia2-child":"--selection-child",window);
         return ReadBounded(helper,Math.Max(1,500-(int)timer.ElapsedMilliseconds));
     }
-    private static Process Start(params string[] args)
+    internal static Process Start(params string[] args)
     {
         var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
         foreach(string arg in args)info.ArgumentList.Add(arg);
@@ -67,7 +67,7 @@ internal static class SelectionTests
         }
     }
 
-    private static string ReadBounded(Process helper,int milliseconds)
+    internal static string ReadBounded(Process helper,int milliseconds)
     {
         using var timeout=new CancellationTokenSource(milliseconds);
         try
