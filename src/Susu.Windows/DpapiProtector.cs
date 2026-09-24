@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 namespace Susu.Windows;
 
 /// <summary>Current-user DPAPI; never machine-wide and never allows a UI prompt.</summary>
-public sealed class DpapiProtector
+public sealed class DpapiProtector : Susu.Abstractions.ISecretProtector
 {
     public byte[] Protect(ReadOnlySpan<byte> plaintext) => Transform(plaintext, true);
     public byte[] Unprotect(ReadOnlySpan<byte> ciphertext) => Transform(ciphertext, false);

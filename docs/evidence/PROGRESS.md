@@ -1,7 +1,7 @@
 # F00–F03 implementation checkpoint
 
 > Parent: [DEV-PLAN](../development/DEV-PLAN.md) · Catalog: [docs/README](../README.md)  
-> Child documents: [F00](F00/F00.md) · [F01](F01/F01.md)
+> Child documents: [F00](F00/F00.md) · [F01](F01/F01.md) · [F02](F02/F02.md)
 
 Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundation`. Local commits only; **no remote push** is authorized. Dependencies may be fetched from official sources. No rate-limit reset credits are to be used.
 
@@ -11,8 +11,8 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 |---|---|---|
 | F00 | Pending integration acceptance. G0 route decisions are made: QuickJS-NG, three-level selection with IA2, one WebView2 environment with suspend keep-warm. Four measurements are open, all blocked by a non-rendering desktop: PER03 hotkey latency, PER04, capture backend, C06 recheck. | [F00](F00/F00.md) |
 | F01 | Complete: contracts, domain, scheduler and session with 112 deterministic tests. | [F01](F01/F01.md) |
-| F02 | In progress | not yet |
-| F03 | Not started | not yet |
+| F02 | Complete: settings, secrets, SQLite, leases, logs; 76 tests | [F02](F02/F02.md) |
+| F03 | In progress | not yet |
 
 Environment notes for whoever resumes:
 

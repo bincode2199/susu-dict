@@ -13,6 +13,9 @@
     <ProjectReference Include="../../src/Susu.Domain/Susu.Domain.csproj" />
     <ProjectReference Include="../../src/Susu.Abstractions/Susu.Abstractions.csproj" />
     <ProjectReference Include="../../src/Susu.Jobs/Susu.Jobs.csproj" />
+    <ProjectReference Include="../../src/Susu.Storage/Susu.Storage.csproj" />
+    <ProjectReference Include="../../src/Susu.Net/Susu.Net.csproj" />
+    <ProjectReference Include="../../src/Susu.Windows/Susu.Windows.csproj" />
     <ProjectReference Include="../Susu.Testing/Susu.Testing.csproj" />
     <ProjectReference Include="../../tools/Susu.ContractsGen/Susu.ContractsGen.csproj" />
   </ItemGroup>
