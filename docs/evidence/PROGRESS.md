@@ -13,7 +13,7 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 | F01 | Complete: contracts, domain, scheduler and session with 112 deterministic tests. | [F01](F01/F01.md) |
 | F02 | Complete: settings, secrets, SQLite, leases, logs; 76 tests; exercised inside the AOT `susu.exe`. | [F02](F02/F02.md) |
 | F03 | Complete. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows. Multi-monitor and mixed DPI, a real IME, screen reader, high contrast and PER03 on the real shell moved to the F19 final acceptance on a physical Windows machine (D-67). | [F03](F03/F03.md) |
-| F04 | In progress: coding agent implementing F04.1–F04.4. | [F04](F04/F04.md) |
+| F04 | In progress. Coding is done (4 commits, 274/274 tests); the independent testing agent is pending, paused on the usage limit. | [F04](F04/F04.md) |
 
 Environment notes for whoever resumes:
 
