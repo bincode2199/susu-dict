@@ -199,16 +199,19 @@ public class ShellCoordinatorTests
         private long counter;
         private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-        public Rig(bool translateReady = false, Func<AppSettings, TranslationSession?>? sessions = null)
+        public Rig(bool translateReady = false, Func<AppSettings, TranslationSession?>? sessions = null, ILanguageDetector? languageDetector = null)
         {
             Settings = new SettingsStore(Root.Paths, new ManualClock());
             Secrets = new SecretStore(Root.Paths.Secrets, new XorProtector());
             Config = new ConfigService(Settings, Secrets);
             Features.Register(new FeatureDescriptor(FeatureRegistry.Ids.InputTranslation, FeatureState.Available, null, [Capability.Translate]));
             Features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Ocr, FeatureState.InDevelopment, "feature.inDevelopment", []));
-            Shell = new ShellCoordinator(Platform, Config, Features, c => translateReady && c == Capability.Translate, new ShellOptions(false, false), sessions);
+            Shell = new ShellCoordinator(Platform, Config, Features, c => translateReady && c == Capability.Translate, new ShellOptions(false, false), sessions, languageDetector);
             Shell.Start();
         }
+
+        public TranslationSnapshot TranslationEvent(int index = 0)
+            => Platform.Posted.Where(p => p.Envelope.Name == "translation").ElementAt(index).Envelope.Payload!.Value.Deserialize(ContractsJson.Default.TranslationSnapshot)!;
 
         public void Ready(WindowKind kind) => Shell.OnPageMessage(kind, JsonSerializer.Serialize(new { uiVersion = 1, kind = "Ready", windowSessionId = Platform.Session(kind) }));
 
@@ -421,6 +424,59 @@ public class ShellCoordinatorTests
         Assert.True(rig.Result(rig.Command(WindowKind.Main, UiCommands.CopyText, new { text = "T:hello" })).Ok);
         Assert.Equal("T:hello", rig.Platform.Clipboard);
         Assert.Equal("text-length", rig.Result(rig.Command(WindowKind.Main, UiCommands.SubmitText, new { text = "   " })).Error);
+    }
+
+    private sealed class FakeDetector(IReadOnlyList<string> candidates) : ILanguageDetector
+    {
+        public int Calls;
+        public Task<IReadOnlyList<string>> DetectAsync(string text, CancellationToken cancellationToken) { Calls++; return Task.FromResult(candidates); }
+    }
+
+    [Fact] // ARCHITECTURE 7: pure Han/Latin text takes the fast Unicode path and never calls the native detector
+    public void Pure_script_text_skips_the_language_detector()
+    {
+        var provider = new ScriptedProvider("svc", ScriptedProvider.Generous, new Step.Echo("T:"));
+        var config = new ConfigSnapshot(1, 1, 1, 1, TimeSpan.FromSeconds(30));
+        var detector = new FakeDetector(["zh-Hans"]);
+        using var rig = new Rig(translateReady: true, sessions: _ => new TranslationSession([provider], new TranslationSessionOptions(config, 1), new InvocationScheduler(new SchedulerLimits()), new ManualClock(), new FixedJitter(), new RecordingUsage()), languageDetector: detector);
+        rig.Shell.Open(WindowKind.Main);
+        rig.Ready(WindowKind.Main);
+        rig.LastSnapshot(WindowKind.Main);
+        Assert.True(rig.Result(rig.Command(WindowKind.Main, UiCommands.SubmitText, new { text = "hello world" })).Ok);
+        var snapshot = rig.TranslationEvent();
+        Assert.Equal(("en", "zh-Hans"), (snapshot.From, snapshot.To));
+        Assert.Equal(0, detector.Calls);
+    }
+
+    [Fact] // ARCHITECTURE 7: mixed-script text falls to the native detector; a confident candidate picks direction
+    public void Mixed_script_text_uses_the_language_detector_result()
+    {
+        var provider = new ScriptedProvider("svc", ScriptedProvider.Generous, new Step.Echo("T:"));
+        var config = new ConfigSnapshot(1, 1, 1, 1, TimeSpan.FromSeconds(30));
+        var detector = new FakeDetector(["zh-Hans"]);
+        using var rig = new Rig(translateReady: true, sessions: _ => new TranslationSession([provider], new TranslationSessionOptions(config, 1), new InvocationScheduler(new SchedulerLimits()), new ManualClock(), new FixedJitter(), new RecordingUsage()), languageDetector: detector);
+        rig.Shell.Open(WindowKind.Main);
+        rig.Ready(WindowKind.Main);
+        rig.LastSnapshot(WindowKind.Main);
+        Assert.True(rig.Result(rig.Command(WindowKind.Main, UiCommands.SubmitText, new { text = "混合 mixed 文本" })).Ok);
+        var snapshot = rig.TranslationEvent();
+        Assert.Equal(("zh-Hans", "en"), (snapshot.From, snapshot.To));
+        Assert.Equal(1, detector.Calls);
+    }
+
+    [Fact] // ARCHITECTURE 7: detection failure/no confident candidate falls back to the configured default, never blocks
+    public void Detector_failure_falls_back_to_the_default_source_language()
+    {
+        var provider = new ScriptedProvider("svc", ScriptedProvider.Generous, new Step.Echo("T:"));
+        var config = new ConfigSnapshot(1, 1, 1, 1, TimeSpan.FromSeconds(30));
+        var detector = new FakeDetector([]); // no candidate the host can map (e.g. unsupported language)
+        using var rig = new Rig(translateReady: true, sessions: _ => new TranslationSession([provider], new TranslationSessionOptions(config, 1), new InvocationScheduler(new SchedulerLimits()), new ManualClock(), new FixedJitter(), new RecordingUsage()), languageDetector: detector);
+        rig.Shell.Open(WindowKind.Main);
+        rig.Ready(WindowKind.Main);
+        rig.LastSnapshot(WindowKind.Main);
+        Assert.True(rig.Result(rig.Command(WindowKind.Main, UiCommands.SubmitText, new { text = "混合 mixed 文本" })).Ok);
+        var snapshot = rig.TranslationEvent();
+        Assert.Equal((rig.Config.State.Effective.General.SourceLanguage, rig.Config.State.Effective.General.TargetLanguage), (snapshot.From, snapshot.To));
     }
 }
 

@@ -89,6 +89,7 @@ public sealed class ShellCoordinator
     private readonly Func<Capability, bool> capabilityReady;
     private readonly ShellOptions options;
     private readonly Func<AppSettings, TranslationSession?> sessionFactory;
+    private readonly ILanguageDetector? languageDetector;
     private readonly Dictionary<WindowKind, WindowSession> windows = [];
     private readonly WebViewLifecycle lifecycle = new();
     private Dictionary<string, bool> hotkeyResults = new(StringComparer.Ordinal);
@@ -96,7 +97,7 @@ public sealed class ShellCoordinator
     private (string From, string To)? languageOverride;
 
     public ShellCoordinator(IWindowPlatform platform, IConfigService config, FeatureRegistry features, Func<Capability, bool> capabilityReady,
-        ShellOptions options, Func<AppSettings, TranslationSession?>? sessionFactory = null)
+        ShellOptions options, Func<AppSettings, TranslationSession?>? sessionFactory = null, ILanguageDetector? languageDetector = null)
     {
         this.platform = platform;
         this.config = config;
@@ -104,6 +105,7 @@ public sealed class ShellCoordinator
         this.capabilityReady = capabilityReady;
         this.options = options;
         this.sessionFactory = sessionFactory ?? (_ => null);
+        this.languageDetector = languageDetector;
     }
 
     public event Action<string>? Diagnostic;
@@ -250,7 +252,7 @@ public sealed class ShellCoordinator
                 var text = Read(payload, ContractsJson.Default.SubmitTextRequest).Text;
                 if (string.IsNullOrWhiteSpace(text) || text.Length > 100_000) return new CommandResult(false, "text-length");
                 var general = config.State.Effective.General;
-                var (from, to) = languageOverride ?? (general.SourceLanguage, general.TargetLanguage);
+                var (from, to) = languageOverride ?? await ResolveLanguageAsync(text, general);
                 await translation.SubmitAsync(text, from, to);
                 // A submit starts a new generation: the page adopts it from this snapshot and replays newer patches.
                 var snapshot = await translation.SnapshotAsync();
@@ -297,6 +299,30 @@ public sealed class ShellCoordinator
     {
         foreach (var (windowKind, session) in windows)
             if (session.Ready && (only is null || only == windowKind)) Send(windowKind, session, kind, name, null, payload);
+    }
+
+    /// <summary>
+    /// TextInput → detect/direction (ARCHITECTURE 7): pure Han/Latin text takes the fast Unicode path;
+    /// mixed/ambiguous text falls to the native ELS detector, bounded so a slow/unavailable detector
+    /// never blocks submission past a short budget. Detection failure or no confident candidate falls
+    /// back to the configured default source language; the target is always the zh↔en opposite of it.
+    /// </summary>
+    private async Task<(string From, string To)> ResolveLanguageAsync(string text, GeneralSettings general)
+    {
+        string? detected = ScriptDetector.Detect(text);
+        if (detected is null && languageDetector is not null)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+                var candidates = await languageDetector.DetectAsync(text, timeout.Token);
+                detected = candidates.Select(Languages.FromDetector).FirstOrDefault(c => c is not null);
+            }
+            catch (OperationCanceledException) { } // bounded: falls back below rather than stalling submit
+            catch (Exception) { } // a native detector failure is not a translation failure
+        }
+        detected ??= general.SourceLanguage;
+        return (detected, Languages.OppositeOf(detected));
     }
 
     // ---------- translation projection ----------
