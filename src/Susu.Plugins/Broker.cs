@@ -36,10 +36,11 @@ public sealed class Broker
 
     public void ApproveLocalOrigin(string origin) { lock (grants) approvedLocalOrigins.Add(origin); }
 
-    public GrantInfo Issue(string requestId, string pluginId, int callId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, IEnumerable<string>? handles = null)
+    /// <param name="expiresAt">Test-only override of the 10-minute default grant lifetime (F04.3 S09: a call token is rejected once expired).</param>
+    public GrantInfo Issue(string requestId, string pluginId, int callId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, IEnumerable<string>? handles = null, DateTime? expiresAt = null)
     {
         var info = new GrantInfo(Convert.ToHexString(RandomNumberGenerator.GetBytes(24)), requestId, pluginId, callId,
-            [.. origins.Select(o => Origin(new Uri(o)) ?? throw new ArgumentException($"Invalid origin {o}"))], [.. secrets ?? []], [.. handles ?? []], DateTime.UtcNow.AddMinutes(10));
+            [.. origins.Select(o => Origin(new Uri(o)) ?? throw new ArgumentException($"Invalid origin {o}"))], [.. secrets ?? []], [.. handles ?? []], expiresAt ?? DateTime.UtcNow.AddMinutes(10));
         lock (grants) grants[info.Grant] = info;
         return info;
     }

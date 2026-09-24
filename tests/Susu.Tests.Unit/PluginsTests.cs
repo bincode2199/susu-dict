@@ -182,6 +182,18 @@ public class SignatureFileTests
 public class BrokerTests
 {
     [Fact]
+    public async Task An_expired_grant_is_rejected_even_though_it_was_never_revoked()
+    {
+        var broker = new Broker();
+        var grant = broker.Issue("r1", "p1", 1, ["https://allowed.example"], expiresAt: DateTime.UtcNow.AddMilliseconds(-1));
+        var envelope = new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.ApiCall, "r1", "j1", PluginId: "p1", Grant: grant.Grant,
+            Payload: JsonSerializer.SerializeToElement(new ApiCallPayload(1, 1, "http", JsonDocument.Parse("{\"method\":\"GET\",\"url\":\"https://allowed.example\"}").RootElement), ContractsJson.Default.ApiCallPayload));
+        var result = await broker.HandleAsync(envelope);
+        Assert.False(result.Ok);
+        Assert.Equal(1, broker.ActiveGrants); // still tracked (not revoked), but every use is denied
+    }
+
+    [Fact]
     public async Task Denies_a_call_with_no_grant()
     {
         var broker = new Broker();
@@ -232,25 +244,125 @@ public class BrokerTests
             Payload: JsonSerializer.SerializeToElement(new ApiCallPayload(1, callId, op, JsonDocument.Parse(argsJson).RootElement), ContractsJson.Default.ApiCallPayload));
 }
 
+/// <summary>Minimal in-memory session double so Supervisor's timing can be unit-tested without a real sandbox.</summary>
+internal sealed class FakeSession : IHostSessionHandle
+{
+    public event Action? Disconnected;
+    public bool Disposed { get; private set; }
+    public void Crash() => Disconnected?.Invoke();
+    public void Dispose() => Disposed = true;
+}
+
 public class SupervisorTests
 {
+    // ManualClock resolves Delay() continuations via RunContinuationsAsynchronously (a background
+    // thread-pool hop), so a settle pause is needed after Advance() before asserting - mirrors the
+    // pattern in JobsTests.cs.
+    private static Task Settle() => Task.Delay(30, TestContext.Current.CancellationToken);
+
     [Fact]
-    public async Task Stops_automatic_restart_after_three_failures_within_the_window()
+    public async Task Restarts_with_1_2_4_second_backoff_after_each_crash()
     {
         var clock = new ManualClock();
-        int attempts = 0;
-        var supervisor = new Supervisor(() =>
-        {
-            attempts++;
-            throw new InvalidOperationException("launch fails for this test");
-        }, clock);
-        // Directly exercise the private restart path via reflection-free approach: Start() itself throws
-        // since Launch() is synchronous; the retry/backoff/stop behavior is exercised through OnDisconnected
-        // in the full HostSession-backed integration test. Here we assert the public contract:
-        // three consecutive failed manual restarts do not loop forever and each attempt is independent.
-        for (int i = 0; i < 3; i++)
-            Assert.Throws<InvalidOperationException>(() => supervisor.Start());
-        Assert.Equal(3, attempts);
-        Assert.False(supervisor.Stopped); // Stopped only latches after a *running* session disconnects three times
+        int launches = 0;
+        var supervisor = new Supervisor<FakeSession>(() => { launches++; return new FakeSession(); }, clock);
+        var first = supervisor.Start();
+        Assert.Equal(1, launches);
+
+        first.Crash();
+        clock.Advance(TimeSpan.FromMilliseconds(999));
+        await Settle();
+        Assert.Equal(1, launches); // still short of the 1 s backoff
+        clock.Advance(TimeSpan.FromMilliseconds(2));
+        await Settle();
+        Assert.Equal(2, launches); // relaunched after 1 s
+
+        supervisor.Current.Crash();
+        clock.Advance(TimeSpan.FromSeconds(2));
+        await Settle();
+        Assert.Equal(3, launches); // second failure backs off 2 s
+
+        supervisor.Current.Crash();
+        clock.Advance(TimeSpan.FromSeconds(4));
+        await Settle();
+        Assert.Equal(4, launches); // third failure backs off 4 s
+        Assert.False(supervisor.Stopped);
+    }
+
+    [Fact]
+    public async Task Stops_automatic_restart_after_a_fourth_failure_inside_the_60s_window()
+    {
+        var clock = new ManualClock();
+        var supervisor = new Supervisor<FakeSession>(() => new FakeSession(), clock);
+        bool stalled = false;
+        supervisor.Stalled += () => stalled = true;
+        var session = supervisor.Start();
+
+        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await Settle();
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(2)); await Settle();
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(4)); await Settle();
+        // A fourth crash inside the 60 s window stops automatic restart instead of relaunching.
+        supervisor.Current.Crash();
+        await Settle();
+        Assert.True(supervisor.Stopped);
+        Assert.True(stalled);
+        Assert.Throws<InvalidOperationException>(() => supervisor.Current);
+    }
+
+    [Fact]
+    public async Task A_failure_outside_the_60s_window_resets_the_backoff_counter()
+    {
+        var clock = new ManualClock();
+        int launches = 0;
+        var supervisor = new Supervisor<FakeSession>(() => { launches++; return new FakeSession(); }, clock);
+        var session = supervisor.Start();
+
+        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await Settle();
+        Assert.Equal(2, launches);
+        // Nothing else fails for over 60 s: the failure history should have aged out.
+        clock.Advance(TimeSpan.FromSeconds(61));
+        supervisor.Current.Crash();
+        clock.Advance(TimeSpan.FromSeconds(1)); // first-failure backoff again, not stalled
+        await Settle();
+        Assert.Equal(3, launches);
+        Assert.False(supervisor.Stopped);
+    }
+
+    [Fact]
+    public async Task Manual_restart_clears_the_stopped_state_and_disposes_the_old_session()
+    {
+        var clock = new ManualClock();
+        var supervisor = new Supervisor<FakeSession>(() => new FakeSession(), clock);
+        var session = supervisor.Start();
+        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await Settle();
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(2)); await Settle();
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(4)); await Settle();
+        supervisor.Current.Crash(); // stalls
+        await Settle();
+        Assert.True(supervisor.Stopped);
+
+        var restarted = supervisor.ManualRestart();
+        Assert.False(supervisor.Stopped);
+        Assert.NotNull(restarted);
+    }
+
+    [Fact]
+    public async Task A_crash_never_resends_calls_a_new_session_never_saw()
+    {
+        // The property this protects: Supervisor only ever creates a brand-new TSession on restart
+        // (LaunchAndWatch calls `launch()` fresh); it holds no queue of "pending calls" to replay, so
+        // whatever the disposed session's callers were waiting on simply completes with a disconnect
+        // error there (HostSession.ReadLoop faults every outstanding TaskCompletionSource) and is
+        // never resubmitted to the new process.
+        var clock = new ManualClock();
+        var sessions = new List<FakeSession>();
+        var supervisor = new Supervisor<FakeSession>(() => { var s = new FakeSession(); sessions.Add(s); return s; }, clock);
+        var first = supervisor.Start();
+        first.Crash();
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await Settle();
+        Assert.Equal(2, sessions.Count);
+        Assert.NotSame(sessions[0], sessions[1]);
+        Assert.False(sessions[0].Disposed); // the crashed session already disconnected itself; Supervisor did not also Dispose it here
     }
 }

@@ -22,9 +22,7 @@ public sealed class ChildHost : IRuntimeCallbacks
     private readonly string engineName;
     private readonly string pluginRoot;
     private readonly string hostBuild;
-    // Two lanes: control messages (Cancel/Shutdown) always drain before data messages (Invoke/ApiResult/Load).
-    private readonly BlockingCollection<Action> control = new(new ConcurrentQueue<Action>());
-    private readonly BlockingCollection<Action> data = new(new ConcurrentQueue<Action>(), boundedCapacity: 1024);
+    private readonly PriorityWorkQueue work = new();
     private readonly Dictionary<string, Slot> slots = new(StringComparer.Ordinal);
     private readonly Dictionary<int, (string PluginId, int CallId)> apis = [];
     private long sequence;
@@ -81,8 +79,7 @@ public sealed class ChildHost : IRuntimeCallbacks
         finally
         {
             host.stopping = true;
-            host.control.CompleteAdding();
-            host.data.CompleteAdding();
+            host.work.CompleteAdding();
             engineThread.Join(2000);
         }
     }
@@ -100,41 +97,33 @@ public sealed class ChildHost : IRuntimeCallbacks
         {
             case IpcMessageType.Load:
                 var load = envelope.Payload!.Value.Deserialize(Resolve<LoadPayload>())!;
-                Enqueue(data, () => DoLoad(envelope.PluginId!, load));
+                work.AddData(() => DoLoad(envelope.PluginId!, load));
                 break;
             case IpcMessageType.Invoke:
                 var invoke = envelope.Payload!.Value.Deserialize(Resolve<InvokePayload>())!;
-                Enqueue(data, () => DoInvoke(envelope.PluginId!, envelope.RequestId!, envelope.JobId!, envelope.Grant!, invoke));
+                work.AddData(() => DoInvoke(envelope.PluginId!, envelope.RequestId!, envelope.JobId!, envelope.Grant!, invoke));
                 break;
             case IpcMessageType.ApiResult:
                 var result = envelope.Payload!.Value.Deserialize(Resolve<ApiResultPayload>())!;
-                Enqueue(data, () => DoSettle(result));
+                work.AddData(() => DoSettle(result));
                 break;
             case IpcMessageType.Cancel:
                 var cancel = envelope.Payload!.Value.Deserialize(Resolve<CancelPayload>())!;
-                Enqueue(control, () => DoCancel(envelope.PluginId!, cancel.CallId));
+                work.AddControl(() => DoCancel(envelope.PluginId!, cancel.CallId));
                 break;
             default:
                 throw new InvalidDataException($"Frame type '{envelope.Type}' is not accepted by the plugin host.");
         }
     }
 
-    private void Enqueue(BlockingCollection<Action> lane, Action action)
-    {
-        try { lane.Add(action); } catch (InvalidOperationException) { } // host is shutting down
-    }
-
     private void EngineLoop()
     {
-        var lanes = new[] { control, data };
         while (!stopping)
         {
-            // Control lane is drained fully before a single data item runs (F04.3: control priority).
-            while (control.TryTake(out var controlAction)) Run(controlAction);
-            if (BlockingCollection<Action>.TryTakeFromAny(lanes, out var action, 100) >= 0 && action is not null) Run(action);
+            var action = work.TakeNext(100);
+            if (action is not null) Run(action);
         }
-        while (control.TryTake(out var last)) Run(last);
-        while (data.TryTake(out var last)) Run(last);
+        foreach (var action in work.DrainRemaining()) Run(action);
         foreach (var slot in slots.Values) { slot.Runtime?.Dispose(); slot.Budget.Dispose(); }
     }
 

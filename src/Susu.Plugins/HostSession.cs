@@ -15,7 +15,7 @@ namespace Susu.Plugins;
 /// (PID + AppContainer SID + nonce), framed IPC over <see cref="IpcEnvelope"/> and the API broker.
 /// One session hosts every plugin package currently loaded in that child process.
 /// </summary>
-public sealed class HostSession : IDisposable
+public sealed class HostSession : IHostSessionHandle
 {
     public sealed record StartTimings(double LaunchMs, double ConnectMs, double HelloMs);
 
