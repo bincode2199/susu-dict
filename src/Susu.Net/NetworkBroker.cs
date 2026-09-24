@@ -300,30 +300,94 @@ public sealed class NetworkBroker : IDisposable
         return new BrokerStreamStarted((int)response.StatusCode, visibleHeaders, DecodeText(httpRequest, response, cancellationToken));
     }
 
-    /// <summary>Reads the live response stream progressively and yields decoded UTF-8 text pieces (not
-    /// SSE-event-boundary-aware - PLAN 4.5 explicitly does not promise that); the request/response are
-    /// disposed once enumeration ends, including when the caller stops early (cancel/error).</summary>
+    /// <summary>Disposes the request/response once enumeration ends (including the caller stopping
+    /// early on cancel/error) and delegates the actual read/coalesce/decode work to <see cref="DecodeTextFromStream"/>,
+    /// which takes a plain <see cref="Stream"/> so it is testable without a real socket.</summary>
     private static async IAsyncEnumerable<string> DecodeText(HttpRequestMessage httpRequest, HttpResponseMessage response,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var _req = httpRequest;
         using var _resp = response;
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await foreach (var piece in DecodeTextFromStream(stream, cancellationToken)) yield return piece;
+    }
+
+    /// <summary>
+    /// Reads <paramref name="stream"/> progressively, decodes UTF-8 and yields text pieces - not
+    /// SSE-event-boundary-aware (PLAN 4.5 explicitly does not promise that), but *does* coalesce bytes
+    /// that arrive close together in time into one piece instead of yielding one piece per raw
+    /// read call: after every read it races a short (<see cref="CoalesceWindow"/>) further read against
+    /// a timer, without cancelling that pending read, so a burst that is still arriving (whether from
+    /// real OS/socket buffering or a test feeding many tiny reads back to back) is not needlessly split
+    /// into pieces at whatever boundary happened to land at. internal (not private) so a test can feed
+    /// it an in-memory stream directly instead of a real socket - see NetworkBrokerTests.
+    /// </summary>
+    internal static async IAsyncEnumerable<string> DecodeTextFromStream(Stream stream,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken, TimeSpan? coalesceWindow = null)
+    {
+        TimeSpan window = coalesceWindow ?? CoalesceWindow;
         var decoder = System.Text.Encoding.UTF8.GetDecoder();
-        // Large enough that a single big write from the server can land in one decoded piece (so an
-        // oversized-chunk test can actually produce one, S09) without being an unbounded read itself -
-        // still one bounded, fixed-size buffer per read, never sized off anything server-controlled.
-        var bytes = new byte[128 * 1024];
-        var chars = new char[128 * 1024];
+        var accumulated = new System.Text.StringBuilder();
+        var buffer = new byte[64 * 1024];
+        // Never more than one ReadAsync in flight on `stream` at a time (most streams, including a real
+        // socket's content stream, do not support concurrent reads): a probe that loses the timer race
+        // is not abandoned, it is carried forward and awaited as the *next* iteration's read instead of
+        // starting a second, overlapping one.
+        Task<int>? pending = null;
+
+        async Task<int> ReadNextAsync()
+        {
+            pending ??= stream.ReadAsync(buffer, cancellationToken).AsTask();
+            int n = await pending;
+            pending = null;
+            return n;
+        }
+
         while (true)
         {
-            int read = await stream.ReadAsync(bytes, cancellationToken);
-            if (read == 0) yield break;
-            int charCount = decoder.GetCharCount(bytes, 0, read, flush: false);
-            if (charCount > chars.Length) chars = new char[charCount];
-            int written = decoder.GetChars(bytes, 0, read, chars, 0, flush: false);
-            if (written > 0) yield return new string(chars, 0, written);
+            int read = await ReadNextAsync(); // blocking wait for at least one chunk
+            if (read == 0) { if (accumulated.Length > 0) { yield return accumulated.ToString(); } yield break; }
+            AppendDecoded(decoder, accumulated, buffer, read);
+            // A safety ceiling independent of any caller's own frame-size policy: even if data keeps
+            // arriving within the coalesce window indefinitely (e.g. many tiny reads back to back with
+            // no gap), this loop must still eventually flush instead of accumulating unbounded memory -
+            // the caller (Broker.PumpStreamAsync) is what actually rejects an oversized piece; this just
+            // guarantees it gets handed one promptly, bounded, rather than growing forever first.
+            while (accumulated.Length <= AccumulationCeilingChars)
+            {
+                pending = stream.ReadAsync(buffer, cancellationToken).AsTask();
+                var winner = await Task.WhenAny(pending, Task.Delay(window, cancellationToken));
+                if (!ReferenceEquals(winner, pending)) break; // nothing arrived within the window: flush below, `pending` carries over
+                int more = await pending;
+                pending = null;
+                if (more == 0) { yield return accumulated.ToString(); yield break; }
+                AppendDecoded(decoder, accumulated, buffer, more);
+            }
+            string piece = accumulated.ToString();
+            accumulated.Clear();
+            if (piece.Length > 0) yield return piece;
         }
+    }
+
+    /// <summary>How long to wait for another read to already have data ready before flushing what has
+    /// accumulated so far as one piece. Small enough that real SSE pacing (events spaced well above
+    /// this) still yields one piece per event; long enough that a genuine burst - one big read, or many
+    /// tiny reads delivered back to back - reliably coalesces into a single piece for the cap check.</summary>
+    internal static readonly TimeSpan CoalesceWindow = TimeSpan.FromMilliseconds(4);
+
+    /// <summary>Force a flush once accumulated (not-yet-yielded) characters pass this many - a generous
+    /// multiple of ProtocolLimits.MaxStreamChunkBytes so any piece Broker.PumpStreamAsync would reject
+    /// as oversized is always reached well before this fires, while still bounding this loop's own
+    /// worst-case memory independent of that caller's policy.</summary>
+    private const int AccumulationCeilingChars = ProtocolLimits.MaxStreamChunkBytes * 4;
+
+    private static void AppendDecoded(System.Text.Decoder decoder, System.Text.StringBuilder accumulated, byte[] buffer, int count)
+    {
+        int charCount = decoder.GetCharCount(buffer, 0, count, flush: false);
+        if (charCount == 0) return;
+        var chars = new char[charCount];
+        int written = decoder.GetChars(buffer, 0, count, chars, 0, flush: false);
+        if (written > 0) accumulated.Append(chars, 0, written);
     }
 
     private bool IsAllowedForRequest(BrokerHttpRequest request, Uri uri)

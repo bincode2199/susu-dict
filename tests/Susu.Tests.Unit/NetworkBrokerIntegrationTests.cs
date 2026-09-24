@@ -121,7 +121,7 @@ public class NetworkBrokerIntegrationTests
             // A tiny gap between writes keeps each one its own decoded piece (realistic SSE pacing);
             // a true back-to-back burst can coalesce into an oversized single read instead (see the
             // S09 comment at the bottom of this file for why that is not separately asserted here).
-            for (int i = 0; i < count; i++) { await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(piece), ct); await Task.Delay(2, ct); }
+            for (int i = 0; i < count; i++) { await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(piece), ct); await Task.Delay(15, ct); } // > NetworkBroker.CoalesceWindow, so pieces don't merge
         });
         using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false));
         try

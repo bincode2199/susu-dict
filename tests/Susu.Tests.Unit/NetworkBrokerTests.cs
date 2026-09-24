@@ -259,3 +259,172 @@ public class NetworkBrokerTests
         Assert.DoesNotContain("X-Custom-Secret", success.Response.Headers.Keys);
     }
 }
+
+/// <summary>
+/// S09 (oversized stream-chunk rejection), deterministic: drives <see cref="NetworkBroker.DecodeTextFromStream"/>
+/// - the same coalescing/decoding code the real $http.stream path uses - directly against a controlled
+/// in-memory <see cref="Stream"/>, with no real socket and no OS/BCL read-chunking timing involved.
+/// A real loopback-socket version of this scenario was tried during development and turned out to be a
+/// genuine, unfixable timing race (TCP/HttpClient deliver bytes to a reader progressively as they
+/// arrive, not held back until a sender's write "completes"), so it is not asserted at that level.
+/// </summary>
+public class StreamChunkLimiterTests
+{
+    /// <summary>Wraps a payload as a <see cref="Stream"/> that returns it broken into
+    /// <paramref name="perReadBytes"/>-sized (or smaller, for the whole payload in one read) chunks per
+    /// <see cref="ReadAsync(Memory{byte}, CancellationToken)"/> call, with no artificial delay - so
+    /// many small reads are all "immediately available" one after another, exactly like the burst
+    /// NetworkBrokerIntegrationTests observed in the real sandbox. Tracks whether it was disposed.
+    /// </summary>
+    private sealed class ScriptedReadStream(byte[] payload, int perReadBytes) : Stream
+    {
+        private int position;
+        public bool Disposed { get; private set; }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int remaining = payload.Length - position;
+            if (remaining <= 0) return ValueTask.FromResult(0);
+            int n = Math.Min(Math.Min(perReadBytes, remaining), buffer.Length);
+            payload.AsSpan(position, n).CopyTo(buffer.Span);
+            position += n;
+            return ValueTask.FromResult(n);
+        }
+
+        protected override void Dispose(bool disposing) { Disposed = true; base.Dispose(disposing); }
+        public override ValueTask DisposeAsync() { Disposed = true; return base.DisposeAsync(); }
+    }
+
+    /// <summary>Mirrors Broker.PumpStreamAsync's own check exactly (PLAN 4.5.4.4/S09): consume the
+    /// enumerable piece by piece, reject the first time one piece's UTF-8 byte length exceeds the frame
+    /// cap. Disposes <paramref name="stream"/> once consumption stops for any reason - reject, normal
+    /// completion or an unexpected exception - the same lifecycle Broker.PumpStreamAsync's real caller
+    /// chain (DecodeText's own `await using`) gives it in production.</summary>
+    private static async Task<(bool Rejected, int PiecesBeforeReject)> ConsumeWithCapAsync(Stream stream, IAsyncEnumerable<string> pieces)
+    {
+        try
+        {
+            int count = 0;
+            await foreach (var piece in pieces)
+            {
+                if (System.Text.Encoding.UTF8.GetByteCount(piece) > Susu.Contracts.ProtocolLimits.MaxStreamChunkBytes)
+                    return (true, count);
+                count++;
+            }
+            return (false, count);
+        }
+        finally { await stream.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task An_oversized_payload_delivered_in_one_read_is_rejected_and_disposes_the_stream()
+    {
+        byte[] payload = new byte[Susu.Contracts.ProtocolLimits.MaxStreamChunkBytes + 1024];
+        Array.Fill(payload, (byte)'y');
+        var stream = new ScriptedReadStream(payload, perReadBytes: payload.Length); // one read gets it all
+
+        var (rejected, piecesBeforeReject) = await ConsumeWithCapAsync(stream, NetworkBroker.DecodeTextFromStream(stream, TestContext.Current.CancellationToken));
+
+        Assert.True(rejected);
+        Assert.Equal(0, piecesBeforeReject); // the very first piece was already oversized
+        Assert.True(stream.Disposed);
+    }
+
+    [Fact]
+    public async Task The_same_oversized_payload_split_into_one_byte_reads_still_coalesces_and_is_rejected()
+    {
+        byte[] payload = new byte[Susu.Contracts.ProtocolLimits.MaxStreamChunkBytes + 1024];
+        Array.Fill(payload, (byte)'y');
+        var stream = new ScriptedReadStream(payload, perReadBytes: 1); // one byte per ReadAsync call
+
+        var (rejected, piecesBeforeReject) = await ConsumeWithCapAsync(stream, NetworkBroker.DecodeTextFromStream(stream, TestContext.Current.CancellationToken));
+
+        Assert.True(rejected); // coalescing (NetworkBroker.CoalesceWindow) merges the back-to-back tiny
+                                // reads into one piece before ever handing an under-cap piece to the caller
+        Assert.Equal(0, piecesBeforeReject);
+        Assert.True(stream.Disposed);
+    }
+
+    [Fact]
+    public async Task A_normal_sized_payload_split_into_small_reads_is_not_rejected()
+    {
+        byte[] payload = new byte[4096];
+        Array.Fill(payload, (byte)'x');
+        var stream = new ScriptedReadStream(payload, perReadBytes: 16);
+
+        var (rejected, piecesBeforeReject) = await ConsumeWithCapAsync(stream, NetworkBroker.DecodeTextFromStream(stream, TestContext.Current.CancellationToken));
+
+        Assert.False(rejected);
+        Assert.True(piecesBeforeReject >= 1);
+        Assert.True(stream.Disposed); // reaching end of stream disposes it too (normal completion, not just rejection)
+    }
+
+    [Fact]
+    public async Task Pieces_separated_by_a_real_pause_beyond_the_coalesce_window_stay_separate()
+    {
+        // Two independent small payloads, back to back through the same stream but with a pause between
+        // them well over NetworkBroker.CoalesceWindow: proves the coalescing loop does not merge
+        // everything into one giant piece regardless of pacing - only genuine bursts coalesce.
+        byte[] first = System.Text.Encoding.UTF8.GetBytes("event-one");
+        byte[] second = System.Text.Encoding.UTF8.GetBytes("event-two");
+        var channel = System.Threading.Channels.Channel.CreateUnbounded<byte[]>();
+        var ct = TestContext.Current.CancellationToken;
+        var pump = Task.Run(async () =>
+        {
+            await channel.Writer.WriteAsync(first, ct);
+            await Task.Delay(NetworkBroker.CoalesceWindow * 5, ct);
+            await channel.Writer.WriteAsync(second, ct);
+            channel.Writer.Complete();
+        }, ct);
+        await using var stream = new ChannelReadStream(channel.Reader);
+
+        var pieces = new List<string>();
+        await foreach (var piece in NetworkBroker.DecodeTextFromStream(stream, TestContext.Current.CancellationToken)) pieces.Add(piece);
+        await pump;
+
+        Assert.Equal(["event-one", "event-two"], pieces);
+    }
+
+    /// <summary>Adapts a byte[]-Channel into a Stream, one queued array per ReadAsync call at most.</summary>
+    private sealed class ChannelReadStream(System.Threading.Channels.ChannelReader<byte[]> reader) : Stream
+    {
+        private byte[]? pending;
+        private int pendingOffset;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (pending is null)
+            {
+                if (!await reader.WaitToReadAsync(cancellationToken) || !reader.TryRead(out pending)) return 0;
+                pendingOffset = 0;
+            }
+            int n = Math.Min(buffer.Length, pending.Length - pendingOffset);
+            pending.AsSpan(pendingOffset, n).CopyTo(buffer.Span);
+            pendingOffset += n;
+            if (pendingOffset >= pending.Length) pending = null;
+            return n;
+        }
+    }
+}

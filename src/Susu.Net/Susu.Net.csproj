@@ -3,4 +3,7 @@
     <ProjectReference Include="../Susu.Abstractions/Susu.Abstractions.csproj" />
     <ProjectReference Include="../Susu.Contracts/Susu.Contracts.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Susu.Tests.Unit" />
+  </ItemGroup>
 </Project>
