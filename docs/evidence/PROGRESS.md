@@ -14,7 +14,7 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 | F02 | Complete: settings, secrets, SQLite, leases, logs; 76 tests; exercised inside the AOT `susu.exe`. | [F02](F02/F02.md) |
 | F03 | Complete. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows. Multi-monitor and mixed DPI, a real IME, screen reader, high contrast and PER03 on the real shell moved to the F19 final acceptance on a physical Windows machine (D-67). | [F03](F03/F03.md) |
 | F04 | Complete. Plugin runtime (`Susu.Runtime`), host side (`Susu.Plugins`), production sandbox module `susu_plugin_sandbox.dll`, supervised sessions and `susu-plugin check/test`. X01–X07 re-ran 54/54 against the production module; S09, J04, J06 and J07 pass; 279 tests. Live stream-chunk limits wait for the first streaming capability. | [F04](F04/F04.md) |
-| F05 | In progress. First coding pass done (327 tests; 9 contract probes through the real sandbox; one real MyMemory call). Four in-scope gaps go back to coding (proxy wiring, cancelling a plain `$http` call, S10, S02); then testing. Paused on the usage limit. | [F05](F05/F05.md) |
+| F05 | Pending integration acceptance. Network broker (origin, DNS and redirect policy; proxy; cancel; SSE), signers checked against official vectors, file handles and transforms, S10 credential-leak interception, 9 contract probes through the real sandbox, one real MyMemory call; 380 tests. Vendor accounts are missing, so A01–A04 and the other real calls are not executed. | [F05](F05/F05.md) |
 
 Environment notes for whoever resumes:
 
@@ -28,7 +28,7 @@ Environment notes for whoever resumes:
 
 1. **Resolved (2026-09-24), D-66:** the product owner accepted the two PER03 misses as a known gap. See [F00 § G0 decision](F00/F00.md#g0-decision).
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
-3. **F04 complete (2026-09-24). F05 in progress.** Master agent coordinates one coding agent and one testing agent per module; modules run one at a time. **Now: F05** (network broker, signers, file handles, contract probes), then F06.
+3. **F04 complete; F05 pending integration acceptance (vendor accounts needed) (2026-09-24).** Master agent coordinates one coding agent and one testing agent per module; modules run one at a time. **Now: F06** (input translation, the first product loop).
 4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window, mostly because one sub-agent ran 370 turns in a single uncompacted context (up to 645k tokens). From now on the master starts a fresh coding agent per sub-item, agents run filtered tests and keep only the tail of the output, and they read files by section. The rules are in [CLAUDE.md](../../CLAUDE.md).
 
 ## History (condensed)
@@ -40,3 +40,4 @@ Environment notes for whoever resumes:
 - 2026-09-24 (final): interactive measurements, F03 fixes and PER02 on the real `susu.exe` committed (`d2140b6`). Native guard test (S08, 10/10 with the CSP removed) and PER03 timing points on the real shell committed (`c7479fc`); `tools/measure-hotkey.ps1` is ready but not yet run, because the desktop went non-interactive. Tests at this point: 232 C# and 16 UI, all passing. Nothing has been pushed.
 - 2026-09-24 (decisions): the product owner accepted the PER03 misses (D-66) and moved the hardware-dependent checks to F19 on a physical machine (D-67). F00 and F03 are marked complete.
 - 2026-09-24: F04 complete. Plugin runtime, IPC, production sandbox module, supervisor and `susu-plugin` CLI; 279 tests; X-matrix re-run 54\/54 on the production module.
+- 2026-09-24: F05 pending integration acceptance. Broker, signers, file transforms, SSE, proxy, cancel, S02 at the broker, S10; 380 tests; S05 test blind spot found and fixed by the testing agent. F06 started.

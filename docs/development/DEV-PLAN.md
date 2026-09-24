@@ -23,7 +23,7 @@
 | F02 | 配置、账户、凭据与数据库基础 | F01 | 完成（见 [F02 证据](../evidence/F02/F02.md)） | M |
 | F03 | Win32 壳、生产 UI、窗口与设置基础 | F02 | 完成（见 [F03 证据](../evidence/F03/F03.md)；多屏/混合 DPI、真实输入法、读屏、高对比度与生产壳 PER03 按 D-67 移到 F19 实机验收） | L |
 | F04 | 插件运行时、IPC、沙箱与监护 | F02 | 完成（见 [F04 证据](../evidence/F04/F04.md)；流式分块限额待首个流式能力实测） | L |
-| F05 | 网络代理、签名、文件句柄与契约探针 | F04 | 进行中（见 [F05 证据](../evidence/F05/F05.md)） | L |
+| F05 | 网络代理、签名、文件句柄与契约探针 | F04 | 待集成验收（见 [F05 证据](../evidence/F05/F05.md)；缺供应商账户，A01–A04 与除 MyMemory 外的真实调用未执行） | L |
 | F06 | 输入翻译最小完整产品 | F03、F05 | 待开始 | L |
 | F07 | 完整服务设置、提示语、动态选项 | F06 | 待开始 | M |
 | F08 | 划词与剪贴板翻译 | F06 | 待开始 | L |
@@ -130,10 +130,10 @@ flowchart LR
 
 ### F05 · 网络与插件契约可执行证明
 
-- [ ] F05.1 HttpClient/代理/超时/取消/SSE/WS、origin/DNS/重定向验证、显式凭据注入、最终 body 签名；调用者不能选择任意本地文件。
-- [ ] F05.2 FileHandle/lease、流式上传、multipart、JSON Base64 插入与提取、响应错误分类、字节限额及资源清理。
-- [ ] F05.3 实现 TC3/AWS/有道等 PLAN 签名器的官方测试向量/固定请求样例；不把完整凭据回给插件。
-- [ ] F05.4 用真实插件宿主跑 OCR JSON、ASR multipart/inlineData、TTS JSON/原始音频、翻译 batch、options、vocab lookup/upsert 的契约探针；开发最小适配器供后续对应模块复用，不复制临时协议。
+- [x] F05.1 HttpClient/代理/超时/取消/SSE/WS、origin/DNS/重定向验证、显式凭据注入、最终 body 签名；调用者不能选择任意本地文件。
+- [x] F05.2 FileHandle/lease、流式上传、multipart、JSON Base64 插入与提取、响应错误分类、字节限额及资源清理。
+- [x] F05.3 实现 TC3/AWS/有道等 PLAN 签名器的官方测试向量/固定请求样例；不把完整凭据回给插件。
+- [x] F05.4 用真实插件宿主跑 OCR JSON、ASR multipart/inlineData、TTS JSON/原始音频、翻译 batch、options、vocab lookup/upsert 的契约探针；开发最小适配器供后续对应模块复用，不复制临时协议。
 
 交付：可用于全部能力的 broker 和 API v1 候选。出口：B01–B08、S01–S06/S09/S10、A01–A04、T03–T05、DATA06 的契约部分；真实调用与回放分别记录。G1 必须在探针真实通过后冻结，无法提供账户的探针明确未执行。
 
