@@ -40,6 +40,16 @@ public static class ProtocolLimits
     public const int UiStreamUpdatesPerSecond = 30;
 }
 
+/// <summary>
+/// A build identity both sides of one plugin-host handshake can compute independently, so a stale
+/// child process left over from an update is rejected (ProtocolNegotiation, ARCHITECTURE 6). Both the
+/// launching process and the child are the same NativeAOT executable, so this is stable across them.
+/// </summary>
+public static class HostBuild
+{
+    public static string Current { get; } = typeof(HostBuild).Assembly.GetName().Version?.ToString() ?? "dev";
+}
+
 /// <summary>Result of a version/identity handshake.</summary>
 public sealed record NegotiationResult(bool Accepted, int Version, string? Reason)
 {

@@ -58,10 +58,10 @@ internal static class Program
         switch (mode.Kind)
         {
             case "main": return MainMode.Run(mode);
-            case "plugin-host":
+            case "plugin-host": return PluginHostMode.Run(args);
             case "selection-host":
-                // Child-process modes are dispatched here first so no main-mode service initializes. Their
-                // implementations are F04 (plugin host) and F08 (selection helper); this build refuses them.
+                // The selection helper is F08; this build refuses it. Child-process modes are dispatched
+                // here first so no main-mode service initializes.
                 Console.Error.WriteLine($"susu: --{mode.Kind} is not available in this build");
                 return 64;
             default:

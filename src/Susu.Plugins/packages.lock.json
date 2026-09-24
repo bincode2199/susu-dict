@@ -8,6 +8,12 @@
         "resolved": "10.0.12",
         "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
       },
+      "YamlDotNet": {
+        "type": "Direct",
+        "requested": "[18.1.0, )",
+        "resolved": "18.1.0",
+        "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
+      },
       "susu.abstractions": {
         "type": "Project",
         "dependencies": {
@@ -21,6 +27,13 @@
       "susu.domain": {
         "type": "Project",
         "dependencies": {
+          "Susu.Contracts": "[1.0.0, )"
+        }
+      },
+      "susu.windows": {
+        "type": "Project",
+        "dependencies": {
+          "Susu.Abstractions": "[1.0.0, )",
           "Susu.Contracts": "[1.0.0, )"
         }
       }

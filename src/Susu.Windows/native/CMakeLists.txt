@@ -5,6 +5,10 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 if(NOT DEFINED WEBVIEW_SDK)
   message(FATAL_ERROR "WEBVIEW_SDK must point to the pinned NuGet package build/native folder")
 endif()
+# susu_windows_probe.dll is shipped with susu.exe from F04.1: container.cpp/sandbox.cpp back the
+# production plugin-host sandbox (Susu.Plugins.HostSession). The other translation units here are
+# probe/harness code (screen capture, clipboard, selection, latency); they ship in the same binary
+# for now (no behavior risk) and are candidates to split into a leaner module in a later pass.
 add_library(susu_windows_probe SHARED probes.cpp sandbox.cpp container.cpp webview_plugins.cpp windows_measure.cpp selection.cpp selection_test.cpp ia2.cpp clipboard.cpp latency.cpp capture.cpp)
 target_compile_features(susu_windows_probe PRIVATE cxx_std_20)
 target_compile_definitions(susu_windows_probe PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)

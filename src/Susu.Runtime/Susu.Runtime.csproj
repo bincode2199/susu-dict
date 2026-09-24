@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Susu.Contracts/Susu.Contracts.csproj" />
+    <!-- Only ContainerHost.GetServerPid (child-side pipe-server identity check); no Net/Storage reference (ARCHITECTURE 5). -->
+    <ProjectReference Include="../Susu.Windows/Susu.Windows.csproj" />
   </ItemGroup>
 </Project>

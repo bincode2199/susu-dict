@@ -1,7 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Susu.Abstractions/Susu.Abstractions.csproj" />
     <ProjectReference Include="../Susu.Contracts/Susu.Contracts.csproj" />
     <ProjectReference Include="../Susu.Domain/Susu.Domain.csproj" />
+    <ProjectReference Include="../Susu.Windows/Susu.Windows.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Manifest YAML subset only (low-level event parser, no reflection; see Susu.Storage/Yaml.cs). -->
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 </Project>

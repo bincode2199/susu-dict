@@ -84,13 +84,16 @@
         "dependencies": {
           "Susu.Abstractions": "[1.0.0, )",
           "Susu.Contracts": "[1.0.0, )",
-          "Susu.Domain": "[1.0.0, )"
+          "Susu.Domain": "[1.0.0, )",
+          "Susu.Windows": "[1.0.0, )",
+          "YamlDotNet": "[18.1.0, )"
         }
       },
       "susu.runtime": {
         "type": "Project",
         "dependencies": {
-          "Susu.Contracts": "[1.0.0, )"
+          "Susu.Contracts": "[1.0.0, )",
+          "Susu.Windows": "[1.0.0, )"
         }
       },
       "susu.storage": {

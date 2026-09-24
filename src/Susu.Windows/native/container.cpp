@@ -1,5 +1,6 @@
-// F00 disposable plugin-host launcher: AppContainer profile, scoped read ACL,
-// authenticated named pipe and Job object. Prototype for F04; not production.
+// Disposable plugin-host launcher: AppContainer profile, scoped read ACL,
+// authenticated named pipe and Job object. Validated as a prototype in F00
+// (X01-X07, 54/54); shipped to production from F04.1 (Susu.Plugins.HostSession).
 #include <windows.h>
 #include <userenv.h>
 #include <aclapi.h>
