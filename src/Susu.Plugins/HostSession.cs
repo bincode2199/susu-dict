@@ -27,7 +27,11 @@ public sealed class HostSession : IHostSessionHandle
         ulong MemoryLimit = 256UL << 20,
         string? ProfileName = null,
         bool KeepProfile = false,
-        string ChildMode = "--plugin-host")
+        string ChildMode = "--plugin-host",
+        /// <summary>Builds this session's Broker; defaults to a production-real <c>new Broker()</c>
+        /// (real NetworkBroker, no file leases/secrets configured). A composition root - or a test that
+        /// needs $file handle support - passes one that wires real FileLeases/ISecretStore.</summary>
+        Func<Broker>? MakeBroker = null)
     {
         public string ResolvedHostBuild => HostBuild ?? Susu.Contracts.HostBuild.Current;
     }
@@ -46,7 +50,7 @@ public sealed class HostSession : IHostSessionHandle
     private readonly string hostBuild;
     private AnonymousPipeServerStream? diagnostics;
 
-    public Broker Broker { get; } = new();
+    public Broker Broker { get; }
     public StartTimings Timings { get; }
     public ConcurrentQueue<IpcEnvelope> Events { get; } = new();
     public int DroppedFrames;
@@ -59,9 +63,10 @@ public sealed class HostSession : IHostSessionHandle
     /// <summary>Raised when the reader loop ends (child disconnected, crashed or was told to shut down).</summary>
     public event Action? Disconnected;
 
-    private HostSession(ContainerHost container, ContainerProcess process, NamedPipeServerStream pipe, StartTimings timings, bool keepProfile, string hostBuild)
+    private HostSession(ContainerHost container, ContainerProcess process, NamedPipeServerStream pipe, StartTimings timings, bool keepProfile, string hostBuild, Func<Broker>? makeBroker)
     {
         this.container = container; this.process = process; this.pipe = pipe; Timings = timings; this.keepProfile = keepProfile; this.hostBuild = hostBuild;
+        Broker = makeBroker?.Invoke() ?? new Broker();
         reader = new Thread(ReadLoop) { IsBackground = true, Name = "susu-ipc-reader" };
         reader.Start();
     }
@@ -115,7 +120,7 @@ public sealed class HostSession : IHostSessionHandle
                 throw new UnauthorizedAccessException("Handshake nonce/process mismatch.");
             var negotiated = ProtocolNegotiation.Negotiate(ProtocolVersions.SupportedIpc, hello.ProtocolVersion, "plugin-host", payload.Role, options.ResolvedHostBuild, payload.HostBuild);
             if (!negotiated.Accepted) throw new UnauthorizedAccessException($"Plugin host handshake rejected: {negotiated.Reason}");
-            var session = new HostSession(container, process, pipe, new StartTimings(launch, connect, timer.Elapsed.TotalMilliseconds), options.KeepProfile, options.ResolvedHostBuild) { diagnostics = diagnostics };
+            var session = new HostSession(container, process, pipe, new StartTimings(launch, connect, timer.Elapsed.TotalMilliseconds), options.KeepProfile, options.ResolvedHostBuild, options.MakeBroker) { diagnostics = diagnostics };
             return session;
         }
         catch
@@ -138,12 +143,14 @@ public sealed class HostSession : IHostSessionHandle
         return waiter.Task.Result.Payload!.Value.Deserialize(ContractsJson.Default.LoadedPayload)!;
     }
 
-    /// <summary><paramref name="jobId"/> correlates this call with its owning Job (F01); the plugin never sees it.</summary>
-    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}")
+    /// <summary><paramref name="jobId"/> correlates this call with its owning Job (F01); the plugin never sees it.
+    /// <paramref name="handles"/> are file-lease ids this call is authorized to reference (e.g. an OCR image or
+    /// ASR audio input already staged by the caller) - never expanded by the plugin itself.</summary>
+    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null)
     {
         int callId = Interlocked.Increment(ref nextCall);
         string requestId = $"r{callId}-{Guid.NewGuid():N}";
-        var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets);
+        var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles);
         var waiter = calls[requestId] = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         callGrants[requestId] = grant.Grant;
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Invoke, requestId, jobId, PluginId: pluginId, Grant: grant.Grant,
@@ -210,5 +217,6 @@ public sealed class HostSession : IHostSessionHandle
         diagnostics?.Dispose();
         reader.Join(2000);
         container.Close(deleteProfile: !keepProfile);
+        Broker.Dispose();
     }
 }

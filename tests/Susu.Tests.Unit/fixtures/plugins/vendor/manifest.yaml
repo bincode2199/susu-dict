@@ -1,0 +1,11 @@
+id: com.example.vendor
+name: Vendor
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - translate
+  - ocr
+  - asr
+  - tts
+  - vocab
