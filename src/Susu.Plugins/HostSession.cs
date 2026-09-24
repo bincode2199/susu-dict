@@ -159,7 +159,13 @@ public sealed class HostSession : IHostSessionHandle
     }
 
     public void Cancel(string pluginId, string requestId, string jobId, int callId)
-        => Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Cancel, requestId, jobId, PluginId: pluginId, Payload: Json(new CancelPayload(callId))));
+    {
+        // Aborts any upstream HTTP request Broker currently has in flight for this call before the
+        // child even processes the IPC message - a cancelled call must not keep running network I/O in
+        // the background just because the plugin-visible promise already rejected (F05.2).
+        if (callGrants.TryGetValue(requestId, out var grant)) Broker.CancelCall(grant);
+        Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Cancel, requestId, jobId, PluginId: pluginId, Payload: Json(new CancelPayload(callId))));
+    }
 
     private static JsonElement Element(string json) { using var d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
     private static JsonElement Json<T>(T value) => JsonSerializer.SerializeToElement(value, (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)ContractsJson.Default.GetTypeInfo(typeof(T))!);

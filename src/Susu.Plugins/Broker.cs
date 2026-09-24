@@ -58,8 +58,8 @@ public sealed class Broker : IDisposable
     private static readonly HashSet<string> forbiddenHeaders = new(StringComparer.OrdinalIgnoreCase) { "host", "content-length", "proxy-authorization", "transfer-encoding", "connection" };
     private readonly Dictionary<string, GrantInfo> grants = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, string>> stores = new(StringComparer.Ordinal);
-    private readonly NetworkBroker network;
-    private readonly bool ownsNetwork;
+    private readonly Func<NetworkBroker> getNetwork;
+    private readonly NetworkBroker? ownedNetwork;
     private readonly FileLeases? leases;
     private readonly ISecretStore? secretStore;
     private readonly StreamWindow streamWindow = new();
@@ -68,13 +68,23 @@ public sealed class Broker : IDisposable
 
     public Broker(NetworkBroker? network = null, FileLeases? leases = null, ISecretStore? secretStore = null)
     {
-        ownsNetwork = network is null;
-        this.network = network ?? new NetworkBroker(new NetworkBrokerOptions());
+        ownedNetwork = network ?? new NetworkBroker(new NetworkBrokerOptions());
+        getNetwork = () => ownedNetwork;
         this.leases = leases;
         this.secretStore = secretStore;
     }
 
-    public void ApproveLocalOrigin(string origin) => network.LocalOrigins.Approve(origin);
+    /// <summary>Reads the current broker on every call instead of fixing one at construction time, so a
+    /// proxy/timeout settings change (<see cref="NetworkBrokerProvider"/>) takes effect for the next
+    /// request without restarting the plugin host. The provider owns disposal of the brokers it builds.</summary>
+    public Broker(NetworkBrokerProvider provider, FileLeases? leases = null, ISecretStore? secretStore = null)
+    {
+        getNetwork = () => provider.Current;
+        this.leases = leases;
+        this.secretStore = secretStore;
+    }
+
+    public void ApproveLocalOrigin(string origin) => getNetwork().LocalOrigins.Approve(origin);
 
     /// <param name="expiresAt">Test-only override of the 10-minute default grant lifetime (F04.3 S09: a call token is rejected once expired).</param>
     public GrantInfo Issue(string requestId, string pluginId, int callId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, IEnumerable<string>? handles = null, DateTime? expiresAt = null)
@@ -98,6 +108,36 @@ public sealed class Broker : IDisposable
         // generator finally-block (e.g. a crashed/cancelled call): stops the pump and releases any
         // StreamWindow credit it still holds rather than leaking it until process exit.
         if (toClose is not null) foreach (var (id, state) in toClose) { state.Cts.Cancel(); streamWindow.Reset(id); }
+        CancelCall(grant); // any plain (non-stream) $http still in flight for this call is aborted too
+    }
+
+    /// <summary>Aborts the upstream HTTP request(s) currently in flight for one capability call, so a
+    /// Cancel arriving mid-request actually closes the connection promptly instead of letting it run to
+    /// completion in the background (F05.2 "取消/超时/插件退出撤销其调用租约，停止 I/O"). Safe to call for
+    /// a grant with nothing in flight (no-op).</summary>
+    public void CancelCall(string grant)
+    {
+        List<CancellationTokenSource>? toCancel;
+        lock (callCts) { if (callCts.Remove(grant, out var set)) toCancel = [.. set]; else toCancel = null; }
+        if (toCancel is not null) foreach (var cts in toCancel) { try { cts.Cancel(); } catch (ObjectDisposedException) { } }
+    }
+
+    private readonly Dictionary<string, HashSet<CancellationTokenSource>> callCts = new(StringComparer.Ordinal);
+
+    /// <summary>Registers a fresh, linked CTS for one in-flight $http/$http.stream.open op under
+    /// <paramref name="grant"/>; <see cref="CancelCall"/> or <see cref="Revoke"/> cancels it. Always pair
+    /// with <see cref="EndHttpCall"/> in a finally.</summary>
+    private CancellationTokenSource BeginHttpCall(string grant)
+    {
+        var cts = new CancellationTokenSource();
+        lock (callCts) (callCts.TryGetValue(grant, out var set) ? set : callCts[grant] = []).Add(cts);
+        return cts;
+    }
+
+    private void EndHttpCall(string grant, CancellationTokenSource cts)
+    {
+        lock (callCts) if (callCts.TryGetValue(grant, out var set)) { set.Remove(cts); if (set.Count == 0) callCts.Remove(grant); }
+        cts.Dispose();
     }
 
     public int ActiveGrants { get { lock (grants) return grants.Count; } }
@@ -158,9 +198,10 @@ public sealed class Broker : IDisposable
         List<(string Handle, FileLease Lease)> takenLeases = [];
         try { request = BuildRequest(grant, call.Args, takenLeases); }
         catch (BrokerDenyException deny) { ReleaseAll(takenLeases); return Deny(call.ApiId, deny.Message, deny.Kind); }
+        var cts = BeginHttpCall(grant.Grant);
         try
         {
-            var outcome = await network.ExecuteAsync(request, CancellationToken.None);
+            var outcome = await getNetwork().ExecuteAsync(request, cts.Token);
             return outcome switch
             {
                 BrokerSuccess success => Allow(call.ApiId, BuildResultJson(success.Response)),
@@ -168,8 +209,13 @@ public sealed class Broker : IDisposable
                 _ => Deny(call.ApiId, "unknown broker outcome"),
             };
         }
+        // A mid-flight Cancel (Broker.CancelCall/Revoke) aborted the upstream request; NetworkBroker
+        // does not itself classify this (it only catches its own internal timeout), so it propagates
+        // here uncaught - the host, not the plugin, is what cancelled it, so this is never surfaced as
+        // a plugin-thrown kind (S09/PLAN 4.5.1 "取消...撤销其调用租约，停止 I/O").
+        catch (OperationCanceledException) { return Deny(call.ApiId, "cancelled by host", "cancelled"); }
         catch (BrokerDenyException deny) { return Deny(call.ApiId, deny.Message, deny.Kind); }
-        finally { ReleaseAll(takenLeases); }
+        finally { EndHttpCall(grant.Grant, cts); ReleaseAll(takenLeases); }
     }
 
     private async Task<ApiResultPayload> StreamOpenAsync(GrantInfo grant, ApiCallPayload call)
@@ -179,7 +225,11 @@ public sealed class Broker : IDisposable
         try { request = BuildRequest(grant, call.Args, takenLeases); }
         catch (BrokerDenyException deny) { return Deny(call.ApiId, deny.Message, deny.Kind); }
         finally { ReleaseAll(takenLeases); } // stream bodies never carry file handles (SSE requests are small/text)
-        var outcome = await network.ExecuteStreamAsync(request, CancellationToken.None);
+        var cts = BeginHttpCall(grant.Grant);
+        BrokerStreamOutcome outcome;
+        try { outcome = await getNetwork().ExecuteStreamAsync(request, cts.Token); }
+        catch (OperationCanceledException) { EndHttpCall(grant.Grant, cts); return Deny(call.ApiId, "cancelled by host", "cancelled"); }
+        EndHttpCall(grant.Grant, cts); // the stream.open request itself is done; the live body read (if any) is owned by the pump from here
         switch (outcome)
         {
             case BrokerStreamRejected rejected:
@@ -194,9 +244,9 @@ public sealed class Broker : IDisposable
                 string streamId = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(12));
                 string callKey = $"{grant.Grant}:{call.CallId}";
                 var channel = System.Threading.Channels.Channel.CreateUnbounded<byte[]>(new() { SingleReader = true, SingleWriter = true });
-                var cts = new CancellationTokenSource();
-                var pump = Task.Run(() => PumpStreamAsync(streamId, started.Text, channel.Writer, cts.Token));
-                lock (streams) streams[streamId] = new StreamState(channel, pump, cts, callKey);
+                var pumpCts = new CancellationTokenSource();
+                var pump = Task.Run(() => PumpStreamAsync(streamId, started.Text, channel.Writer, pumpCts.Token));
+                lock (streams) streams[streamId] = new StreamState(channel, pump, pumpCts, callKey);
                 var node = new JsonObject { ["status"] = started.Status, ["headers"] = HeadersNode(started.Headers), ["streamId"] = streamId };
                 return Allow(call.ApiId, node.ToJsonString());
             }
@@ -546,7 +596,7 @@ public sealed class Broker : IDisposable
         return new(apiId, true, document.RootElement.Clone());
     }
 
-    public void Dispose() { if (ownsNetwork) network.Dispose(); }
+    public void Dispose() => ownedNetwork?.Dispose();
 }
 
 internal sealed record DenyValue(string Kind, string Detail);

@@ -175,6 +175,55 @@ public class NetworkBrokerIntegrationTests
         finally { session.Shutdown(2000); }
     }
 
+    /// <summary>
+    /// F05.2 mid-flight cancel: a plain (non-stream) $http call cancelled while its response is still
+    /// pending must (a) resolve promptly as cancelled rather than waiting for the slow server, and
+    /// (b) actually close the upstream TCP connection, not just abandon the C# Task and leave the
+    /// socket running in the background. The server never writes anything until it can positively
+    /// detect the client socket closed (via Socket.Poll), so a passing test proves real disconnection,
+    /// not just that our side stopped waiting.
+    /// </summary>
+    [Fact]
+    public async Task Cancelling_a_plain_http_call_mid_flight_closes_the_upstream_connection_promptly()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        var disconnectDetected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = new LoopbackHttpServer(async (_, stream, ct) =>
+        {
+            var socket = stream.Socket;
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+            {
+                if (socket.Poll(0, System.Net.Sockets.SelectMode.SelectRead) && socket.Available == 0)
+                {
+                    disconnectDetected.TrySetResult();
+                    return; // do not write a response - the point is the client already left
+                }
+                await Task.Delay(20, ct);
+            }
+            disconnectDetected.TrySetException(new TimeoutException("client never disconnected"));
+        });
+        using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load("echo", "plugins/echo").Ok);
+            var (requestId, callId, task) = session.Invoke("echo", "httpGet", "{\"url\":\"" + server.Origin + "/slow\"}", jobId: "job-cancel",
+                origins: [server.Origin]);
+            await Task.Delay(150, TestContext.Current.CancellationToken); // let the request actually reach the server first
+            session.Cancel("echo", requestId, "job-cancel", callId);
+
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // must not take anywhere near the server's 10 s window
+            Assert.Equal(IpcMessageType.Failed, envelope.Type);
+            var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
+            Assert.Equal("cancelled", completed.Error!.Kind);
+
+            await disconnectDetected.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // the socket really closed, not just our Task
+        }
+        finally { session.Shutdown(2000); }
+    }
+
     // S09 (oversized single stream-chunk rejection): Broker.PumpStreamAsync checks each decoded piece
     // against ProtocolLimits.MaxStreamChunkBytes (64 KiB) before buffering it and throws bad_response
     // if it is over. This was manually verified to fire correctly (confirmed via a temporary trace: a

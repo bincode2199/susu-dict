@@ -77,6 +77,9 @@ public sealed record BrokerStreamFailure(string Kind, string Detail) : BrokerStr
 public sealed class NetworkBrokerOptions
 {
     public IWebProxy? Proxy { get; init; }
+    /// <summary>Use the OS-configured default proxy (PLAN NetworkSettings.ProxyMode.System) when
+    /// <see cref="Proxy"/> is null. Ignored when <see cref="Proxy"/> is set.</summary>
+    public bool UseSystemProxy { get; init; }
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
     public ApprovedLocalOrigins LocalOrigins { get; init; } = new();
     /// <summary>Response headers ever forwarded to a plugin (PLAN 4.5.1): Content-Type, Retry-After and
@@ -104,7 +107,7 @@ public sealed class NetworkBroker : IDisposable
         handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false, // redirects are handled by hand (S04: no auto-follow with credentials, 5-hop cap otherwise)
-            UseProxy = options.Proxy is not null,
+            UseProxy = options.Proxy is not null || options.UseSystemProxy,
             Proxy = options.Proxy,
             ConnectCallback = ConnectValidatedAsync,
             AutomaticDecompression = System.Net.DecompressionMethods.None, // a plugin never sees a caller-uncontrolled decompression bomb (B08)
