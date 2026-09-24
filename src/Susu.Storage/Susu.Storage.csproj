@@ -5,6 +5,7 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Susu.Tests.Unit" />
+    <InternalsVisibleTo Include="Susu.Plugins" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Susu.Abstractions/Susu.Abstractions.csproj" />

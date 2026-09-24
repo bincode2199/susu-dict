@@ -66,6 +66,14 @@ public sealed record BrokerSuccess(BrokerHttpResponse Response) : BrokerOutcome;
 /// for transport-level failures the host classifies itself; "bad_response" for contract violations.</summary>
 public sealed record BrokerFailure(string Kind, string Detail) : BrokerOutcome;
 
+/// <summary>Result of <see cref="NetworkBroker.ExecuteStreamAsync"/> ($http.stream). A 2xx response
+/// streams; a non-2xx response never does ("非 2xx 时只有有界 error", PLAN 4.5) so it carries only a
+/// bounded error body, exactly like the non-streaming $http shape's error path.</summary>
+public abstract record BrokerStreamOutcome;
+public sealed record BrokerStreamStarted(int Status, IReadOnlyDictionary<string, string> Headers, IAsyncEnumerable<string> Text) : BrokerStreamOutcome;
+public sealed record BrokerStreamRejected(int Status, IReadOnlyDictionary<string, string> Headers, byte[] Body, bool Truncated) : BrokerStreamOutcome;
+public sealed record BrokerStreamFailure(string Kind, string Detail) : BrokerStreamOutcome;
+
 public sealed class NetworkBrokerOptions
 {
     public IWebProxy? Proxy { get; init; }
@@ -104,13 +112,18 @@ public sealed class NetworkBroker : IDisposable
         client = new HttpClient(handler) { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
     }
 
+    /// <summary>The set of explicitly-approved local origins (127.0.0.1:8765/11434-style) this broker
+    /// instance uses; a composition root adds to it at install/configure time (PLAN 4.5.4.2).</summary>
+    public ApprovedLocalOrigins LocalOrigins => options.LocalOrigins;
+
     public async Task<BrokerOutcome> ExecuteAsync(BrokerHttpRequest request, CancellationToken cancellationToken)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(options.Timeout);
         try
         {
-            return await ExecuteInternalAsync(request, timeoutCts.Token);
+            var (uri, headers, body, authorized) = Prepare(request);
+            return await SendWithRedirectsAsync(request, uri, headers, body, authorized, timeoutCts.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -124,7 +137,31 @@ public sealed class NetworkBroker : IDisposable
         catch (InvalidOperationException error) { return new BrokerFailure("network", error.Message); }
     }
 
-    private async Task<BrokerOutcome> ExecuteInternalAsync(BrokerHttpRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// SSE-shaped streaming variant of <see cref="ExecuteAsync"/> ($http.stream, PLAN 4.5): same
+    /// origin/credential/signing pipeline, but on a 2xx response the body is handed back as an
+    /// <see cref="IAsyncEnumerable{T}"/> of decoded UTF-8 text pieces read progressively from the live
+    /// socket, instead of being buffered - the caller (Susu.Plugins.Broker) is responsible for pacing
+    /// its own consumption against StreamWindow credit. Disposing the enumerator (stop enumerating,
+    /// including via cancellation) closes the underlying response/connection.
+    /// </summary>
+    public async Task<BrokerStreamOutcome> ExecuteStreamAsync(BrokerHttpRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var (uri, headers, body, authorized) = Prepare(request);
+            return await SendStreamingAsync(request, uri, headers, body, authorized, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return new BrokerStreamFailure("timeout", $"request exceeded {options.Timeout}"); }
+        catch (FileTransformException error) { return new BrokerStreamFailure("bad_response", error.Message); }
+        catch (CredentialRejectedException error) { return new BrokerStreamFailure("bad_response", error.Message); }
+        catch (HttpRequestException error) { return new BrokerStreamFailure("network", error.Message); }
+        catch (SocketException error) { return new BrokerStreamFailure("network", error.Message); }
+        catch (IOException error) { return new BrokerStreamFailure("network", error.Message); }
+        catch (InvalidOperationException error) { return new BrokerStreamFailure("network", error.Message); }
+    }
+
+    private (Uri Uri, List<KeyValuePair<string, string>> Headers, byte[] Body, bool Authorized) Prepare(BrokerHttpRequest request)
     {
         bool authorized = request.Credentials.Count > 0 || request.Sign is not null;
 
@@ -189,7 +226,7 @@ public sealed class NetworkBroker : IDisposable
             }
         }
 
-        return await SendWithRedirectsAsync(request, uri, headers, finalBody, authorized, cancellationToken);
+        return (uri, headers, finalBody, authorized);
     }
 
     private static string ResolvePrimitiveSecret(BrokerHttpRequest request, PrimitiveSign primitive, string secretName)
@@ -227,6 +264,65 @@ public sealed class NetworkBroker : IDisposable
                 continue;
             }
             return await BuildResultAsync(request, response, cancellationToken, redirectUrl: null);
+        }
+    }
+
+    /// <summary>No redirect-following: an SSE/streaming endpoint is not expected to redirect, and
+    /// deciding whether to auto-follow needs the whole response body semantics streaming intentionally
+    /// avoids buffering. A redirect response is surfaced as a rejection instead.</summary>
+    private async Task<BrokerStreamOutcome> SendStreamingAsync(BrokerHttpRequest request, Uri uri, List<KeyValuePair<string, string>> headers, byte[] body, bool authorized, CancellationToken cancellationToken)
+    {
+        _ = authorized;
+        if (!IsAllowedForRequest(request, uri)) return new BrokerStreamFailure("network", $"origin {Origin(uri)} not allowed");
+
+        var httpRequest = new HttpRequestMessage(new HttpMethod(request.Method), uri);
+        HttpContent? content = BuildContent(request.Body, headers, body);
+        if (content is not null) httpRequest.Content = content;
+        foreach (var header in headers)
+        {
+            if (content is not null && IsContentHeader(header.Key)) { TrySetContentHeader(content, header.Key, header.Value); continue; }
+            httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        var response = await client.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        bool redirect = response.StatusCode is System.Net.HttpStatusCode.MovedPermanently or System.Net.HttpStatusCode.Found or System.Net.HttpStatusCode.SeeOther
+            or System.Net.HttpStatusCode.TemporaryRedirect or System.Net.HttpStatusCode.PermanentRedirect;
+        var visibleHeaders = FilterResponseHeaders(response, options.ExtraAllowedResponseHeaders);
+        if (!response.IsSuccessStatusCode || redirect)
+        {
+            int status = (int)response.StatusCode;
+            var (bytes, _) = await ReadBoundedAsync(response.Content, ProtocolLimits.MaxHttpErrorBodyBytes, cancellationToken);
+            bool truncated = bytes.Length >= ProtocolLimits.MaxHttpErrorBodyBytes;
+            httpRequest.Dispose();
+            response.Dispose();
+            return new BrokerStreamRejected(status, visibleHeaders, bytes, truncated);
+        }
+        return new BrokerStreamStarted((int)response.StatusCode, visibleHeaders, DecodeText(httpRequest, response, cancellationToken));
+    }
+
+    /// <summary>Reads the live response stream progressively and yields decoded UTF-8 text pieces (not
+    /// SSE-event-boundary-aware - PLAN 4.5 explicitly does not promise that); the request/response are
+    /// disposed once enumeration ends, including when the caller stops early (cancel/error).</summary>
+    private static async IAsyncEnumerable<string> DecodeText(HttpRequestMessage httpRequest, HttpResponseMessage response,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        using var _req = httpRequest;
+        using var _resp = response;
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var decoder = System.Text.Encoding.UTF8.GetDecoder();
+        // Large enough that a single big write from the server can land in one decoded piece (so an
+        // oversized-chunk test can actually produce one, S09) without being an unbounded read itself -
+        // still one bounded, fixed-size buffer per read, never sized off anything server-controlled.
+        var bytes = new byte[128 * 1024];
+        var chars = new char[128 * 1024];
+        while (true)
+        {
+            int read = await stream.ReadAsync(bytes, cancellationToken);
+            if (read == 0) yield break;
+            int charCount = decoder.GetCharCount(bytes, 0, read, flush: false);
+            if (charCount > chars.Length) chars = new char[charCount];
+            int written = decoder.GetChars(bytes, 0, read, chars, 0, flush: false);
+            if (written > 0) yield return new string(chars, 0, written);
         }
     }
 

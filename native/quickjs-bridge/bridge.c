@@ -240,10 +240,24 @@ static const char *bootstrap =
 "function toError(e){if(e&&typeof e==='object'&&typeof e.kind==='string'&&KINDS.has(e.kind))return {kind:e.kind,detail:e.detail===undefined?undefined:String(e.detail).slice(0,1024)};"
 "if(e&&e.kind==='cancelled')return {kind:'cancelled'};return {kind:'bad_response',detail:String(e&&e.message||e).slice(0,1024)};}"
 "function finish(id,message){calls.delete(id);let text;try{text=JSON.stringify(message);}catch(e){text=JSON.stringify({callId:id,ok:false,error:{kind:'bad_response',detail:'result is not JSON'}});}host(2,text);}"
+// $http.stream(req): the host runs the real HTTP/SSE request (http.stream.open), the plugin pulls
+// text pieces one at a time (http.stream.read) - each pull both consumes and acknowledges one piece
+// of host-side StreamWindow credit (Susu.Runtime), so the host never buffers unboundedly ahead of a
+// plugin that reads slowly. http.stream.close on generator return/throw releases the host-side stream
+// eagerly instead of waiting for call teardown (mirrors the non-streaming $http cancellation contract).
+"async function streamHttp(c,api,r){"
+"const opened=await api('http.stream.open',r);"
+"if(opened&&opened.error)return{status:opened.status,headers:opened.headers,error:opened.error};"
+"const streamId=opened.streamId;"
+"async function* gen(){try{for(;;){if(c.signal.aborted)throw c.signal.reason;"
+"const chunk=await api('http.stream.read',{streamId});if(chunk.done)return;yield chunk.text;}}"
+"finally{try{await api('http.stream.close',{streamId});}catch(_){}}}"
+"return{status:opened.status,headers:opened.headers,chunks:gen()};}"
 "function invoke(plugin,id,cap,req,config){const c=makeSignal();calls.set(id,c);"
 "const api=(op,args)=>c.signal.aborted?Promise.reject(c.signal.reason):host(1,JSON.stringify({callId:id,op,args}));"
 "const ctx=Object.freeze({config:Object.freeze(config||{}),signal:c.signal,lang:Object.freeze({from:'en',to:'zh-Hans'}),"
-"$http:(r)=>api('http',r),$store:Object.freeze({get:(k)=>api('store.get',{key:k}),set:(k,v)=>api('store.set',{key:k,value:v})}),"
+"$http:Object.assign((r)=>api('http',r),{stream:(r)=>streamHttp(c,api,r)}),"
+"$store:Object.freeze({get:(k)=>api('store.get',{key:k}),set:(k,v)=>api('store.set',{key:k,value:v})}),"
 "$log:(level,msg)=>{host(3,JSON.stringify({callId:id,level:String(level),msg:String(msg).slice(0,4096)}));}});"
 "Promise.resolve().then(()=>{const f=plugin&&plugin[cap];if(typeof f!=='function')throw new PluginError('bad_response','capability not exported');return f.call(plugin,req,ctx);})"
 ".then(r=>finish(id,{callId:id,ok:true,result:r}),e=>finish(id,{callId:id,ok:false,error:toError(e)}));}"

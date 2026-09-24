@@ -9,6 +9,9 @@
     <ProjectReference Include="../Susu.Contracts/Susu.Contracts.csproj" />
     <ProjectReference Include="../Susu.Domain/Susu.Domain.csproj" />
     <ProjectReference Include="../Susu.Windows/Susu.Windows.csproj" />
+    <ProjectReference Include="../Susu.Net/Susu.Net.csproj" />
+    <ProjectReference Include="../Susu.Storage/Susu.Storage.csproj" />
+    <ProjectReference Include="../Susu.Runtime/Susu.Runtime.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Manifest YAML subset only (low-level event parser, no reflection; see Susu.Storage/Yaml.cs). -->

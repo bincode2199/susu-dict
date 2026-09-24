@@ -52,4 +52,35 @@ export default {
       return { denied: true, error: (e && (e.detail || e.message)) || text };
     }
   },
+  // F05.1/F05.2: the real network broker (Susu.Net.NetworkBroker) through the real sandbox, not just
+  // the C#-envelope-level BrokerTests/NetworkBrokerTests.
+  async httpGet(req, ctx) {
+    return await ctx.$http({ method: 'GET', url: req.url });
+  },
+  // F05.1: $http.stream (SSE) through the real bridge - pulls the async generator to completion and
+  // reports every piece it received, so a test can check both the content and (indirectly, via how
+  // many round trips it took) that pieces arrived one at a time rather than as one buffered blob.
+  async httpStream(req, ctx) {
+    const r = await ctx.$http.stream({ method: 'GET', url: req.url });
+    if (r.error) return { status: r.status, error: r.error };
+    const pieces = [];
+    try {
+      for await (const p of r.chunks) pieces.push(p);
+    } catch (e) {
+      let text; try { text = JSON.stringify(e); } catch { text = String(e); }
+      return { status: r.status, pieces, caught: (e && (e.detail || e.message)) || text };
+    }
+    return { status: r.status, pieces };
+  },
+  // Reads only the first piece then returns without draining the generator, so the host-side pump
+  // (and its StreamWindow reservation) is left mid-stream - exercises stream.close cleanup on an
+  // abandoned/cancelled call (the generator's finally-block still runs via the normal JS return path
+  // here, but a genuinely cancelled call exercises the same Broker.Revoke cleanup path).
+  async httpStreamFirstOnly(req, ctx) {
+    const r = await ctx.$http.stream({ method: 'GET', url: req.url });
+    if (r.error) return { status: r.status, error: r.error };
+    const it = r.chunks[Symbol.asyncIterator]();
+    const first = await it.next();
+    return { status: r.status, first: first.value };
+  },
 };

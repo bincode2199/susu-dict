@@ -26,7 +26,8 @@ public sealed record LoopbackHttpResponse(int Status, byte[] Body, IReadOnlyDict
 public sealed class LoopbackHttpServer : IDisposable
 {
     private readonly TcpListener listener;
-    private readonly Func<LoopbackHttpRequest, LoopbackHttpResponse> handler;
+    private readonly Func<LoopbackHttpRequest, LoopbackHttpResponse>? handler;
+    private readonly Func<LoopbackHttpRequest, NetworkStream, CancellationToken, Task>? streamHandler;
     private readonly CancellationTokenSource cts = new();
     private readonly Task loop;
 
@@ -41,6 +42,27 @@ public sealed class LoopbackHttpServer : IDisposable
         listener.Start();
         Port = ((IPEndPoint)listener.LocalEndpoint).Port;
         loop = Task.Run(AcceptLoopAsync);
+    }
+
+    /// <summary>Full control over the wire bytes after the request line/headers are parsed - for SSE-style
+    /// tests that need to write a status line, headers, and then body pieces spread over time on the same
+    /// connection (e.g. to exercise StreamWindow credit against a plugin that reads slowly).</summary>
+    public LoopbackHttpServer(Func<LoopbackHttpRequest, NetworkStream, CancellationToken, Task> streamHandler)
+    {
+        this.streamHandler = streamHandler;
+        listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        Port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        loop = Task.Run(AcceptLoopAsync);
+    }
+
+    /// <summary>Writes an SSE-shaped status line + headers (Content-Type text/event-stream, no
+    /// Content-Length - the body length is not known upfront) ready for the caller to then write body
+    /// pieces directly to <paramref name="stream"/>.</summary>
+    public static async Task WriteSseHeadAsync(NetworkStream stream, CancellationToken cancellationToken)
+    {
+        byte[] head = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
+        await stream.WriteAsync(head, cancellationToken);
     }
 
     private async Task AcceptLoopAsync()
@@ -65,8 +87,8 @@ public sealed class LoopbackHttpServer : IDisposable
             var request = await ReadRequestAsync(stream, cts.Token);
             if (request is null) return;
             Interlocked.Increment(ref RequestCount);
-            var response = handler(request);
-            await WriteResponseAsync(stream, response, cts.Token);
+            if (streamHandler is not null) await streamHandler(request, stream, cts.Token);
+            else { var response = handler!(request); await WriteResponseAsync(stream, response, cts.Token); }
         }
         catch (IOException) { } catch (ObjectDisposedException) { }
     }
