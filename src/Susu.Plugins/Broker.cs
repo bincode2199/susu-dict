@@ -46,12 +46,14 @@ public sealed class Broker : IDisposable
     /// unacked budget, the same primitive F04.3 built for outbound Chunk frames). Each successful
     /// http.stream.read both dequeues one piece and acks its bytes, freeing credit for the pump.
     /// </summary>
-    private sealed class StreamState(System.Threading.Channels.Channel<byte[]> channel, Task pump, CancellationTokenSource cts, string callKey)
+    private sealed class StreamState(System.Threading.Channels.Channel<byte[]> channel, Task pump, CancellationTokenSource cts, string callKey, IReadOnlyList<string> resolvedSecrets)
     {
         public System.Threading.Channels.Channel<byte[]> Channel { get; } = channel;
         public Task Pump { get; } = pump;
         public CancellationTokenSource Cts { get; } = cts;
         public string CallKey { get; } = callKey;
+        /// <summary>S10: checked against every piece as it is read (StreamReadAsync).</summary>
+        public IReadOnlyList<string> ResolvedSecrets { get; } = resolvedSecrets;
     }
 
     private static readonly HashSet<string> allowedFields = ["method", "url", "headers", "query", "body", "responseType", "bodyFiles", "responseFiles", "credentials", "sign", "errorPointer"];
@@ -196,7 +198,8 @@ public sealed class Broker : IDisposable
     {
         BrokerHttpRequest request;
         List<(string Handle, FileLease Lease)> takenLeases = [];
-        try { request = BuildRequest(grant, call.Args, takenLeases); }
+        var resolvedSecrets = new List<string>();
+        try { request = BuildRequest(grant, call.Args, takenLeases, resolvedSecrets); }
         catch (BrokerDenyException deny) { ReleaseAll(takenLeases); return Deny(call.ApiId, deny.Message, deny.Kind); }
         var cts = BeginHttpCall(grant.Grant);
         try
@@ -204,6 +207,11 @@ public sealed class Broker : IDisposable
             var outcome = await getNetwork().ExecuteAsync(request, cts.Token);
             return outcome switch
             {
+                // S10: a response that echoes back a known literal form of a credential the host just
+                // injected is intercepted here, before the plugin ever sees it (defense in depth only -
+                // any other transformation of the value is out of scope, PLAN says so explicitly).
+                BrokerSuccess success when CredentialLeakScanner.ContainsKnownForm(success.Response, resolvedSecrets)
+                    => Deny(call.ApiId, "response echoed a known credential form", "bad_response"),
                 BrokerSuccess success => Allow(call.ApiId, BuildResultJson(success.Response)),
                 BrokerFailure failure => Deny(call.ApiId, failure.Detail, failure.Kind),
                 _ => Deny(call.ApiId, "unknown broker outcome"),
@@ -222,7 +230,8 @@ public sealed class Broker : IDisposable
     {
         BrokerHttpRequest request;
         List<(string Handle, FileLease Lease)> takenLeases = [];
-        try { request = BuildRequest(grant, call.Args, takenLeases); }
+        var resolvedSecrets = new List<string>();
+        try { request = BuildRequest(grant, call.Args, takenLeases, resolvedSecrets); }
         catch (BrokerDenyException deny) { return Deny(call.ApiId, deny.Message, deny.Kind); }
         finally { ReleaseAll(takenLeases); } // stream bodies never carry file handles (SSE requests are small/text)
         var cts = BeginHttpCall(grant.Grant);
@@ -241,12 +250,18 @@ public sealed class Broker : IDisposable
                 return Deny(call.ApiId, failure.Detail, failure.Kind);
             case BrokerStreamStarted started:
             {
+                // S10: the headers half of the started response is scanned the same as a non-streaming
+                // response's; body pieces are scanned as they are read (StreamReadAsync), since the
+                // full body is never buffered here.
+                foreach (var value in started.Headers.Values)
+                    if (CredentialLeakScanner.ContainsKnownForm(value, resolvedSecrets))
+                        return Deny(call.ApiId, "response echoed a known credential form", "bad_response");
                 string streamId = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(12));
                 string callKey = $"{grant.Grant}:{call.CallId}";
                 var channel = System.Threading.Channels.Channel.CreateUnbounded<byte[]>(new() { SingleReader = true, SingleWriter = true });
                 var pumpCts = new CancellationTokenSource();
                 var pump = Task.Run(() => PumpStreamAsync(streamId, started.Text, channel.Writer, pumpCts.Token));
-                lock (streams) streams[streamId] = new StreamState(channel, pump, pumpCts, callKey);
+                lock (streams) streams[streamId] = new StreamState(channel, pump, pumpCts, callKey, resolvedSecrets);
                 var node = new JsonObject { ["status"] = started.Status, ["headers"] = HeadersNode(started.Headers), ["streamId"] = streamId };
                 return Allow(call.ApiId, node.ToJsonString());
             }
@@ -309,7 +324,15 @@ public sealed class Broker : IDisposable
             return Deny(call.ApiId, error.Message, "network");
         }
         streamWindow.Ack(streamId, bytes.Length); // one read = one piece = one ack; frees the pump to buffer its next piece
-        var node = new JsonObject { ["done"] = false, ["text"] = System.Text.Encoding.UTF8.GetString(bytes) };
+        string text = System.Text.Encoding.UTF8.GetString(bytes);
+        if (CredentialLeakScanner.ContainsKnownForm(text, state.ResolvedSecrets)) // S10: same check, applied per streamed piece
+        {
+            lock (streams) streams.Remove(streamId);
+            streamWindow.Reset(streamId);
+            state.Cts.Cancel();
+            return Deny(call.ApiId, "response echoed a known credential form", "bad_response");
+        }
+        var node = new JsonObject { ["done"] = false, ["text"] = text };
         return Allow(call.ApiId, node.ToJsonString());
     }
 
@@ -374,7 +397,7 @@ public sealed class Broker : IDisposable
 
     private sealed class BrokerDenyException(string message, string kind = "bad_response") : Exception(message) { public string Kind { get; } = kind; }
 
-    private BrokerHttpRequest BuildRequest(GrantInfo grant, JsonElement args, List<(string Handle, FileLease Lease)> takenLeases)
+    private BrokerHttpRequest BuildRequest(GrantInfo grant, JsonElement args, List<(string Handle, FileLease Lease)> takenLeases, List<string> resolvedSecretValues)
     {
         if (args.ValueKind != JsonValueKind.Object) throw new BrokerDenyException("request must be an object");
         foreach (var property in args.EnumerateObject())
@@ -414,14 +437,15 @@ public sealed class Broker : IDisposable
 
         foreach (string handle in bodyHandles) if (!grant.Handles.Contains(handle)) throw new BrokerDenyException("file handle not granted to this call");
 
-        return new BrokerHttpRequest(method, uri, headers, body, bodyFiles, credentials, (spec, name) => ResolveSecret(grant, spec, name), sign, responseType, responseFiles, errorPointer, LocalOriginApproved: true);
+        return new BrokerHttpRequest(method, uri, headers, body, bodyFiles, credentials, (spec, name) => ResolveSecret(grant, spec, name, resolvedSecretValues), sign, responseType, responseFiles, errorPointer, LocalOriginApproved: true);
     }
 
-    private string ResolveSecret(GrantInfo grant, CredentialSpec spec, string secretName)
+    private string ResolveSecret(GrantInfo grant, CredentialSpec spec, string secretName, List<string> resolvedSecretValues)
     {
         _ = spec;
         if (!grant.Secrets.Contains(secretName)) throw new BrokerDenyException($"secret '{secretName}' is not bound to this plugin/account");
         if (secretStore is null || !secretStore.TryRead(grant.PluginId, secretName, out string value)) throw new BrokerDenyException($"secret '{secretName}' is not configured");
+        resolvedSecretValues.Add(value); // S10: known-form leak scan checks the response against every secret actually used
         return value;
     }
 
