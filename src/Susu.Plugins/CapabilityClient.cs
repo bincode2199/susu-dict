@@ -38,8 +38,3 @@ public static class CapabilityClient
         return new(true, result, null, null);
     }
 }
-
-/// <summary>The plugin-visible shape of a $file reference (PLAN 4.5/4.5.1): an opaque host-issued id plus
-/// read-only metadata, never a path or bytes. Used both to pass an input file into a capability request
-/// and to read a $http result's file/files entries.</summary>
-public sealed record FileHandleRef(string Id, string Mime, long Bytes, double? DurationMs = null);

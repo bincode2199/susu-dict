@@ -30,6 +30,8 @@ namespace Susu.Contracts;
 [JsonSerializable(typeof(DetectCandidate[]))]
 [JsonSerializable(typeof(OcrResult))]
 [JsonSerializable(typeof(AsrResult))]
+[JsonSerializable(typeof(FileHandleInfo))]
+[JsonSerializable(typeof(TtsResult))]
 [JsonSerializable(typeof(OptionsRequest))]
 [JsonSerializable(typeof(OptionsResult))]
 [JsonSerializable(typeof(VocabRequest))]

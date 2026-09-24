@@ -237,4 +237,69 @@ public class ContractProbeTests
         }
         return null;
     }
+
+    /// <summary>B03-shaped: TTS JSON response - a Base64 audio field extracted host-side into a fresh
+    /// FileHandle; the plugin only ever sees {id, mime, bytes}, never the encoded audio bytes.</summary>
+    [Fact]
+    public async Task TtsJson_extracts_a_real_output_file_handle_through_the_real_broker()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        byte[] audioBytes = [0x49, 0x44, 0x33, 1, 2, 3, 4, 5]; // synthetic MP3-ish bytes
+        string audioBase64 = Convert.ToBase64String(audioBytes);
+        string leaseDir = Path.Combine(Path.GetTempPath(), "susu-tts-leases-" + Guid.NewGuid().ToString("N"));
+        using var leases = new FileLeases(leaseDir);
+
+        using var server = new LoopbackHttpServer(_ => LoopbackHttpResponse.Json(200,
+            "{\"Response\":{\"Audio\":\"" + audioBase64 + "\",\"RequestId\":\"r1\"}}"));
+        using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false,
+            MakeBroker: () => new Broker(leases: leases)));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load("vendor", "plugins/vendor").Ok);
+            string requestJson = "{\"url\":\"" + server.Origin + "/tts\",\"text\":\"hello\",\"voice\":\"female\"}";
+            var outcome = await CapabilityClient.InvokeAsync(session, "vendor", "ttsJson", requestJson, "job-tts-json",
+                [server.Origin], ContractsJson.Default.TtsResult, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.True(outcome.Ok, outcome.ErrorDetail);
+            Assert.Equal("audio/mpeg", outcome.Result!.Audio.Mime);
+            Assert.Equal(audioBytes.LongLength, outcome.Result.Audio.Bytes);
+
+            var lease = leases.AddReference(outcome.Result.Audio.Id);
+            Assert.NotNull(lease);
+            Assert.Equal(audioBytes, File.ReadAllBytes(leases.PathOf(lease!))); // the real decoded bytes are on disk, not just referenced
+        }
+        finally { session.Shutdown(2000); try { Directory.Delete(leaseDir, recursive: true); } catch (IOException) { } }
+    }
+
+    /// <summary>B04-shaped: a raw (non-JSON) TTS audio response becomes a file handle result directly,
+    /// with no JSON parsing attempted on the audio bytes.</summary>
+    [Fact]
+    public async Task TtsRaw_returns_a_real_output_file_handle_through_the_real_broker()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        byte[] audioBytes = [0xFF, 0xFB, 9, 9, 9, 9];
+        string leaseDir = Path.Combine(Path.GetTempPath(), "susu-tts-raw-leases-" + Guid.NewGuid().ToString("N"));
+        using var leases = new FileLeases(leaseDir);
+
+        using var server = new LoopbackHttpServer(_ => new LoopbackHttpResponse(200, audioBytes, ContentType: "audio/mpeg"));
+        using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false,
+            MakeBroker: () => new Broker(leases: leases)));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load("vendor", "plugins/vendor").Ok);
+            string requestJson = "{\"url\":\"" + server.Origin + "/tts-raw\",\"text\":\"hello\"}";
+            var outcome = await CapabilityClient.InvokeAsync(session, "vendor", "ttsRaw", requestJson, "job-tts-raw",
+                [server.Origin], ContractsJson.Default.TtsResult, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.True(outcome.Ok, outcome.ErrorDetail);
+            Assert.Equal("audio/mpeg", outcome.Result!.Audio.Mime);
+
+            var lease = leases.AddReference(outcome.Result.Audio.Id);
+            Assert.NotNull(lease);
+            Assert.Equal(audioBytes, File.ReadAllBytes(leases.PathOf(lease!)));
+        }
+        finally { session.Shutdown(2000); try { Directory.Delete(leaseDir, recursive: true); } catch (IOException) { } }
+    }
 }

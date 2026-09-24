@@ -40,6 +40,11 @@ public enum Capability
 /// <summary><c>kind</c> is "text" (Text set) or "segments" (Segments set); must match the requested output.</summary>
 [TsExport("plugin")] public sealed record AsrResult(string Kind, string? Text = null, AsrSegment[]? Segments = null);
 
+/// <summary>The plugin-visible shape of a $file reference (PLAN 4.5/4.5.1): a host-issued opaque id
+/// plus read-only metadata, never a path or the raw bytes.</summary>
+[TsExport("plugin")] public sealed record FileHandleInfo(string Id, string Mime, long Bytes, double? DurationMs = null);
+[TsExport("plugin")] public sealed record TtsResult(FileHandleInfo Audio);
+
 [TsExport("plugin")] public sealed record OptionsRequest(string Field, long DependsOnRevision, string? Cursor = null);
 [TsExport("plugin")] public sealed record OptionItem(string Value, string Label);
 [TsExport("plugin")] public sealed record OptionsResult(OptionItem[] Items, string? NextCursor = null);

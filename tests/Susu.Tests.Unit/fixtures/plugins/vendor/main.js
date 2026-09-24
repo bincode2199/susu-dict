@@ -68,4 +68,29 @@ export default {
     });
     return { kind: 'text', text: r.body.text };
   },
+
+  // TTS JSON (B03-shaped, Tencent-style): a Base64 audio field extracted host-side into a file; the
+  // plugin gets the FileHandle, never the encoded bytes.
+  async ttsJson(req, ctx) {
+    const r = await ctx.$http({
+      method: 'POST',
+      url: req.url,
+      headers: { 'content-type': 'application/json' },
+      body: { kind: 'json', value: { Text: req.text, VoiceType: req.voice || 'default' } },
+      responseFiles: [{ name: 'audio', pointer: '/Response/Audio', mime: 'audio/mpeg' }],
+    });
+    return { audio: r.files.audio };
+  },
+
+  // TTS raw (B04-shaped): the whole response body is the audio file, not JSON.
+  async ttsRaw(req, ctx) {
+    const r = await ctx.$http({
+      method: 'POST',
+      url: req.url,
+      headers: { 'content-type': 'application/json' },
+      body: { kind: 'json', value: { Text: req.text, VoiceType: req.voice || 'default' } },
+      responseType: 'file',
+    });
+    return { audio: r.body };
+  },
 };

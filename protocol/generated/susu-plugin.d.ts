@@ -60,6 +60,13 @@ export interface Example {
   dst: string;
 }
 
+export interface FileHandleInfo {
+  id: string;
+  mime: string;
+  bytes: number;
+  durationMs?: number;
+}
+
 export interface OcrBlock {
   text: string;
   box?: number[];
@@ -117,6 +124,10 @@ export interface TranslateResult {
   text: string;
   detectedFrom?: string;
   raw?: unknown;
+}
+
+export interface TtsResult {
+  audio: FileHandleInfo;
 }
 
 export interface VocabRequest {
