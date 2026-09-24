@@ -259,4 +259,55 @@ public class PluginHostIntegrationTests
         }
         finally { session.Shutdown(2000); }
     }
+
+    /// <summary>
+    /// J07 (live, not the FakeSession/ManualClock unit coverage in SupervisorTests): kill the real
+    /// AppContainer child process while a call is in flight. The call must fail rather than hang or
+    /// silently succeed later (no replay - HostSession.ReadLoop faults every outstanding waiter once
+    /// the pipe breaks), the grant Broker.HandleAsync would have used must not still work against a
+    /// resurrected process (each HostSession/Broker pair is destroyed together - see
+    /// SupervisorTests.A_crash_never_resends_calls_a_new_session_never_saw for why that already rules
+    /// out replay structurally), and the OS process itself must actually be gone (no orphan, X06).
+    /// </summary>
+    [Fact]
+    public async Task Killing_the_real_child_process_faults_the_in_flight_call_and_leaves_no_orphan()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        string host = Path.Combine(staged, "susu.exe");
+
+        var session = HostSession.Start(new HostSession.Options(host, staged, "quickjs", KeepProfile: false));
+        bool disconnected = false;
+        session.Disconnected += () => disconnected = true;
+        int pid = session.ChildPid;
+        try
+        {
+            Assert.True(session.Load("echo", "plugins/echo").Ok);
+            // A call that suspends on a host round trip, so it is genuinely in flight when killed.
+            var (_, _, inFlight) = session.Invoke("echo", "slowA", "{}", jobId: "job-kill", origins: []);
+
+            using (var real = System.Diagnostics.Process.GetProcessById(pid))
+            {
+                real.Kill();
+                Assert.True(real.WaitForExit(5000), "the real child process must actually terminate");
+            }
+
+            // Not a hang and not a silent success replayed from nowhere: the pending call faults.
+            await Assert.ThrowsAsync<IOException>(async () => await inFlight.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            Assert.True(disconnected);
+
+            // No orphan left behind under the process's own PID.
+            Assert.Throws<ArgumentException>(() => System.Diagnostics.Process.GetProcessById(pid));
+
+            // A fresh session (what Supervisor would launch next) is unaffected and works independently -
+            // nothing about the killed process's grants or state leaks forward.
+            using var next = HostSession.Start(new HostSession.Options(host, staged, "quickjs", KeepProfile: false));
+            Assert.True(next.Load("echo", "plugins/echo").Ok);
+            var (_, _, freshCall) = next.Invoke("echo", "translate", "{\"text\":\"after-kill\"}", jobId: "job-after-kill", origins: []);
+            var freshResult = await freshCall.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal(Susu.Contracts.IpcMessageType.Completed, freshResult.Type);
+            next.Shutdown(2000);
+        }
+        finally { session.Dispose(); }
+    }
 }
