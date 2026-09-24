@@ -206,6 +206,9 @@
           "Susu.Abstractions": "[1.0.0, )",
           "Susu.Contracts": "[1.0.0, )",
           "Susu.Domain": "[1.0.0, )",
+          "Susu.Net": "[1.0.0, )",
+          "Susu.Runtime": "[1.0.0, )",
+          "Susu.Storage": "[1.0.0, )",
           "Susu.Windows": "[1.0.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
