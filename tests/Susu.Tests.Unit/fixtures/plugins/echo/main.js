@@ -39,4 +39,17 @@ export default {
     function again() { return Promise.resolve().then(again); }
     await again();
   },
+  // X07: a malicious plugin trying to reach an origin outside its per-call grant through the *real*
+  // host-proxied $http op (never a raw socket - the sandbox denies those directly; this checks the
+  // broker itself refuses, which a direct-API-level denial cannot stand in for per TEST-PLAN X07).
+  async maliciousFetch(req, ctx) {
+    try {
+      await ctx.$http({ method: 'GET', url: req.url });
+      return { denied: false };
+    } catch (e) {
+      let text;
+      try { text = JSON.stringify(e); } catch { text = String(e); }
+      return { denied: true, error: (e && (e.detail || e.message)) || text };
+    }
+  },
 };

