@@ -102,14 +102,11 @@ public class SignersTests
             "{\"SourceText\":\"hello\",\"Source\":\"en\",\"Target\":\"zh\",\"ProjectId\":0}"u8.ToArray());
         var timestamp = DateTimeOffset.FromUnixTimeSeconds(1700000000);
 
-        var signed = TencentTc3Signer.Sign(request, "tmt", "ap-guangzhou", "TextTranslate", "2018-03-21", "AKIDexampleSecretId0123456789", "exampleSecretKey0123456789abcdef", timestamp);
+        var signed = TencentTc3Signer.Sign(request, "tmt", "AKIDexampleSecretId0123456789", "exampleSecretKey0123456789abcdef", timestamp);
 
         Assert.Equal("TC3-HMAC-SHA256 Credential=AKIDexampleSecretId0123456789/2023-11-14/tmt/tc3_request, SignedHeaders=content-type;host, Signature=02dcec9f8080927c210c877a70bbc08a94f9e495bf884b4b510878a028e106d1",
             Header(signed, "Authorization"));
         Assert.Equal("1700000000", Header(signed, "X-TC-Timestamp"));
-        Assert.Equal("TextTranslate", Header(signed, "X-TC-Action"));
-        Assert.Equal("2018-03-21", Header(signed, "X-TC-Version"));
-        Assert.Equal("ap-guangzhou", Header(signed, "X-TC-Region"));
     }
 
     [Fact]
@@ -118,7 +115,7 @@ public class SignersTests
         var timestamp = DateTimeOffset.FromUnixTimeSeconds(1700000000);
         NamedSignature Sign(string body) => TencentTc3Signer.Sign(
             new SignableRequest("POST", new Uri("https://tmt.tencentcloudapi.com/"), [new("content-type", "application/json"), new("host", "tmt.tencentcloudapi.com")], System.Text.Encoding.UTF8.GetBytes(body)),
-            "tmt", "ap-guangzhou", "TextTranslate", "2018-03-21", "id", "key", timestamp);
+            "tmt", "id", "key", timestamp);
         Assert.NotEqual(Header(Sign("{\"a\":1}"), "Authorization"), Header(Sign("{\"a\":2}"), "Authorization")); // signs final bytes, not a pre-signing snapshot
     }
 

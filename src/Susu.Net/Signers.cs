@@ -71,7 +71,13 @@ public static class TencentTc3Signer
     /// cross-checked end to end (see <see cref="SignFromDerivedKey"/>).</summary>
     public readonly record struct CanonicalPieces(string CanonicalRequest, string StringToSign, string CredentialScope, string SignedHeaders, string Timestamp);
 
-    public static NamedSignature Sign(SignableRequest request, string service, string region, string action, string version, string secretId, string secretKey, DateTimeOffset timestamp)
+    /// <summary>
+    /// Signs Authorization and X-TC-Timestamp only - the two values a plugin cannot compute itself
+    /// without the raw secret key or the host's clock. X-TC-Action/X-TC-Version/X-TC-Region are not
+    /// secret, so the plugin sets them as ordinary headers before this runs; <see cref="BuildCanonicalPieces"/>
+    /// picks up any such X-TC-* header already present and folds it into the signed-header set.
+    /// </summary>
+    public static NamedSignature Sign(SignableRequest request, string service, string secretId, string secretKey, DateTimeOffset timestamp)
     {
         var pieces = BuildCanonicalPieces(request, service, timestamp);
         byte[] secretDate = HmacSigner.HashData("sha256", Encoding.UTF8.GetBytes("TC3" + secretKey), Encoding.UTF8.GetBytes(timestamp.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
@@ -79,13 +85,7 @@ public static class TencentTc3Signer
         byte[] secretSigning = HmacSigner.HashData("sha256", secretService, Encoding.UTF8.GetBytes("tc3_request"));
         string signature = SignFromDerivedKey(secretSigning, pieces.StringToSign);
         string authorization = $"TC3-HMAC-SHA256 Credential={secretId}/{pieces.CredentialScope}, SignedHeaders={pieces.SignedHeaders}, Signature={signature}";
-        return new NamedSignature([
-            new("Authorization", authorization),
-            new("X-TC-Timestamp", pieces.Timestamp),
-            new("X-TC-Action", action),
-            new("X-TC-Version", version),
-            new("X-TC-Region", region),
-        ]);
+        return new NamedSignature([new("Authorization", authorization), new("X-TC-Timestamp", pieces.Timestamp)]);
     }
 
     /// <summary>The final HMAC step alone, given an already-derived SecretSigning key. Lets a test verify
