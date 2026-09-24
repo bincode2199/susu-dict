@@ -9,10 +9,10 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 
 | Module | State | Record |
 |---|---|---|
-| F00 | Pending integration acceptance. Every measurement has run, including the interactive ones: C06 now passes (17/17); GDI BitBlt was chosen for capture; PER04 passes. **PER03 misses two budgets**: hot content visible p95 57 ms against ≤50, and cold interactive first frame p95 792 ms against ≤300. That needs a product decision, and the options are recorded; the budgets were not changed. | [F00](F00/F00.md) |
+| F00 | Complete. Every measurement has run, including the interactive ones: C06 passes (17/17); GDI BitBlt was chosen for capture; PER04 passes. PER03 misses two budgets (hot content visible p95 57 ms against ≤50; cold interactive first frame p95 792 ms against ≤300). The product owner accepted both as a known gap (D-66); the targets were not changed. | [F00](F00/F00.md) |
 | F01 | Complete: contracts, domain, scheduler and session with 112 deterministic tests. | [F01](F01/F01.md) |
 | F02 | Complete: settings, secrets, SQLite, leases, logs; 76 tests; exercised inside the AOT `susu.exe`. | [F02](F02/F02.md) |
-| F03 | Pending integration acceptance. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows; multi-monitor and mixed DPI, a real IME, screen reader and high contrast still need to be checked. | [F03](F03/F03.md) |
+| F03 | Complete. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows. Multi-monitor and mixed DPI, a real IME, screen reader, high contrast and PER03 on the real shell moved to the F19 final acceptance on a physical Windows machine (D-67). | [F03](F03/F03.md) |
 
 Environment notes for whoever resumes:
 
@@ -22,11 +22,11 @@ Environment notes for whoever resumes:
 - `tools/Susu.SelectionFixtures` needs `DOTNET_ROOT` set to `.tools/dotnet`.
 - Never commit machine names, account names or IPs; see [SENSITIVE.example](../SENSITIVE.example.md).
 
-## Open decisions and next steps
+## Decisions and next steps
 
-1. **G0 PER03 decision (product owner)**: accept WebView2 cold start as a known gap, keep a warm browser longer (which costs idle memory), or re-measure on the clean VM and on physical hardware first. See [F00 § G0 decision](F00/F00.md#g0-decision).
-2. F03 environment checks: a second monitor with a different DPI, a real IME session (Microsoft Pinyin is not installed), screen reader and high contrast. The native guard test passes (S08). When the desktop is interactive, run `tools/measure-hotkey.ps1` for PER03 on the real shell.
-3. Next modules per DEV-PLAN: F04 (plugin runtime, IPC, sandbox; the `--plugin-host` mode is reserved) and F05 (network, signers, contract probes); then F06 (first usable input translation, which re-measures PER03 in the production shell).
+1. **Resolved (2026-09-24), D-66:** the product owner accepted the two PER03 misses as a known gap. See [F00 § G0 decision](F00/F00.md#g0-decision).
+2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
+3. Next modules per DEV-PLAN: F04 (plugin runtime, IPC, sandbox; the `--plugin-host` mode is reserved) and F05 (network, signers, contract probes); then F06 (first usable input translation).
 
 ## History (condensed)
 
@@ -35,3 +35,4 @@ Environment notes for whoever resumes:
 - 2026-09-24: docs moved into the `docs/` tree (commit `e54b114`). F00 remainder and F01 committed (`23f36f5`). The local CI-equivalent run passed ([local-ci-run.txt](F00/local-ci-run.txt)). The G0 decision was recorded.
 - 2026-09-24 (later): F02 committed (`7283302`). F03 implemented (`d0aba9a` and follow-up). On an interactive desktop, the F00 capture, C06, PER03 and PER04 measurements ran, and two probe-driver crashes were fixed along the way. PER02 was measured on the real `susu.exe`. Real-window checks found and fixed three bugs: focus on open, waking an unrelated instance, and a duplicate service label.
 - 2026-09-24 (final): interactive measurements, F03 fixes and PER02 on the real `susu.exe` committed (`d2140b6`). Native guard test (S08, 10/10 with the CSP removed) and PER03 timing points on the real shell committed (`c7479fc`); `tools/measure-hotkey.ps1` is ready but not yet run, because the desktop went non-interactive. Tests at this point: 232 C# and 16 UI, all passing. Nothing has been pushed.
+- 2026-09-24 (decisions): the product owner accepted the PER03 misses (D-66) and moved the hardware-dependent checks to F19 on a physical machine (D-67). F00 and F03 are marked complete.
