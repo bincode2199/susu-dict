@@ -44,6 +44,7 @@ public sealed class HostSession : IDisposable
     private int nextCall;
     private readonly bool keepProfile;
     private readonly string hostBuild;
+    private AnonymousPipeServerStream? diagnostics;
 
     public Broker Broker { get; } = new();
     public StartTimings Timings { get; }
@@ -72,17 +73,21 @@ public sealed class HostSession : IDisposable
         var container = ContainerHost.Open(profile, options.Resources, allowExisting: options.KeepProfile);
         NamedPipeServerStream? pipe = null;
         ContainerProcess? process = null;
+        AnonymousPipeServerStream? diagnostics = null;
         try
         {
             string pipeName = $"Susu.Plugin.{Guid.NewGuid():N}";
             pipe = new NamedPipeServerStream(PipeDirection.InOut, isAsync: true, isConnected: false, container.CreatePipe(@"\\.\pipe\" + pipeName, CurrentUserSid));
             using var nonceOut = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.Inheritable);
+            diagnostics = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
             string nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
             process = container.Start(options.Executable, $"{options.ChildMode} {pipeName} {Environment.ProcessId} {options.Engine}",
-                [nonceOut.ClientSafePipeHandle], nonceOut.ClientSafePipeHandle, null, options.MemoryLimit);
+                [nonceOut.ClientSafePipeHandle, diagnostics.ClientSafePipeHandle], nonceOut.ClientSafePipeHandle, diagnostics.ClientSafePipeHandle, options.MemoryLimit);
             nonceOut.DisposeLocalCopyOfClientHandle();
+            diagnostics.DisposeLocalCopyOfClientHandle();
             double launch = timer.Elapsed.TotalMilliseconds;
             using (var writer = new StreamWriter(nonceOut)) writer.WriteLine(nonce);
+            var diagnosticText = new StreamReader(diagnostics).ReadToEndAsync();
             // A lowbox access check needs both the user and the container SID in the DACL, so other
             // same-user processes can reach the pipe: the PID + token check below is the real gate.
             int rejected = 0;
@@ -93,7 +98,8 @@ public sealed class HostSession : IDisposable
                     try { pipe.WaitForConnectionAsync(connectTimeout.Token).GetAwaiter().GetResult(); }
                     catch (OperationCanceledException)
                     {
-                        throw new InvalidOperationException($"Plugin host did not connect (rejected clients: {rejected}).");
+                        string text = process.WaitForExit(2000) && diagnosticText.Wait(1000) ? diagnosticText.Result : "(no diagnostics; child may still be starting)";
+                        throw new InvalidOperationException($"Plugin host did not connect (rejected clients: {rejected}): {text.Trim()}");
                     }
                     int verdict = container.Verify(pipe.SafePipeHandle, process.Process, out int clientPid);
                     if (verdict == 1) break;
@@ -109,12 +115,13 @@ public sealed class HostSession : IDisposable
                 throw new UnauthorizedAccessException("Handshake nonce/process mismatch.");
             var negotiated = ProtocolNegotiation.Negotiate(ProtocolVersions.SupportedIpc, hello.ProtocolVersion, "plugin-host", payload.Role, options.ResolvedHostBuild, payload.HostBuild);
             if (!negotiated.Accepted) throw new UnauthorizedAccessException($"Plugin host handshake rejected: {negotiated.Reason}");
-            var session = new HostSession(container, process, pipe, new StartTimings(launch, connect, timer.Elapsed.TotalMilliseconds), options.KeepProfile, options.ResolvedHostBuild);
+            var session = new HostSession(container, process, pipe, new StartTimings(launch, connect, timer.Elapsed.TotalMilliseconds), options.KeepProfile, options.ResolvedHostBuild) { diagnostics = diagnostics };
             return session;
         }
         catch
         {
             pipe?.Dispose();
+            diagnostics?.Dispose();
             process?.Dispose();
             container.Close(deleteProfile: !options.KeepProfile);
             throw;
@@ -200,6 +207,7 @@ public sealed class HostSession : IDisposable
     {
         pipe.Dispose();
         process.Dispose(); // closing the only Job handle terminates the child (kill-on-close)
+        diagnostics?.Dispose();
         reader.Join(2000);
         container.Close(deleteProfile: !keepProfile);
     }

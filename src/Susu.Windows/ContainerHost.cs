@@ -6,23 +6,23 @@ namespace Susu.Windows;
 /// <summary>F00 disposable AppContainer launcher (see native/container.cpp). Prototype for F04.</summary>
 public sealed partial class ContainerHost : IDisposable
 {
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_container_open", StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_container_open", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int Open(string name, string resource, int allowExisting, out nint handle, out int created);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_container_sid")]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_container_sid")]
     private static unsafe partial int Sid(nint handle, char* text, uint capacity);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_container_close")]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_container_close")]
     private static partial int Close(nint handle, int deleteProfile);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_container_pipe", StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_container_pipe", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int Pipe(nint handle, string name, string? extraSid, int rejectRemote, out nint pipe);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_container_launch", StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_container_launch", StringMarshalling = StringMarshalling.Utf16)]
     private static unsafe partial int Launch(nint handle, string executable, string arguments, nint* inherit, int inheritCount, nint stdIn, nint stdOut, ulong memoryLimit, out nint process, out nint job, out uint pid);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_container_verify_client")]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_container_verify_client")]
     private static partial int VerifyClient(nint handle, nint pipe, nint process, out int result, out uint clientPid);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_pipe_server_pid")]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_pipe_server_pid")]
     private static partial int ServerPid(nint pipe, out uint pid);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_launch_plain", StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_launch_plain", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int LaunchPlain(string executable, string arguments, nint stdOut, out nint process, out uint pid);
-    [LibraryImport("susu_windows_probe", EntryPoint = "susu_process_memory")]
+    [LibraryImport("susu_plugin_sandbox", EntryPoint = "susu_process_memory")]
     private static partial int Memory(nint process, out ulong privateWorkingSet, out ulong privateBytes, out ulong peakPrivateBytes);
 
     private nint handle;

@@ -9,6 +9,12 @@
     <PackageReference Include="xunit.v3" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Susu.Plugins is windows-only (AppContainer/WindowsIdentity); this suite only runs on Windows. -->
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Susu.Contracts/Susu.Contracts.csproj" />
     <ProjectReference Include="../../src/Susu.Domain/Susu.Domain.csproj" />
     <ProjectReference Include="../../src/Susu.Abstractions/Susu.Abstractions.csproj" />
@@ -17,10 +23,16 @@
     <ProjectReference Include="../../src/Susu.Net/Susu.Net.csproj" />
     <ProjectReference Include="../../src/Susu.Windows/Susu.Windows.csproj" />
     <ProjectReference Include="../../src/Susu.Ui/Susu.Ui.csproj" />
+    <ProjectReference Include="../../src/Susu.Plugins/Susu.Plugins.csproj" />
+    <ProjectReference Include="../../src/Susu.Runtime/Susu.Runtime.csproj" />
     <ProjectReference Include="../Susu.Testing/Susu.Testing.csproj" />
     <ProjectReference Include="../../tools/Susu.ContractsGen/Susu.ContractsGen.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../protocol/**/*" Link="protocol/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="fixtures/**/*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- AppContainer plugin-host sandbox native module (F04): PluginHostIntegrationTests launches
+         the real susu.exe (plugin-host mode) under it via Susu.Windows.ContainerHost. -->
+    <None Include="../../artifacts/windows-native/Release/susu_plugin_sandbox.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_plugin_sandbox.dll')" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
