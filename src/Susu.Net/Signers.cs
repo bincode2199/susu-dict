@@ -65,15 +65,55 @@ public sealed record NamedSignature(IReadOnlyList<KeyValuePair<string, string>> 
 /// </summary>
 public static class TencentTc3Signer
 {
+    /// <summary>Canonical-request pieces that do not need the secret key, so tests can check them against
+    /// Tencent's published worked example (cloud.tencent.com/document/product/213/30654) even though that
+    /// document masks its demo SecretKey with asterisks and only the derived SecretSigning bytes can be
+    /// cross-checked end to end (see <see cref="SignFromDerivedKey"/>).</summary>
+    public readonly record struct CanonicalPieces(string CanonicalRequest, string StringToSign, string CredentialScope, string SignedHeaders, string Timestamp);
+
     public static NamedSignature Sign(SignableRequest request, string service, string region, string action, string version, string secretId, string secretKey, DateTimeOffset timestamp)
+    {
+        var pieces = BuildCanonicalPieces(request, service, timestamp);
+        byte[] secretDate = HmacSigner.HashData("sha256", Encoding.UTF8.GetBytes("TC3" + secretKey), Encoding.UTF8.GetBytes(timestamp.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+        byte[] secretService = HmacSigner.HashData("sha256", secretDate, Encoding.UTF8.GetBytes(service));
+        byte[] secretSigning = HmacSigner.HashData("sha256", secretService, Encoding.UTF8.GetBytes("tc3_request"));
+        string signature = SignFromDerivedKey(secretSigning, pieces.StringToSign);
+        string authorization = $"TC3-HMAC-SHA256 Credential={secretId}/{pieces.CredentialScope}, SignedHeaders={pieces.SignedHeaders}, Signature={signature}";
+        return new NamedSignature([
+            new("Authorization", authorization),
+            new("X-TC-Timestamp", pieces.Timestamp),
+            new("X-TC-Action", action),
+            new("X-TC-Version", version),
+            new("X-TC-Region", region),
+        ]);
+    }
+
+    /// <summary>The final HMAC step alone, given an already-derived SecretSigning key. Lets a test verify
+    /// against Tencent's published example, which prints SecretDate/SecretService/SecretSigning in hex
+    /// even though the demo SecretKey itself is masked in the document.</summary>
+    public static string SignFromDerivedKey(byte[] secretSigning, string stringToSign)
+        => Convert.ToHexStringLower(HmacSigner.HashData("sha256", secretSigning, Encoding.UTF8.GetBytes(stringToSign)));
+
+    /// <summary>Builds CanonicalRequest/StringToSign exactly as PLAN 4.5.3 requires: content-type and host
+    /// are always signed; any other X-TC-* header the caller already set (e.g. X-TC-Action) is folded in
+    /// too, the same optional-extra-header convention Tencent's own worked example demonstrates.</summary>
+    public static CanonicalPieces BuildCanonicalPieces(SignableRequest request, string service, DateTimeOffset timestamp)
     {
         string date = timestamp.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         string ts = timestamp.ToUniversalTime().ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
 
-        var signedHeaderNames = new List<string> { "content-type", "host" };
         string contentType = HeaderValue(request.Headers, "content-type") ?? "application/json";
         string host = HeaderValue(request.Headers, "host") ?? request.Uri.IdnHost;
-        string canonicalHeaders = $"content-type:{contentType}\nhost:{host}\n";
+        var extra = request.Headers
+            .Where(h => h.Key.StartsWith("x-tc-", StringComparison.OrdinalIgnoreCase) && !string.Equals(h.Key, "x-tc-timestamp", StringComparison.OrdinalIgnoreCase))
+            .Select(h => (Name: h.Key.ToLowerInvariant(), Value: h.Value.Trim().ToLowerInvariant()))
+            .GroupBy(h => h.Name, StringComparer.Ordinal).Select(g => g.First())
+            .OrderBy(h => h.Name, StringComparer.Ordinal).ToList();
+        var signedHeaderNames = new List<string> { "content-type", "host" };
+        signedHeaderNames.AddRange(extra.Select(h => h.Name));
+        // Tencent's canonical-header rule lowercases both header name and value (its worked example
+        // signs X-TC-Action: DescribeInstances as "x-tc-action:describeinstances").
+        string canonicalHeaders = $"content-type:{contentType.Trim().ToLowerInvariant()}\nhost:{host.Trim().ToLowerInvariant()}\n" + string.Concat(extra.Select(h => $"{h.Name}:{h.Value}\n"));
         string signedHeaders = string.Join(';', signedHeaderNames);
 
         string canonicalQuery = CanonicalQuery(request.Uri);
@@ -83,20 +123,7 @@ public static class TencentTc3Signer
 
         string credentialScope = $"{date}/{service}/tc3_request";
         string stringToSign = $"TC3-HMAC-SHA256\n{ts}\n{credentialScope}\n{hashedCanonicalRequest}";
-
-        byte[] secretDate = HmacSigner.HashData("sha256", Encoding.UTF8.GetBytes("TC3" + secretKey), Encoding.UTF8.GetBytes(date));
-        byte[] secretService = HmacSigner.HashData("sha256", secretDate, Encoding.UTF8.GetBytes(service));
-        byte[] secretSigning = HmacSigner.HashData("sha256", secretService, Encoding.UTF8.GetBytes("tc3_request"));
-        string signature = Convert.ToHexStringLower(HmacSigner.HashData("sha256", secretSigning, Encoding.UTF8.GetBytes(stringToSign)));
-
-        string authorization = $"TC3-HMAC-SHA256 Credential={secretId}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
-        return new NamedSignature([
-            new("Authorization", authorization),
-            new("X-TC-Timestamp", ts),
-            new("X-TC-Action", action),
-            new("X-TC-Version", version),
-            new("X-TC-Region", region),
-        ]);
+        return new CanonicalPieces(canonicalRequest, stringToSign, credentialScope, signedHeaders, ts);
     }
 
     private static string CanonicalPath(Uri uri) => string.IsNullOrEmpty(uri.AbsolutePath) ? "/" : uri.AbsolutePath;
