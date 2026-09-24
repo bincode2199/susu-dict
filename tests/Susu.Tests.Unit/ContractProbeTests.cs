@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Susu.Contracts;
 using Susu.Plugins;
+using Susu.Storage;
 using Susu.Testing;
 using Xunit;
 
@@ -119,5 +120,39 @@ public class ContractProbeTests
             Assert.Equal(remoteId, outcome.Result.RemoteId);
         }
         finally { session.Shutdown(2000); }
+    }
+
+    /// <summary>B01-shaped: OCR JSON/ImageBase64 request with a real input FileHandle - the host fills
+    /// the Base64 field from the leased file's bytes, the plugin only ever sees the handle's id.</summary>
+    [Fact]
+    public async Task Ocr_round_trips_a_real_input_file_handle_through_the_real_broker()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        byte[] imageBytes = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3, 4]; // synthetic "PNG-ish" bytes, contents don't matter here
+        string leaseDir = Path.Combine(Path.GetTempPath(), "susu-ocr-leases-" + Guid.NewGuid().ToString("N"));
+        using var leases = new FileLeases(leaseDir);
+        var lease = leases.Create("ocr-input", "png");
+        File.WriteAllBytes(leases.PathOf(lease), imageBytes);
+
+        LoopbackHttpRequest? seen = null;
+        using var server = new LoopbackHttpServer(req => { seen = req; return LoopbackHttpResponse.Json(200, """{"TextDetections":[{"DetectedText":"hello world"}]}"""); });
+        using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false,
+            MakeBroker: () => new Broker(leases: leases)));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load("vendor", "plugins/vendor").Ok);
+            string requestJson = "{\"url\":\"" + server.Origin + "/ocr\",\"lang\":\"en\",\"image\":{\"id\":\"" + lease.Id + "\"}}";
+            var outcome = await CapabilityClient.InvokeAsync(session, "vendor", "ocr", requestJson, "job-ocr",
+                [server.Origin], ContractsJson.Default.OcrResult, handles: [lease.Id], cancellationToken: TestContext.Current.CancellationToken);
+            Assert.True(outcome.Ok, outcome.ErrorDetail);
+            Assert.Single(outcome.Result!.Blocks);
+            Assert.Equal("hello world", outcome.Result.Blocks[0].Text);
+
+            var sentBody = System.Text.Json.Nodes.JsonNode.Parse(seen!.Body)!;
+            Assert.Equal(Convert.ToBase64String(imageBytes), sentBody["ImageBase64"]!.GetValue<string>()); // real bytes, host-filled
+        }
+        finally { session.Shutdown(2000); try { Directory.Delete(leaseDir, recursive: true); } catch (IOException) { } }
     }
 }

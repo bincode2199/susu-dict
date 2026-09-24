@@ -29,4 +29,17 @@ export default {
     });
     return { status: r.body.Status, remoteId: r.body.RemoteId };
   },
+
+  // OCR (PLAN 4.5.1 B01-shaped): JSON body with an ImageBase64 field the host fills from the input
+  // FileHandle - the plugin never sees the image bytes, only the handle's id.
+  async ocr(req, ctx) {
+    const r = await ctx.$http({
+      method: 'POST',
+      url: req.url,
+      headers: { 'content-type': 'application/json' },
+      body: { kind: 'json', value: { ImageBase64: null, LanguageType: req.lang || 'en' } },
+      bodyFiles: [{ pointer: '/ImageBase64', file: req.image.id }],
+    });
+    return { blocks: r.body.TextDetections.map(d => ({ text: d.DetectedText })) };
+  },
 };
