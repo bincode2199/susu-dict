@@ -1,5 +1,8 @@
 # F00–F03 implementation checkpoint
 
+> Parent: [DEV-PLAN](../development/DEV-PLAN.md) · Catalog: [docs/README](../README.md)  
+> Child documents: [F00](F00/F00.md)
+
 Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundation`.
 
 Scope follows the four explicit IDs F00, F01, F02, F03 in the request. The repository initially had only untracked planning/design documents and no commits or implementation.
@@ -8,7 +11,7 @@ Scope follows the four explicit IDs F00, F01, F02, F03 in the request. The repos
 
 Latest handoff (2026-09-22): F00 is incomplete; G0 has not passed; F01–F03 remain pending their hard dependencies. Branch `work/f00-f03-foundation`; latest successful local commit `0f0f9cf`. No remote push. The latest WebView hostname fix and its evidence are saved on disk but **not committed**. See the final checkpoint below before resuming; earlier entries are historical snapshots.
 
-- F00: in progress. .NET SDK 10.0.401 installed locally; VS 2022 Build Tools installed successfully, including MSVC 14.44.35207, Windows SDK 10.0.26100.0 and CMake. Node 24.19.0 and pnpm 11.19.0 available. Solution and initial Windows/library/QuickJS probes implemented; see [F00 evidence](F00/README.md).
+- F00: in progress. .NET SDK 10.0.401 installed locally; VS 2022 Build Tools installed successfully, including MSVC 14.44.35207, Windows SDK 10.0.26100.0 and CMake. Node 24.19.0 and pnpm 11.19.0 available. Solution and initial Windows/library/QuickJS probes implemented; see [F00 evidence](F00/F00.md).
 - F01: pending F00/G0.
 - F02: pending F01.
 - F03: pending F02.

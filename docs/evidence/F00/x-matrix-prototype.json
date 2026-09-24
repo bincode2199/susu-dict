@@ -126,7 +126,7 @@
       "id": "X03",
       "name": "container-owned LocalState file \u002B private registry round trip",
       "expected": "allowed (expected AppContainer behaviour; synthetic data only)",
-      "observed": "allowed(C:\\Users\\vm-admin\\AppData\\Local\\Packages\\susu.f00.x.e480e88b92754e198b68d054fb5592e8.x2\\AC\\LocalState)",
+      "observed": "allowed(C:\\Users\\<VM_ADMIN>\\AppData\\Local\\Packages\\susu.f00.x.e480e88b92754e198b68d054fb5592e8.x2\\AC\\LocalState)",
       "passed": true
     },
     {

@@ -2,4 +2,4 @@ container=True; resourceRead=True; secretDenied=True; resourceWriteDenied=True; 
 receiverTcpAccepted=False; receiverUdpDelivered=False; profileRemoved=True; resourceAclRestored=True
 memory: exit=0x00000000; memoryLimitDenied=True; win32Error=1455; requestedMiB=256; jobLimitMiB=128; profileRemoved=True; resourceAclRestored=True
 job-close: exit=0x00000000; containerReady=True; profileRemoved=True; resourceAclRestored=True
-own-storage: exit=0x00000000; ownStorageWrite=True; registryRoundTrip=True; fileRoundTrip=True; folder=C:\Users\vm-admin\AppData\Local\Packages\susu.f00.6d3aba41defd4927a25bbe7fef549bbc\AC\LocalState; profileRemoved=True; resourceAclRestored=True
+own-storage: exit=0x00000000; ownStorageWrite=True; registryRoundTrip=True; fileRoundTrip=True; folder=C:\Users\<VM_ADMIN>\AppData\Local\Packages\susu.f00.6d3aba41defd4927a25bbe7fef549bbc\AC\LocalState; profileRemoved=True; resourceAclRestored=True

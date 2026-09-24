@@ -1,12 +1,16 @@
 # Su-Su · 项目方案
 
+> 上级：[docs/README](../README.md)  
+> 子文档：[RECORD](RECORD.md) · [REVIEW](REVIEW.md)  
+> 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
+
 **项目开发的执行依据。这里只有最终方案。**
 
 - 为什么这么定、否决过什么方案、调研与竞品实测数据 → [`RECORD.md`](RECORD.md)
-- 视觉与交互规格（色彩、字阶、控件、窗口尺寸、卡片结构）→ [`DESIGN.md`](DESIGN.md)，所有取值以它为准，本文件不重复
+- 视觉与交互规格（色彩、字阶、控件、窗口尺寸、卡片结构）→ [`DESIGN.md`](../design/DESIGN.md)，所有取值以它为准，本文件不重复
 - 画板源文件 → `design/`，43 张（浅色 22 + 深色 21），线上画板是唯一编辑入口
-- 实施架构、模块边界、任务/存储/更新协议 → [`ARCHITECTURE.md`](ARCHITECTURE.md)（A1）
-- 按功能逐个开发的依赖、工作单元与出口 → [`DEV-PLAN.md`](DEV-PLAN.md)；验收用例 → [`TEST-PLAN.md`](TEST-PLAN.md)
+- 实施架构、模块边界、任务/存储/更新协议 → [`ARCHITECTURE.md`](../architecture/ARCHITECTURE.md)（A1）
+- 按功能逐个开发的依赖、工作单元与出口 → [`DEV-PLAN.md`](../development/DEV-PLAN.md)；验收用例 → [`TEST-PLAN.md`](../development/TEST-PLAN.md)
 
 **状态**：第四版 + A1 实施细化（2026-09-19）。R01–R06 已按 D-52–D-57 修订，R07–R13 的设计落点与开发任务已补齐（D-59–D-65）；实现与实测尚未开始。第 4 章与 ARCHITECTURE 的 options/vocab 补充共同构成 API v1 候选，须通过 M1 契约探针后冻结。画板已同步线上第 17 版，源文件已导出（O-20 结清）；A1 新增行为规格见 DESIGN 第 13 节，不声称新增细节已经画入第 17 版。
 
@@ -878,9 +882,9 @@ M0 排在最前：它的实测结果若不达标，插件运行时路线与取�
 
 ## 11. 画板待改清单
 
-下表保存第三版画板修订历史（当时同步第 16 版）。第四版 D-52–D-57 也已按 `design/REVISIONS.md` 同步第 17 版，取舍见 D-58。当前交互以 DESIGN 为准；A1 新增规格另见其第 13 节，未改画板源文件。
+下表保存第三版画板修订历史（当时同步第 16 版）。第四版 D-52–D-57 也已按 [ARTBOARD-REVISIONS.md](../design/ARTBOARD-REVISIONS.md) 同步第 17 版，取舍见 D-58。当前交互以 DESIGN 为准；A1 新增规格另见其第 13 节，未改画板源文件。
 
-线上画板：<https://claude.ai/artifact/BeXBbTPMfy1zRjJs7mkyQS>，文件在其 `project/` 路径下。
+线上画板：`<DESIGN_CANVAS_URL>`，文件在其 `project/` 路径下。
 
 ### `SetGeneral` —— 改动最大，等于重做"语言"分组
 
@@ -995,11 +999,11 @@ O-01 至 O-12 的历史处置保留。R01–R06 已修订方案并同步画板�
 | O-17 | R11 | ARCHITECTURE 8；F02/F15/F17，DATA 用例 |
 | O-18 | R12 | ARCHITECTURE 10；F16/F18，UPD 用例 |
 | O-19 | R13 | ARCHITECTURE 9；F03/F19，UI 用例 |
-| ~~O-20~~ | R01–R06 | **已结清**（2026-09-19）：画板按 `design/REVISIONS.md` 同步完毕，线上第 17 版，浅/深色源文件已导出回 `design/`。执行时的两处取舍见 `RECORD.md` D-58 |
+| ~~O-20~~ | R01–R06 | **已结清**（2026-09-19）：画板按 [ARTBOARD-REVISIONS.md](../design/ARTBOARD-REVISIONS.md) 同步完毕，线上第 17 版，浅/深色源文件已导出回 `design/`。执行时的两处取舍见 `RECORD.md` D-58 |
 
 ### 移交开发测试计划的实测项
 
-原始六项及本次架构验收已列入 [`TEST-PLAN.md`](TEST-PLAN.md)，状态全部为未执行；下表保留原有实测项索引，执行任务对应 DEV-PLAN：
+原始六项及本次架构验收已列入 [`TEST-PLAN.md`](../development/TEST-PLAN.md)，状态全部为未执行；下表保留原有实测项索引，执行任务对应 DEV-PLAN：
 
 | 来源 | 实测项 | 阶段 |
 |---|---|---|

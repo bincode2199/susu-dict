@@ -1,15 +1,19 @@
 # Su-Su · 设计基础
 
+> 上级：[docs/README](../README.md)  
+> 子文档：[ARTBOARDS](ARTBOARDS.md)  
+> 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
+
 本文件是后续所有界面设计与前端实现的基准。新界面一律从这里取值，不要另起一套。
 
 可视化画板（43 张：浅色 22 张 + 深色 21 张，线上第 17 版）：
-<https://claude.ai/artifact/BeXBbTPMfy1zRjJs7mkyQS>
+`<DESIGN_CANVAS_URL>`
 
 画板索引见本文末尾第 12 节。
 
 范围：Windows 11。浅色是首版实现的主题；深色 token 与全部界面的深色版画板已出（第 2 节「深色 token」），首版只实现浅色，token 结构预留。
 
-**第四版修订状态**：本文件已同步 PLAN 的 R01–R06 修复，线上画板与 `design/*.dc.html` 已于 2026-09-19 按 [`design/REVISIONS.md`](design/REVISIONS.md) 同步完毕（第 17 版）。颜色、尺寸和视觉风格不因这次修订改变。
+**第四版修订状态**：本文件已同步 PLAN 的 R01–R06 修复，线上画板与 `design/*.dc.html` 已于 2026-09-19 按 [ARTBOARD-REVISIONS.md](ARTBOARD-REVISIONS.md) 同步完毕（第 17 版）。颜色、尺寸和视觉风格不因这次修订改变。
 
 ---
 
@@ -388,7 +392,7 @@ PRD 要求「译文卡片中包含一个复制按钮，一个发音按钮」。2
 
 ## 12. 画板索引
 
-画板与 `design/` 下的源文件一一对应，文件名即 `canvas.json` 里 `boards` 的键。2026-09-19 同步线上第 17 版，共 43 张；第四版调整见 `design/REVISIONS.md`，A1 实施补充见第 13 节。
+画板与 `design/` 下的源文件一一对应，文件名即 `canvas.json` 里 `boards` 的键。2026-09-19 同步线上第 17 版，共 43 张；第四版调整见 [ARTBOARD-REVISIONS.md](ARTBOARD-REVISIONS.md)，A1 实施补充见第 13 节。
 
 ### 基础
 

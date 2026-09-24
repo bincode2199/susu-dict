@@ -1,8 +1,11 @@
 # Su-Su · 技术架构设计
 
+> 上级：[docs/README](../README.md)  
+> 子文档：[PROTOCOL](PROTOCOL.md) · [NATIVE](NATIVE.md) · [UI](UI.md)
+
 版本 A1，2026-09-19。状态：设计基线，尚无实现或 Windows 实测。面向 PLAN 第四版、D-58 和线上第 17 版的 43 张画板；本次新增实现决策记录为 D-59–D-65。
 
-文档分工：[`PLAN.md`](PLAN.md) 定产品范围与插件公开契约；[`DESIGN.md`](DESIGN.md) 定视觉/交互；本文定模块、接口、状态与数据实现；[`DEV-PLAN.md`](DEV-PLAN.md) 定模块开发顺序和完成条件；[`TEST-PLAN.md`](TEST-PLAN.md) 定验收场景。协议数值继承 PLAN，不在实现中另设一套。本文提及的目录、类型和工具均为待创建的目标结构。
+文档分工：[`PLAN.md`](../product/PLAN.md) 定产品范围与插件公开契约；[`DESIGN.md`](../design/DESIGN.md) 定视觉/交互；本文定模块、接口、状态与数据实现；[`DEV-PLAN.md`](../development/DEV-PLAN.md) 定模块开发顺序和完成条件；[`TEST-PLAN.md`](../development/TEST-PLAN.md) 定验收场景。协议数值继承 PLAN，不在实现中另设一套。本文提及的目录、类型和工具均为待创建的目标结构。
 
 ## 1. 技术基线与验证门槛
 

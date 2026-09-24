@@ -1,5 +1,9 @@
 # Windows 虚拟机安装部署计划
 
+> 上级：[WINDOWS-VM-OPERATIONS](WINDOWS-VM-OPERATIONS.md) · 文档目录：[docs/README](../README.md)  
+> 子文档：[WINDOWS-VM-REVIEW](WINDOWS-VM-REVIEW.md)  
+> 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
+
 初版日期：2026-09-19（America/Toronto）。版本：V5（故障路径复审）。状态：已于 2026-09-21 按方案实施，实际证据和差异见 [部署记录](WINDOWS-VM-DEPLOYMENT.md)。范围：在宿主机上部署两台可供多项目复用的 Windows 11 虚拟机，首个使用项目为 susu-dict。第 2 节保留实施前的只读调查快照，不代表当前状态。
 
 本计划到 Windows 系统和基础设备验收为止。GitHub、CI/CD、代码仓库接入、开发工具链和项目测试将在后续开发环境搭建阶段另行设计与实施，不是本次部署的前置条件或完成条件。
@@ -20,7 +24,7 @@
 | CPU | Ryzen 9 3900X，12 核/24 线程，AMD-V | 能力与目标 x64 匹配；Microsoft 支持清单列有此型号 [S1] |
 | 内存 | 62 GiB，总体已用约 28 GiB，available 约 34 GiB | 两台同时启动仍需动态资源门槛 |
 | 数据盘 | `/data` 为 1.9 TiB ext4 SATA SSD，空闲约 1.5 TiB | 满足缩减后的独立磁盘与关键数据预算 |
-| 目标目录 | `/data/vm` 已存在，为空，属 arvin | 无既有虚拟机迁移需求 |
+| 目标目录 | `/data/vm` 已存在，为空，属 `<OWNER_USER>` | 无既有虚拟机迁移需求 |
 | KVM | 内核已加载 `kvm_amd`/`kvm`；真实 `/dev/kvm` 存在 | 沙箱内设备缺失不是 BIOS 关闭的证据 |
 | KVM 权限 | 当前用户不在 kvm 组；打开设备返回 PermissionError | 安装时配置权限并重新登录，之后重新验证；尚未成功创建 KVM VM |
 | 软件 | QEMU、OVMF、swtpm、virt-viewer 未安装 | 本地 apt 索引有候选包，不能把索引等同于已下载验证 |
@@ -76,7 +80,7 @@ Windows 选仍受支持的正式 Windows 11 Pro x64 版本，实施当天依 [S2
 - 每台独立 swtpm，TPM 2.0、独立状态目录和 socket；通过 QEMU `tpmdev emulator` 与 `tpm-tis` 接入 [S4]。TPM 不直通宿主物理 TPM。
 - 主磁盘 VirtIO，安装器加载匹配架构且签名有效的存储/网卡驱动；保留驱动 ISO。必要时先 SATA 安装、装好驱动后关机切换并重验。驱动由 VirtIO 项目指向的正式渠道获取 [S5]。
 - 首期标准虚拟显示设备、软件渲染；不依赖 GPU 直通。优先通过仅本机可访问的 SPICE UNIX socket 操作；若客户端要求 TCP，只监听 127.0.0.1。音频后端与输入设备按已安装版本列出的能力配置并做播放/采集实测。
-- QEMU 用户态 NAT 出网，不新增宿主路由/桥接。RDP 后续已启用：QEMU 在 `127.0.0.1:13488/13489` 转发至对应 VM 的 3389，LAN 转发进程在 `192.168.1.31:13488/13489` 监听并仅允许 `192.168.1.0/24` 来源。不在其他宿主地址监听。
+- QEMU 用户态 NAT 出网，不新增宿主路由/桥接。RDP 后续已启用：QEMU 在 `127.0.0.1:<RDP_PORT_DEV>/<RDP_PORT_CLEAN>` 转发至对应 VM 的 3389，LAN 转发进程在 `<HOST_LAN_IP>:<RDP_PORT_DEV>/<RDP_PORT_CLEAN>` 监听并仅允许 `<LAN_SUBNET>` 来源。不在其他宿主地址监听。
 - 默认不挂载宿主工作区，不共享个人 HOME、SSH agent、Docker socket、磁盘分区或 Tailscale 身份。默认关闭 SPICE/RDP 的自动剪贴板同步，后续按使用需要调整。
 - PID/锁防止两个 QEMU 写同一磁盘；先启动 swtpm，再 QEMU。通过 QMP 请求 ACPI 关机并等待进程退出后才停 swtpm；超时保留状态供诊断，不能自动杀进程后冒充干净关机。
 
@@ -102,7 +106,7 @@ NAT 只解决连接方式，不提供宿主/LAN 安全隔离。当前仅部署�
 | 阶段 | 实施动作 | 出口证据 / 失败处理 |
 |---|---|---|
 | P0 预检 | 重查资源、空间、端口；核对 ISO/许可；备份将修改的宿主配置 | 记录日期和版本；不满足门槛则暂不安装 |
-| P1 宿主 | 安装 `qemu-system-x86`、`qemu-utils`、`qemu-system-gui`、`mtools`、`ovmf`、`swtpm`、`swtpm-tools`、`virt-viewer`；按需要补显示/音频后端包；将 arvin 加入 kvm 组并重新登录（或采用等效受控设备授权） | `/dev/kvm` 可读写、KVM API 与最小启动探针通过；不以 root 长期运行 VM |
+| P1 宿主 | 安装 `qemu-system-x86`、`qemu-utils`、`qemu-system-gui`、`mtools`、`ovmf`、`swtpm`、`swtpm-tools`、`virt-viewer`；按需要补显示/音频后端包；将 `<OWNER_USER>` 加入 kvm 组并重新登录（或采用等效受控设备授权） | `/dev/kvm` 可读写、KVM API 与最小启动探针通过；不以 root 长期运行 VM |
 | P2 固件与骨架 | 创建两个独立目录；配置固件、TPM、磁盘、NAT、控制台；启动安装介质 | QEMU 明确使用 KVM，固件/TPM 正常；参数不兼容先修正，禁止退到绕过安全要求安装 |
 | P3 Windows | 分别安装、更新、装驱动（用户已决定任务完成后激活）；建立普通测试用户与独立管理账户；记录版本 | `Get-Tpm` 显示 TPM 就绪，Secure Boot 为 True，网卡/磁盘/显示无异常；重启后仍正常 |
 | P4 基础配置 | 配置控制台、虚拟显示/声卡、普通用户权限和可选 RDP；记录系统/驱动/软件清单 | 两台均能交互使用；开发机与验收机均不安装项目工具 |
@@ -130,10 +134,10 @@ NAT 只解决连接方式，不提供宿主/LAN 安全隔离。当前仅部署�
 
 | 操作 | 执行权限与当前状态 |
 |---|---|
-| 安装宿主虚拟化软件、配置 KVM 组权限 | 需宿主管理员；arvin 在 sudo 组，但只读 `sudo -n -l` 返回需要密码，尚未验证认证后的具体授权范围 |
-| 创建 `/data/vm` 下的 VM 目录和文件 | arvin 当前可写，可由普通用户执行 |
-| 日常启动/关闭 QEMU 与 swtpm | KVM 权限配置并重新登录验证后，以 arvin 运行，无需长期 root |
-| 安装 Windows 驱动/系统级组件 | 使用 Windows 内的管理员账户，与宿主 arvin 权限独立 |
+| 安装宿主虚拟化软件、配置 KVM 组权限 | 需宿主管理员；`<OWNER_USER>` 在 sudo 组，但只读 `sudo -n -l` 返回需要密码，尚未验证认证后的具体授权范围 |
+| 创建 `/data/vm` 下的 VM 目录和文件 | `<OWNER_USER>` 当前可写，可由普通用户执行 |
+| 日常启动/关闭 QEMU 与 swtpm | KVM 权限配置并重新登录验证后，以 `<OWNER_USER>` 运行，无需长期 root |
+| 安装 Windows 驱动/系统级组件 | 使用 Windows 内的管理员账户，与宿主 `<OWNER_USER>` 权限独立 |
 | 用户态 NAT 和本机高位端口转发 | 按本计划无需配置宿主网桥或修改系统防火墙 |
 
 P1 的管理员步骤须由有权限的操作者在本机终端完成；不要求通过对话发送密码。权限准备不足时停在 P1，不以软件模拟替代 KVM 验收。
@@ -175,7 +179,7 @@ TPM/Windows 身份绑定的密文不能仅靠复制文件迁移到新系统；�
 
 | 检查项 | 完成条件 |
 |---|---|
-| 权限与加速 | arvin 能以普通用户启动两台 VM；运行配置确认 KVM 加速，无软件模拟回退 |
+| 权限与加速 | `<OWNER_USER>` 能以普通用户启动两台 VM；运行配置确认 KVM 加速，无软件模拟回退 |
 | Windows 与固件 | 官方安装完成，记录版本和激活状态，允许待激活交付；TPM 2.0 就绪，Secure Boot 为 True |
 | 基础设备 | 设备管理器无未解决的驱动异常；磁盘、网卡、显示、键鼠正常；音频播放/输入按配置实测 |
 | 网络与访问 | guest 能解析域名并访问更新服务；控制台可用；RDP 未启用时标记不适用；启用时按设定本机端口连接成功且 guest 账户授权有效 |

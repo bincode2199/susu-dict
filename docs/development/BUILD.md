@@ -1,8 +1,10 @@
 # Development build
 
+> Parent: [DEV-PLAN](DEV-PLAN.md) · Catalog: [docs/README](../README.md)
+
 Windows 11 x64; .NET SDK **10.0.401** (`global.json`); VS 2022 Build Tools C++ workload, MSVC **14.44.35207**, Windows SDK **10.0.26100.0**. Node **24.19.0** is used by the child-environment wrapper. The Vue fixture toolchain is pinned in `ui/package.json` and `ui/pnpm-lock.yaml`; it is not a production UI.
 
-The current deliverable is an F00 feasibility harness, not a usable translator. Follow [progress](docs/evidence/PROGRESS.md) and [F00 evidence](docs/evidence/F00/README.md).
+The current deliverable is an F00 feasibility harness, not a usable translator. Follow [progress](../evidence/PROGRESS.md) and [F00 evidence](../evidence/F00/F00.md).
 
 ```powershell
 # SDK may be installed globally or under .tools/dotnet.

@@ -1,6 +1,8 @@
 # Fxx · 模块交付记录模板
 
-复制到 `docs/evidence/Fxx/README.md`。本模板不是验收报告；未实施的项目保持“未执行”。
+> 上级：[DEV-PLAN](DEV-PLAN.md) · 文档目录：[docs/README](../README.md)
+
+复制到 `docs/evidence/Fxx/Fxx.md`。本模板不是验收报告；未实施的项目保持“未执行”。
 
 - 状态：待开始 / 进行中 / 待集成验收 / 阻塞 / 完成
 - 负责人、日期、应用 commit、插件 commit：待填
