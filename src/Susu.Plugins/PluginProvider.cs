@@ -18,7 +18,8 @@ namespace Susu.Plugins;
 /// <see cref="Supervisor{TSession}.Stopped"/> is surfaced to the caller as
 /// <see cref="ErrorKind.Unavailable"/> instead of hanging or silently retrying forever.
 /// </summary>
-public sealed class PluginProvider(string pluginId, string serviceId, string displayName, TranslationLimits limits, Supervisor<HostSession> supervisor, IReadOnlyList<string> hostOrigins) : ITranslationProvider
+public sealed class PluginProvider(string pluginId, string serviceId, string displayName, TranslationLimits limits, Supervisor<HostSession> supervisor, IReadOnlyList<string> hostOrigins,
+    string? instanceId = null, string? signer = null) : ITranslationProvider
 {
     public string ServiceId { get; } = serviceId;
     public string DisplayName { get; } = displayName;
@@ -36,9 +37,9 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
         if (!supervisor.TryGetCurrent(out var host) || host is null)
             return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host is restarting"));
 
-        string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text), ContractsJson.Default.TranslateRequest);
+        string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text, call.From, call.To), ContractsJson.Default.TranslateRequest);
         (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
-        try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins); }
+        try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins, instanceId: instanceId, signer: signer); }
         catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }
         var (requestId, callId, task) = invocation;
         await using var registration = cancellationToken.Register(() => { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } });

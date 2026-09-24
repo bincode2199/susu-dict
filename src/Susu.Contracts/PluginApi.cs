@@ -18,7 +18,9 @@ public enum Capability
 
 // ---- Plugin API v1 candidate (PLAN 4.4, ARCHITECTURE 3.1 / 8.3). Frozen only at G1. ----
 
-[TsExport("plugin")] public sealed record TranslateRequest(string Text);
+/// <summary><c>From</c>/<c>To</c> are canonical BCP-47 codes (Susu.Domain.Languages) the host has already
+/// resolved (detected or user-selected); a plugin that ignores them falls back to its own default pair.</summary>
+[TsExport("plugin")] public sealed record TranslateRequest(string Text, string? From = null, string? To = null);
 [TsExport("plugin")] public sealed record TranslateChunk(string Text, bool? Done = null);
 [TsExport("plugin")] public sealed record TranslateResult(string Text, string? DetectedFrom = null, JsonElement? Raw = null);
 [TsExport("plugin")] public sealed record BatchItem(string Id, string Text);

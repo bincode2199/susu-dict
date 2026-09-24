@@ -146,11 +146,14 @@ public sealed class HostSession : IHostSessionHandle
     /// <summary><paramref name="jobId"/> correlates this call with its owning Job (F01); the plugin never sees it.
     /// <paramref name="handles"/> are file-lease ids this call is authorized to reference (e.g. an OCR image or
     /// ASR audio input already staged by the caller) - never expanded by the plugin itself.</summary>
-    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null)
+    /// <summary><paramref name="instanceId"/>/<paramref name="signer"/> identify the configured provider
+    /// instance and its confirmed package signer for S02 account/origin authorization (Broker.Issue);
+    /// omitted they default to the plugin id and "unsigned:&lt;pluginId&gt;" (pre-S02 callers).</summary>
+    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null, string? instanceId = null, string? signer = null)
     {
         int callId = Interlocked.Increment(ref nextCall);
         string requestId = $"r{callId}-{Guid.NewGuid():N}";
-        var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles);
+        var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles, instanceId: instanceId, signer: signer);
         var waiter = calls[requestId] = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         callGrants[requestId] = grant.Grant;
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Invoke, requestId, jobId, PluginId: pluginId, Grant: grant.Grant,

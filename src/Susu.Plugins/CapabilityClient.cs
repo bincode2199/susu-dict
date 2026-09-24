@@ -19,10 +19,10 @@ public static class CapabilityClient
         HostSession host, string pluginId, string capability, string requestJson, string jobId,
         IEnumerable<string> origins, JsonTypeInfo<TResult> resultType,
         IEnumerable<string>? secrets = null, IEnumerable<string>? handles = null, string configJson = "{}",
-        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default, string? instanceId = null, string? signer = null)
     {
         (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
-        try { invocation = host.Invoke(pluginId, capability, requestJson, jobId, origins, secrets, configJson, handles); }
+        try { invocation = host.Invoke(pluginId, capability, requestJson, jobId, origins, secrets, configJson, handles, instanceId, signer); }
         catch (IOException) { return new(false, default, Susu.Contracts.ErrorKind.Unavailable, "plugin host disconnected"); }
         var (requestId, callId, task) = invocation;
         IpcEnvelope envelope;
