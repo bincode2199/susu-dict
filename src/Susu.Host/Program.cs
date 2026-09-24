@@ -13,7 +13,7 @@ using Susu.Windows.Shell;
 namespace Susu.Host;
 
 /// <summary>Startup mode, decided before anything else is initialized (ARCHITECTURE 2).</summary>
-internal sealed record StartupMode(string Kind, string? DataRoot, bool Autostart, bool DevTools, string? SmokeReport, int SmokeCycles, string? MeasureEvents = null)
+internal sealed record StartupMode(string Kind, string? DataRoot, bool Autostart, bool DevTools, string? SmokeReport, int SmokeCycles, string? MeasureEvents = null, int? ReleaseAfterSeconds = null, string? GuardFixture = null, string? GuardReport = null)
 {
     public static StartupMode Parse(string[] args)
     {
@@ -21,6 +21,8 @@ internal sealed record StartupMode(string Kind, string? DataRoot, bool Autostart
         string? dataRoot = null, smoke = null, measure = null;
         bool autostart = false, devTools = false;
         int cycles = 3;
+        int? releaseAfter = null;
+        string? guardFixture = null, guardReport = null;
         for (int i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -30,12 +32,14 @@ internal sealed record StartupMode(string Kind, string? DataRoot, bool Autostart
                 case "--dev-tools": devTools = true; break;
                 case "--smoke" when i + 1 < args.Length: smoke = args[++i]; break;
                 case "--measure" when i + 1 < args.Length: measure = args[++i]; break;
+                case "--guard-test" when i + 2 < args.Length: guardFixture = Path.GetFullPath(args[++i]); guardReport = args[++i]; break;
+                case "--release-after-seconds" when i + 1 < args.Length && int.TryParse(args[i + 1], out int r) && r is > 0 and <= 3600: releaseAfter = r; i++; break;
                 case "--cycles" when i + 1 < args.Length && int.TryParse(args[i + 1], out int n) && n is > 0 and <= 1000: cycles = n; i++; break;
                 default: return new("invalid", null, false, false, null, 0);
             }
         }
         dataRoot ??= Environment.GetEnvironmentVariable(AppPaths.DataRootVariable);
-        return new("main", dataRoot, autostart, devTools, smoke, cycles, measure);
+        return new("main", dataRoot, autostart, devTools, smoke, cycles, measure, releaseAfter, guardFixture, guardReport);
     }
 }
 
@@ -110,7 +114,7 @@ internal static class MainMode
 
         using var dispatcher = new UiDispatcher(instanceName);
         ShellEnvironment.Initialize(assets, e => log.Event("ui.exception", ("code", e.GetType().Name)));
-        using var platform = new WindowPlatform(dispatcher, new UiHosting(Path.Combine(exeFolder, "ui"), paths.WebView, mode.DevTools && Program.DevelopmentBuild),
+        using var platform = new WindowPlatform(dispatcher, new UiHosting(Program.DevelopmentBuild && mode.GuardFixture is not null ? mode.GuardFixture : Path.Combine(exeFolder, "ui"), paths.WebView, mode.DevTools && Program.DevelopmentBuild),
             new WindowStateRepository(db), () => config.State.Effective.General.UiLanguage);
 
         var features = new FeatureRegistry();
@@ -127,7 +131,7 @@ internal static class MainMode
             new InvocationScheduler(SchedulerLimits.Default), clock, new SystemJitter(), usage);
 #endif
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
-            new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, mode.SmokeReport is null ? null : TimeSpan.FromSeconds(2)), sessions);
+            new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions);
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;
@@ -136,6 +140,7 @@ internal static class MainMode
         platform.Diagnostic += message => log.Event("shell", ("code", message));
         platform.Timing += (kind, phase, ms) => log.Event("timing", ("window", kind.ToString()), ("phase", phase), ("durationMs", ms));
         coordinator.Diagnostic += message => log.Event("ui", ("code", message));
+        coordinator.Timing += (kind, phase, ms) => log.Event("timing", ("window", kind.ToString()), ("phase", phase), ("durationMs", Math.Round(ms, 1)));
         dispatcher.ActivateRequested += coordinator.OnActivateRequest;
         tray.DoubleClick += coordinator.OnTrayDoubleClick;
         tray.MenuRequested += coordinator.OnTrayMenu;
@@ -155,13 +160,25 @@ internal static class MainMode
         smoke?.Start();
         Measure? measure = mode.MeasureEvents is null ? null : new Measure(mode.MeasureEvents, coordinator, platform, dispatcher, Program.DevelopmentBuild);
         measure?.Start();
+#if DEV_PREVIEW
+        GuardTest? guard = mode.GuardFixture is null ? null : new GuardTest(mode.GuardReport!, platform, dispatcher);
+        guard?.Start();
+#endif
 
         dispatcher.Run();
 
         log.Event("app.exit");
         smoke?.Finish();
+#if DEV_PREVIEW
+        if (guard is not null) return guard.ExitCode;
+#endif
         return smoke?.ExitCode ?? measure?.ExitCode ?? 0;
     }
+
+    /// <summary>Keep-warm override: 2 s for --smoke; --release-after-seconds only in development builds (PER03 cold runs).</summary>
+    private static TimeSpan? ReleaseAfter(StartupMode mode)
+        => mode.SmokeReport is not null ? TimeSpan.FromSeconds(2)
+        : Program.DevelopmentBuild && mode.ReleaseAfterSeconds is int seconds ? TimeSpan.FromSeconds(seconds) : null;
 
     private static void ApplyAutostart(bool enabled)
     {

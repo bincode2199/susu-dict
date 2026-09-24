@@ -1,0 +1,61 @@
+{
+  "scope": "S08 native guard test: hostile page without CSP in the real WebView2 host (susu.exe, development build)",
+  "webViewRuntime": "153.0.4234.48",
+  "checks": [
+    {
+      "check": "fetch-external refused",
+      "passed": true,
+      "observed": "error: TypeError"
+    },
+    {
+      "check": "fetch-file refused",
+      "passed": true,
+      "observed": "error: TypeError"
+    },
+    {
+      "check": "fetch-loopback refused",
+      "passed": true,
+      "observed": "error: TypeError"
+    },
+    {
+      "check": "external image blocked",
+      "passed": true,
+      "observed": "blocked"
+    },
+    {
+      "check": "external iframe not loaded",
+      "passed": true,
+      "observed": "timeout"
+    },
+    {
+      "check": "window.open refused",
+      "passed": true,
+      "observed": "null"
+    },
+    {
+      "check": "geolocation denied",
+      "passed": true,
+      "observed": "denied 1"
+    },
+    {
+      "check": "download cancelled (no file in Downloads)",
+      "passed": true,
+      "observed": "no file"
+    },
+    {
+      "check": "page stayed on its origin after navigation attempts",
+      "passed": true,
+      "observed": "same page; page loads=1"
+    },
+    {
+      "check": "blocked requests reported for example.com",
+      "passed": true,
+      "observed": "Main https://example.com, Main http://127.0.0.1"
+    }
+  ],
+  "informational": {
+    "websocket-external": "failed (the native layer does not filter WebSockets; production relies on the CSP connect-src \u0027none\u0027)",
+    "host-objects": "present"
+  },
+  "passed": true
+}

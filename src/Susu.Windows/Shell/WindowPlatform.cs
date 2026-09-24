@@ -188,7 +188,7 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
             view.Navigated += () => Timing?.Invoke(window.Kind, "PageLoaded", Environment.TickCount64 - started);
             view.Message += json => PageMessage?.Invoke(window.Kind, json);
             view.Failed += hr => Diagnostic?.Invoke($"webview.failed {window.Kind} 0x{hr:x8}");
-            view.Blocked += uri => Diagnostic?.Invoke($"webview.blocked {window.Kind}");
+            view.Blocked += uri => Diagnostic?.Invoke($"webview.blocked {window.Kind} {OriginOf(uri)}");
         });
     }
 
@@ -198,6 +198,10 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
         env.BrowserExited += () => { Diagnostic?.Invoke("webview.browser-exited"); BrowserExited?.Invoke(); };
         return env;
     }
+
+    /// <summary>Scheme and host only: blocked-request diagnostics never log paths or queries.</summary>
+    private static string OriginOf(string? uri)
+        => Uri.TryCreate(uri, UriKind.Absolute, out var u) ? (u.IsFile ? "file:" : $"{u.Scheme}://{u.Host}") : "(unparsed)";
 
     // ---------- placement ----------
 

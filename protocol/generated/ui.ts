@@ -34,6 +34,7 @@ export const UI_COMMANDS = {
   TrayOpen: 'Tray.Open',
   TrayExit: 'Tray.Exit',
   OpenSettings: 'Window.OpenSettings',
+  Painted: 'Window.Painted',
 } as const;
 
 export type UiCommandName = (typeof UI_COMMANDS)[keyof typeof UI_COMMANDS];

@@ -71,7 +71,7 @@ public static class UiCommands
         BeginCapture = "Capture.BeginCapture", StartRecording = "Audio.StartRecording", PauseRecording = "Audio.PauseRecording", StopRecording = "Audio.StopRecording",
         PickMedia = "Transcription.PickMedia", StartTranscription = "Transcription.Start", PauseTranscription = "Transcription.Pause",
         ChangeTranslator = "Transcription.ChangeTranslator", Export = "Transcription.Export",
-        Collect = "Vocab.Collect", Speak = "Vocab.Speak", TrayOpen = "Tray.Open", TrayExit = "Tray.Exit", OpenSettings = "Window.OpenSettings";
+        Collect = "Vocab.Collect", Speak = "Vocab.Speak", TrayOpen = "Tray.Open", TrayExit = "Tray.Exit", OpenSettings = "Window.OpenSettings", Painted = "Window.Painted";
 
     private static readonly WindowKind[] resultWindows = [WindowKind.Main, WindowKind.Selection, WindowKind.Clipboard, WindowKind.Ocr, WindowKind.Voice];
     private static readonly WindowKind[] allWindows = Enum.GetValues<WindowKind>();
@@ -92,6 +92,8 @@ public static class UiCommands
         [ChangeTranslator] = [WindowKind.Transcribe], [Export] = [WindowKind.Transcribe],
         [TrayOpen] = [WindowKind.Tray], [TrayExit] = [WindowKind.Tray],
         [OpenSettings] = [.. resultWindows, WindowKind.Transcribe],
+        // Local timing signal only (ARCHITECTURE 11 UiReady/first frame): no payload, never leaves the machine.
+        [Painted] = allWindows,
     };
 
     public static IReadOnlyCollection<string> All => allowed.Keys;

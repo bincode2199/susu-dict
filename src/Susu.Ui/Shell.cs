@@ -109,6 +109,10 @@ public sealed class ShellCoordinator
     public event Action<string>? Diagnostic;
     /// <summary>A page sent Ready and received its snapshot (instrumentation for UiReady timing).</summary>
     public event Action<WindowKind>? PageReady;
+    /// <summary>PER03 timing points (ARCHITECTURE 11): (window, phase, milliseconds).</summary>
+    public event Action<WindowKind, string, double>? Timing;
+    private readonly Dictionary<WindowKind, long> openedAt = [];
+    private long hotkeyAt;
     public IReadOnlyDictionary<string, bool> HotkeyResults => hotkeyResults;
     public bool ReleasePending => lifecycle.TimerPending;
     public IReadOnlyCollection<WindowKind> VisibleWindows => lifecycle.Visible;
@@ -125,7 +129,9 @@ public sealed class ShellCoordinator
     {
         if (kind is WindowKind.Main && translation is null) AttachTranslation();
         bool wasVisible = lifecycle.Visible.Contains(kind);
+        if (!wasVisible) openedAt[kind] = System.Diagnostics.Stopwatch.GetTimestamp();
         string session = platform.Show(kind, WindowSpec.For(kind).Activates);
+        if (hotkeyAt != 0 && !wasVisible) Timing?.Invoke(kind, "NativeShellAfterHotkey", System.Diagnostics.Stopwatch.GetElapsedTime(hotkeyAt).TotalMilliseconds);
         if (!windows.TryGetValue(kind, out var existing) || existing.Id != session) windows[kind] = existing = new WindowSession(session);
         lifecycle.Shown(kind);
         if (!wasVisible && existing.Ready) _ = SendSnapshotAsync(kind, existing); // warm reopen: resynchronize the page
@@ -179,6 +185,7 @@ public sealed class ShellCoordinator
     public void OnHotkey(string action)
     {
         if (!hotkeyFeatures.TryGetValue(action, out var feature) || Resolve(feature).State != FeatureState.Available) return; // unavailable: no action (PLAN 1.2)
+        hotkeyAt = System.Diagnostics.Stopwatch.GetTimestamp();
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
     }
 
@@ -226,6 +233,14 @@ public sealed class ShellCoordinator
                 platform.SetPinned(kind, session.Pinned);
                 return Ok(JsonSerializer.SerializeToElement(session.Pinned, ContractsJson.Default.Boolean));
             case UiCommands.OpenSettings: Open(WindowKind.Settings); return Ok();
+            case UiCommands.Painted:
+                if (openedAt.Remove(kind, out long opened))
+                {
+                    Timing?.Invoke(kind, "FirstFrameAfterOpen", System.Diagnostics.Stopwatch.GetElapsedTime(opened).TotalMilliseconds);
+                    if (hotkeyAt != 0 && hotkeyAt <= opened) Timing?.Invoke(kind, "FirstFrameAfterHotkey", System.Diagnostics.Stopwatch.GetElapsedTime(hotkeyAt).TotalMilliseconds);
+                    hotkeyAt = 0;
+                }
+                return Ok();
             case UiCommands.CopyText:
                 platform.SetClipboardText(Read(payload, ContractsJson.Default.SubmitTextRequest).Text);
                 return Ok();

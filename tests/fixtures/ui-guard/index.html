@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <!-- S08 fixture: a deliberately hostile page WITHOUT the production CSP, so only the native WebView host
+       guards (shell_webview.cpp) stand between it and the outside. Every attempt reports its outcome. -->
+  <title>guard fixture</title>
+</head>
+<body>
+<script>
+const host = window.chrome && window.chrome.webview;
+const report = (name, outcome) => host.postMessage(JSON.stringify({ type: 'result', name, outcome: String(outcome) }));
+const attempt = async (name, run) => {
+  try { report(name, await run()); } catch (e) { report(name, 'error: ' + (e && e.name ? e.name : e)); }
+};
+const timeout = (ms) => new Promise((resolve) => setTimeout(() => resolve('timeout'), ms));
+
+(async () => {
+  await attempt('fetch-external', async () => { const r = await fetch('https://example.com/'); return 'status ' + r.status; });
+  await attempt('fetch-file', async () => { const r = await fetch('file:///C:/Windows/win.ini'); return 'status ' + r.status; });
+  await attempt('fetch-loopback', async () => { const r = await fetch('http://127.0.0.1:11434/'); return 'status ' + r.status; });
+  await attempt('image-external', () => Promise.race([new Promise((resolve) => {
+    const img = new Image(); img.onload = () => resolve('loaded'); img.onerror = () => resolve('blocked'); img.src = 'https://example.com/favicon.ico';
+  }), timeout(5000)]));
+  await attempt('websocket-external', () => Promise.race([new Promise((resolve) => {
+    const ws = new WebSocket('wss://example.com/'); ws.onopen = () => { ws.close(); resolve('opened'); }; ws.onerror = () => resolve('failed');
+  }), timeout(5000)]));
+  await attempt('iframe-external', () => Promise.race([new Promise((resolve) => {
+    const frame = document.createElement('iframe'); frame.onload = () => { let url = ''; try { url = frame.contentWindow.location.href; } catch (e) { url = 'cross-origin'; } resolve('loaded ' + url); };
+    frame.src = 'https://example.com/'; document.body.appendChild(frame);
+  }), timeout(3000)]));
+  await attempt('window-open', () => { const w = window.open('https://example.com/', '_blank'); return w ? 'opened' : 'null'; });
+  await attempt('geolocation', () => Promise.race([new Promise((resolve) => navigator.geolocation.getCurrentPosition(() => resolve('granted'), (e) => resolve('denied ' + e.code))), timeout(5000)]));
+  await attempt('download', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['x'])); a.download = 'x.txt'; document.body.appendChild(a); a.click(); return 'clicked'; });
+  await attempt('host-objects', () => (host.hostObjects ? 'present' : 'absent'));
+  report('navigate', 'about to navigate to an external origin');
+  setTimeout(() => { location.href = 'https://example.com/'; }, 100);
+  setTimeout(() => { location.href = 'file:///C:/Windows/win.ini'; }, 600);
+  setTimeout(() => report('still-here', location.href.startsWith(location.origin) ? 'same page' : location.href), 2500);
+})();
+</script>
+</body>
+</html>

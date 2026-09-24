@@ -25,7 +25,7 @@ Environment notes for whoever resumes:
 ## Open decisions and next steps
 
 1. **G0 PER03 decision (product owner)**: accept WebView2 cold start as a known gap, keep a warm browser longer (which costs idle memory), or re-measure on the clean VM and on physical hardware first. See [F00 § G0 decision](F00/F00.md#g0-decision).
-2. F03 environment checks: a second monitor with a different DPI, a real IME session, screen reader and high contrast, and a hostile-page test of the native navigation guards.
+2. F03 environment checks: a second monitor with a different DPI, a real IME session (Microsoft Pinyin is not installed), screen reader and high contrast. The native guard test passes (S08). When the desktop is interactive, run `tools/measure-hotkey.ps1` for PER03 on the real shell.
 3. Next modules per DEV-PLAN: F04 (plugin runtime, IPC, sandbox; the `--plugin-host` mode is reserved) and F05 (network, signers, contract probes); then F06 (first usable input translation, which re-measures PER03 in the production shell).
 
 ## History (condensed)
