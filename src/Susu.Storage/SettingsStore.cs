@@ -186,3 +186,21 @@ public sealed class SettingsStore : ISettingsStore, IDisposable
     private static IReadOnlyList<SettingsIssue> Map(IReadOnlyList<FileIssue> issues)
         => issues.Select(i => new SettingsIssue(i.Path, i.Code, i.Message, i.Line, i.Column)).ToList();
 }
+
+/// <summary>Settings plus secrets behind one port; combined changes use the journaled two-file commit.</summary>
+public sealed class ConfigService(SettingsStore settings, SecretStore secrets) : IConfigService
+{
+    public SettingsState State => settings.State;
+    public ISecretStore Secrets => secrets;
+
+    public event Action<SettingsState>? Changed
+    {
+        add => settings.Changed += value;
+        remove => settings.Changed -= value;
+    }
+
+    public SaveResult Save(AppSettings proposed, long expectedRevision, string expectedFileHash) => settings.Save(proposed, expectedRevision, expectedFileHash);
+
+    public SaveResult SaveWithSecrets(AppSettings proposed, long expectedRevision, string expectedFileHash, IReadOnlyList<(string Account, string Name, string? Value)> secretChanges)
+        => settings.SaveWithSecrets(proposed, expectedRevision, expectedFileHash, secrets, secrets.Prepare(secretChanges));
+}

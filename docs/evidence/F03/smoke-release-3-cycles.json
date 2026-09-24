@@ -1,0 +1,49 @@
+{
+  "startedAt": "2026-09-24T04:07:42.312579+00:00",
+  "scope": "F03 shell lifecycle smoke: real susu.exe, WebView2, coordinator-driven (no synthetic input); open\u2192UiReady timings in ms",
+  "webViewRuntime": "153.0.4234.48",
+  "developmentBuild": false,
+  "trayIconAdded": true,
+  "cycles": 3,
+  "openToReadyMs": {
+    "Settings.after-release": {
+      "samples": 1,
+      "p50": 690.7,
+      "p95": 690.7,
+      "max": 690.7
+    },
+    "Settings.cold": {
+      "samples": 1,
+      "p50": 932.5,
+      "p95": 932.5,
+      "max": 932.5
+    },
+    "Settings.warm": {
+      "samples": 2,
+      "p50": 99.7,
+      "p95": 110.1,
+      "max": 111.3
+    },
+    "Tray.cold": {
+      "samples": 1,
+      "p50": 266.4,
+      "p95": 266.4,
+      "max": 266.4
+    },
+    "Tray.warm": {
+      "samples": 2,
+      "p50": 80.1,
+      "p95": 91.6,
+      "max": 92.9
+    }
+  },
+  "releaseAfterLastHideMs": 2065.4,
+  "browserExitedAfterLastHideMs": 2571.1,
+  "secondCycleBrowserExitedMs": 2322.2,
+  "errors": [],
+  "diagnostics": [
+    "webview.browser-exited",
+    "webview.browser-exited"
+  ],
+  "passed": true
+}

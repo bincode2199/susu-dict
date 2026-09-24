@@ -71,7 +71,7 @@ public static class UiCommands
         BeginCapture = "Capture.BeginCapture", StartRecording = "Audio.StartRecording", PauseRecording = "Audio.PauseRecording", StopRecording = "Audio.StopRecording",
         PickMedia = "Transcription.PickMedia", StartTranscription = "Transcription.Start", PauseTranscription = "Transcription.Pause",
         ChangeTranslator = "Transcription.ChangeTranslator", Export = "Transcription.Export",
-        Collect = "Vocab.Collect", Speak = "Vocab.Speak", TrayOpen = "Tray.Open", TrayExit = "Tray.Exit";
+        Collect = "Vocab.Collect", Speak = "Vocab.Speak", TrayOpen = "Tray.Open", TrayExit = "Tray.Exit", OpenSettings = "Window.OpenSettings";
 
     private static readonly WindowKind[] resultWindows = [WindowKind.Main, WindowKind.Selection, WindowKind.Clipboard, WindowKind.Ocr, WindowKind.Voice];
     private static readonly WindowKind[] allWindows = Enum.GetValues<WindowKind>();
@@ -91,6 +91,7 @@ public static class UiCommands
         [PickMedia] = [WindowKind.Transcribe], [StartTranscription] = [WindowKind.Transcribe], [PauseTranscription] = [WindowKind.Transcribe],
         [ChangeTranslator] = [WindowKind.Transcribe], [Export] = [WindowKind.Transcribe],
         [TrayOpen] = [WindowKind.Tray], [TrayExit] = [WindowKind.Tray],
+        [OpenSettings] = [.. resultWindows, WindowKind.Transcribe],
     };
 
     public static IReadOnlyCollection<string> All => allowed.Keys;

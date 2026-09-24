@@ -215,6 +215,13 @@
           "Susu.Abstractions": "[1.0.0, )"
         }
       },
+      "susu.ui": {
+        "type": "Project",
+        "dependencies": {
+          "Susu.Abstractions": "[1.0.0, )",
+          "Susu.Jobs": "[1.0.0, )"
+        }
+      },
       "susu.windows": {
         "type": "Project",
         "dependencies": {

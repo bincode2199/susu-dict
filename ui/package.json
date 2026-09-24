@@ -1,6 +1,6 @@
 {
   "name": "susu-ui",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.19.0",
@@ -8,17 +8,21 @@
     "node": "24.19.0"
   },
   "scripts": {
-    "build:probe": "vue-tsc --noEmit && vite build --mode probe",
-    "dev": "vite --host 127.0.0.1",
-    "preview": "vite preview --mode probe --host 127.0.0.1 --port 4173"
+    "build": "vue-tsc --noEmit && vite build",
+    "build:probe": "vite build --mode probe",
+    "test": "vitest run",
+    "dev": "vite --host 127.0.0.1"
   },
   "dependencies": {
     "vue": "3.5.43"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "6.0.9",
+    "@vue/test-utils": "2.5.1",
+    "happy-dom": "20.14.5",
     "typescript": "5.9.3",
     "vite": "8.3.0",
+    "vitest": "5.0.1",
     "vue-tsc": "3.3.11"
   }
 }

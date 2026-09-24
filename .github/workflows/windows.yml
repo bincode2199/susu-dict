@@ -31,11 +31,22 @@ jobs:
       - name: Publish NativeAOT probe executable
         shell: pwsh
         run: node tools/run-clean-env.mjs pwsh -NoProfile -File tools/dev.ps1 publish
-      - name: Build UI (locked)
+      - name: UI tests and builds (locked)
         working-directory: ui
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
+          pnpm test
+          pnpm run build
           pnpm run build:probe
+      - name: Publish NativeAOT susu.exe (release, no fixtures)
+        shell: pwsh
+        run: node tools/run-clean-env.mjs pwsh -NoProfile -File tools/dev.ps1 publish -Project src/Susu.Host -OutputDirectory artifacts/app
+      - name: Shell lifecycle smoke (F03)
+        shell: pwsh
+        run: |
+          $p = Start-Process artifacts/app/susu.exe -ArgumentList "--data-root `"$env:RUNNER_TEMP/susu`" --smoke artifacts/app/smoke.json --cycles 3" -PassThru -Wait
+          Get-Content artifacts/app/smoke.json
+          exit $p.ExitCode
       - name: Execute published probes
         shell: pwsh
         run: |
@@ -50,4 +61,6 @@ jobs:
         if: always()
         with:
           name: windows-aot-probes
-          path: artifacts/probes/
+          path: |
+            artifacts/probes/
+            artifacts/app/smoke.json

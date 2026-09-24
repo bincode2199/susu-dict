@@ -1,0 +1,112 @@
+{
+  "startedAt": "2026-09-24T13:17:03.4864086+00:00",
+  "scope": "F03 shell lifecycle smoke: real susu.exe, WebView2, coordinator-driven (no synthetic input); open\u2192UiReady timings in ms",
+  "webViewRuntime": "153.0.4234.48",
+  "developmentBuild": true,
+  "trayIconAdded": true,
+  "cycles": 200,
+  "openToReadyMs": {
+    "Main.cold": {
+      "samples": 1,
+      "p50": 282.2,
+      "p95": 282.2,
+      "max": 282.2
+    },
+    "Main.warm": {
+      "samples": 199,
+      "p50": 168.7,
+      "p95": 203.1,
+      "max": 219.6
+    },
+    "Settings.after-release": {
+      "samples": 1,
+      "p50": 599.2,
+      "p95": 599.2,
+      "max": 599.2
+    },
+    "Settings.cold": {
+      "samples": 1,
+      "p50": 815,
+      "p95": 815,
+      "max": 815
+    },
+    "Settings.warm": {
+      "samples": 199,
+      "p50": 158,
+      "p95": 183.2,
+      "max": 201.1
+    },
+    "Tray.cold": {
+      "samples": 1,
+      "p50": 239.4,
+      "p95": 239.4,
+      "max": 239.4
+    },
+    "Tray.warm": {
+      "samples": 199,
+      "p50": 123.7,
+      "p95": 148.6,
+      "max": 160.8
+    }
+  },
+  "releaseAfterLastHideMs": 2141.3,
+  "browserExitedAfterLastHideMs": 2616.6,
+  "secondCycleBrowserExitedMs": 2314.3,
+  "hostProcess": [
+    {
+      "point": "after-first-cycle",
+      "privateMiB": 8.61,
+      "managedHeapMiB": 0.36,
+      "handles": 312,
+      "threads": 11
+    },
+    {
+      "point": "after-cycle-50",
+      "privateMiB": 13.39,
+      "managedHeapMiB": 0.38,
+      "handles": 349,
+      "threads": 9
+    },
+    {
+      "point": "after-cycle-100",
+      "privateMiB": 15.44,
+      "managedHeapMiB": 0.38,
+      "handles": 347,
+      "threads": 8
+    },
+    {
+      "point": "after-cycle-150",
+      "privateMiB": 16.63,
+      "managedHeapMiB": 0.38,
+      "handles": 347,
+      "threads": 8
+    },
+    {
+      "point": "after-last-cycle",
+      "privateMiB": 16.65,
+      "managedHeapMiB": 0.38,
+      "handles": 347,
+      "threads": 8
+    },
+    {
+      "point": "after-release",
+      "privateMiB": 16.91,
+      "managedHeapMiB": 0.38,
+      "handles": 327,
+      "threads": 12
+    },
+    {
+      "point": "after-second-release",
+      "privateMiB": 13.1,
+      "managedHeapMiB": 0.38,
+      "handles": 328,
+      "threads": 12
+    }
+  ],
+  "errors": [],
+  "diagnostics": [
+    "webview.browser-exited",
+    "webview.browser-exited"
+  ],
+  "passed": true
+}

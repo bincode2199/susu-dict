@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 project(susu_windows_probe CXX)
 # Static CRT: no VC++ redistributable is required on a clean Windows 11 system.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -11,3 +11,12 @@ target_compile_definitions(susu_windows_probe PRIVATE UNICODE _UNICODE WIN32_LEA
 target_compile_options(susu_windows_probe PRIVATE /W4 /WX /EHsc /utf-8)
 target_include_directories(susu_windows_probe PRIVATE "${WEBVIEW_SDK}/include")
 target_link_libraries(susu_windows_probe PRIVATE "${WEBVIEW_SDK}/x64/WebView2LoaderStatic.lib" dwmapi d3d11 dxgi shcore ole32 oleaut32 oleacc user32 elscore version shlwapi userenv advapi32 uiautomationcore)
+
+# Product DLL (shipped with susu.exe). Probe code above is never linked into it.
+add_library(susu_native SHARED shell_webview.cpp)
+target_compile_features(susu_native PRIVATE cxx_std_20)
+target_compile_definitions(susu_native PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(susu_native PRIVATE /W4 /WX /EHsc /utf-8 /guard:cf)
+target_link_options(susu_native PRIVATE /GUARD:CF /DYNAMICBASE /NXCOMPAT /CETCOMPAT)
+target_include_directories(susu_native PRIVATE "${WEBVIEW_SDK}/include")
+target_link_libraries(susu_native PRIVATE "${WEBVIEW_SDK}/x64/WebView2LoaderStatic.lib" ole32 oleaut32 user32 advapi32 shlwapi version)

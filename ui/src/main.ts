@@ -1,21 +1,31 @@
-import { createApp } from 'vue';
+import { createApp, h } from 'vue';
+import type { WindowView } from '@protocol/ui';
+import { Bridge, windowFromQuery, type HostPort } from './bridge/bridge';
+import { createStore } from './bridge/store';
+import { setLocale } from './locales/i18n';
 import App from './App.vue';
 import './styles/tokens.css';
+import './styles/base.css';
 
-createApp(App).mount('#app');
+const { kind, session, language } = windowFromQuery(location.search);
+setLocale(language);
 
-// F00 PER03/PER04 probe signals (fixture only): report the first painted frame after mount and a
-// painted frame after each native "shown" notification. Two rAFs place the callback after a paint.
-interface ProbeBridge {
-  postMessage(message: unknown): void;
-  addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+function applyWindow(view: WindowView): void {
+  setLocale(view.uiLanguage);
+  document.documentElement.dataset.theme = view.theme === 'dark' ? 'dark' : 'light';
 }
-const bridge = (window as unknown as { chrome?: { webview?: ProbeBridge } }).chrome?.webview;
-const afterPaint = (callback: () => void) => requestAnimationFrame(() => requestAnimationFrame(callback));
-if (bridge) {
-  afterPaint(() => bridge.postMessage({ type: 'first-frame' }));
-  bridge.addEventListener('message', (event) => {
-    const data = event.data as { type?: string; seq?: number } | undefined;
-    if (data?.type === 'shown') afterPaint(() => bridge.postMessage({ type: 'shown-frame', seq: data.seq, dom: document.querySelector('#app')?.children.length ?? 0 }));
-  });
+
+async function hostPort(): Promise<HostPort | null> {
+  const webview = (window as unknown as { chrome?: { webview?: HostPort } }).chrome?.webview;
+  if (webview) return webview;
+  if (import.meta.env.DEV) return (await import('./bridge/devHost')).createDevHost(kind, session, language);
+  return null;
 }
+
+void hostPort().then((host) => {
+  const { state, inbound } = createStore(applyWindow);
+  if (!host) return; // opened outside Su-Su: nothing to talk to
+  const bridge = new Bridge(host, session, inbound);
+  createApp({ render: () => h(App, { kind, bridge, state }) }).mount('#app');
+  bridge.ready();
+});

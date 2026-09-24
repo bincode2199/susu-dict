@@ -228,20 +228,38 @@ public sealed class WriteContext(SqliteConnection connection, SqliteTransaction?
     public object? Scalar(string sql, params (string Name, object? Value)[] parameters) => Database.Scalar(Connection, transaction, sql, parameters);
 }
 
-public sealed class WindowStateRepository(Database db) : IWindowStateStore
+/// <summary>
+/// window_state (PLAN 1.4.1): positions are read once into memory and written through the single writer
+/// without waiting, so the UI thread never blocks on SQL (ARCHITECTURE 4).
+/// </summary>
+public sealed class WindowStateRepository : IWindowStateStore
 {
-    public WindowPlacement? Get(string windowKind) => db.Read(connection =>
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT monitor_hint, x, y, dpi FROM window_state WHERE window_kind = $k;";
-        command.Parameters.AddWithValue("$k", windowKind);
-        using var reader = command.ExecuteReader();
-        return reader.Read() ? new WindowPlacement(windowKind, reader.GetString(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3)) : null;
-    });
+    private readonly Database db;
+    private readonly Dictionary<string, WindowPlacement> cache = new(StringComparer.Ordinal);
+    private readonly object gate = new();
 
-    public void Save(WindowPlacement p) => db.Write(w => w.Exec(
-        "INSERT INTO window_state(window_kind, monitor_hint, x, y, dpi) VALUES ($k, $m, $x, $y, $d) ON CONFLICT(window_kind) DO UPDATE SET monitor_hint=excluded.monitor_hint, x=excluded.x, y=excluded.y, dpi=excluded.dpi;",
-        ("$k", p.WindowKind), ("$m", p.MonitorHint), ("$x", p.X), ("$y", p.Y), ("$d", p.Dpi)));
+    public WindowStateRepository(Database db)
+    {
+        this.db = db;
+        db.Read(connection =>
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT window_kind, monitor_hint, x, y, dpi FROM window_state;";
+            using var reader = command.ExecuteReader();
+            while (reader.Read()) cache[reader.GetString(0)] = new WindowPlacement(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4));
+            return true;
+        });
+    }
+
+    public WindowPlacement? Get(string windowKind) { lock (gate) return cache.TryGetValue(windowKind, out var p) ? p : null; }
+
+    public void Save(WindowPlacement p)
+    {
+        lock (gate) cache[p.WindowKind] = p;
+        _ = db.WriteAsync(w => w.Exec(
+            "INSERT INTO window_state(window_kind, monitor_hint, x, y, dpi) VALUES ($k, $m, $x, $y, $d) ON CONFLICT(window_kind) DO UPDATE SET monitor_hint=excluded.monitor_hint, x=excluded.x, y=excluded.y, dpi=excluded.dpi;",
+            ("$k", p.WindowKind), ("$m", p.MonitorHint), ("$x", p.X), ("$y", p.Y), ("$d", p.Dpi)));
+    }
 }
 
 /// <summary>

@@ -104,32 +104,35 @@ public static class SettingsText
 /// <summary>Built-in packages (DEV-PLAN 5: 21 plugins) and native providers, with first-run defaults.</summary>
 public static class BuiltInCatalog
 {
-    public sealed record Package(string InstanceId, string PackageId, Capability[] Capabilities, string Page);
+    /// <summary>Secrets: local secret names the package declares (PLAN 4.5.3 table); values live only in secrets.dat.</summary>
+    public sealed record Package(string InstanceId, string PackageId, Capability[] Capabilities, string Page, string[] Secrets);
 
     public static readonly IReadOnlyList<Package> Packages =
     [
-        new("mymemory", "app.susu.mymemory", [Capability.Translate], "engines"),
-        new("tencent-translate", "app.susu.tencent-translate", [Capability.Translate], "engines"),
-        new("deepl", "app.susu.deepl", [Capability.Translate], "engines"),
-        new("google-translate", "app.susu.google-translate", [Capability.Translate], "engines"),
-        new("microsoft-translate", "app.susu.microsoft-translate", [Capability.Translate], "engines"),
-        new("amazon-translate", "app.susu.amazon-translate", [Capability.Translate], "engines"),
-        new("youdao", "app.susu.youdao", [Capability.Translate, Capability.Dictionary], "engines"),
-        new("openai", "app.susu.openai", [Capability.Translate], "ai"),
-        new("glm", "app.susu.glm", [Capability.Translate], "ai"),
-        new("gemini", "app.susu.gemini", [Capability.Translate], "ai"),
-        new("claude", "app.susu.claude", [Capability.Translate], "ai"),
-        new("ollama", "app.susu.ollama", [Capability.Translate], "ai"),
-        new("tencent-ocr", "app.susu.tencent-ocr", [Capability.Ocr], "ocr"),
-        new("simple-latex", "app.susu.simple-latex", [Capability.Ocr], "ocr"),
-        new("microsoft-tts", "app.susu.microsoft-tts", [Capability.Tts], "speech"),
-        new("google-tts", "app.susu.google-tts", [Capability.Tts], "speech"),
-        new("tencent-tts", "app.susu.tencent-tts", [Capability.Tts], "speech"),
-        new("openai-asr", "app.susu.openai-asr", [Capability.Asr], "speech"),
-        new("gemini-asr", "app.susu.gemini-asr", [Capability.Asr], "speech"),
-        new("ankiconnect", "app.susu.ankiconnect", [Capability.Vocab], "vocab"),
-        new("eudic", "app.susu.eudic", [Capability.Vocab], "vocab"),
+        new("mymemory", "app.susu.mymemory", [Capability.Translate], "engines", []),
+        new("tencent-translate", "app.susu.tencent-translate", [Capability.Translate], "engines", ["secretId", "secretKey"]),
+        new("deepl", "app.susu.deepl", [Capability.Translate], "engines", ["apiKey"]),
+        new("google-translate", "app.susu.google-translate", [Capability.Translate], "engines", ["apiKey"]),
+        new("microsoft-translate", "app.susu.microsoft-translate", [Capability.Translate], "engines", ["apiKey"]),
+        new("amazon-translate", "app.susu.amazon-translate", [Capability.Translate], "engines", ["accessKeyId", "secretAccessKey"]),
+        new("youdao", "app.susu.youdao", [Capability.Translate, Capability.Dictionary], "engines", ["appKey", "appSecret"]),
+        new("openai", "app.susu.openai", [Capability.Translate], "ai", ["apiKey"]),
+        new("glm", "app.susu.glm", [Capability.Translate], "ai", ["apiKey"]),
+        new("gemini", "app.susu.gemini", [Capability.Translate], "ai", ["apiKey"]),
+        new("claude", "app.susu.claude", [Capability.Translate], "ai", ["apiKey"]),
+        new("ollama", "app.susu.ollama", [Capability.Translate], "ai", []),
+        new("tencent-ocr", "app.susu.tencent-ocr", [Capability.Ocr], "ocr", ["secretId", "secretKey"]),
+        new("simple-latex", "app.susu.simple-latex", [Capability.Ocr], "ocr", ["apiKey"]),
+        new("microsoft-tts", "app.susu.microsoft-tts", [Capability.Tts], "speech", ["apiKey"]),
+        new("google-tts", "app.susu.google-tts", [Capability.Tts], "speech", ["apiKey"]),
+        new("tencent-tts", "app.susu.tencent-tts", [Capability.Tts], "speech", ["secretId", "secretKey"]),
+        new("openai-asr", "app.susu.openai-asr", [Capability.Asr], "speech", ["apiKey"]),
+        new("gemini-asr", "app.susu.gemini-asr", [Capability.Asr], "speech", ["apiKey"]),
+        new("ankiconnect", "app.susu.ankiconnect", [Capability.Vocab], "vocab", []),
+        new("eudic", "app.susu.eudic", [Capability.Vocab], "vocab", ["apiKey"]),
     ];
+
+    public static Package? Find(string instanceId) => Packages.FirstOrDefault(p => p.InstanceId == instanceId);
 
     public const string NativeDetect = "native-els", NativeTts = "native-sapi";
 

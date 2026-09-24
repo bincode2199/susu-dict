@@ -8,7 +8,8 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "paths": { "@protocol/*": ["../protocol/generated/*"] }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.vue", "probe/**/*.ts", "probe/**/*.vue", "tests/**/*.ts", "../protocol/generated/ui.ts", "vite.config.ts"]
 }

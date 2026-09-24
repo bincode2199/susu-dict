@@ -1,0 +1,87 @@
+{
+  "startedAt": "2026-09-24T04:09:04.4328123+00:00",
+  "scope": "F03 shell lifecycle smoke: real susu.exe, WebView2, coordinator-driven (no synthetic input); open\u2192UiReady timings in ms",
+  "webViewRuntime": "153.0.4234.48",
+  "developmentBuild": true,
+  "trayIconAdded": true,
+  "cycles": 34,
+  "openToReadyMs": {
+    "Main.cold": {
+      "samples": 1,
+      "p50": 304,
+      "p95": 304,
+      "max": 304
+    },
+    "Main.warm": {
+      "samples": 33,
+      "p50": 130.3,
+      "p95": 182.5,
+      "max": 187
+    },
+    "Settings.after-release": {
+      "samples": 1,
+      "p50": 725,
+      "p95": 725,
+      "max": 725
+    },
+    "Settings.cold": {
+      "samples": 1,
+      "p50": 971.6,
+      "p95": 971.6,
+      "max": 971.6
+    },
+    "Settings.warm": {
+      "samples": 33,
+      "p50": 140.5,
+      "p95": 168.3,
+      "max": 176.7
+    },
+    "Tray.cold": {
+      "samples": 1,
+      "p50": 228.2,
+      "p95": 228.2,
+      "max": 228.2
+    },
+    "Tray.warm": {
+      "samples": 33,
+      "p50": 106.2,
+      "p95": 132.2,
+      "max": 157.6
+    }
+  },
+  "releaseAfterLastHideMs": 2158.3,
+  "browserExitedAfterLastHideMs": 2638,
+  "secondCycleBrowserExitedMs": 2303.1,
+  "hostProcess": [
+    {
+      "point": "after-first-cycle",
+      "privateMiB": 8.73,
+      "handles": 312,
+      "threads": 11
+    },
+    {
+      "point": "after-last-cycle",
+      "privateMiB": 11.29,
+      "handles": 351,
+      "threads": 11
+    },
+    {
+      "point": "after-release",
+      "privateMiB": 12.05,
+      "handles": 329,
+      "threads": 12
+    },
+    {
+      "point": "after-second-release",
+      "privateMiB": 12.2,
+      "handles": 330,
+      "threads": 12
+    }
+  ],
+  "errors": [],
+  "diagnostics": [
+    "webview.browser-exited",
+    "webview.browser-exited"
+  ],
+  "passed": true
+}

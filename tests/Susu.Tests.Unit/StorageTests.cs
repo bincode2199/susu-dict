@@ -500,6 +500,7 @@ public class DatabaseTests
         using var db = Database.Open(root.Paths.Database);
         var windows = new WindowStateRepository(db);
         for (int i = 0; i < 50; i++) windows.Save(new WindowPlacement($"w{i}", "m", i, -i, 144));
+        await db.FlushAsync();
         Assert.True(new FileInfo(root.Paths.Database + "-wal").Length > 0);
         string backup = Path.Combine(root.Root, "copy.db");
         await db.BackupToAsync(backup);
@@ -510,11 +511,11 @@ public class DatabaseTests
     }
 
     [Fact] // DATA03: failed migration keeps the old version and data; older app refuses newer data and can restore its backup
-    public void Failed_migration_and_rollback_to_an_older_app()
+    public async Task Failed_migration_and_rollback_to_an_older_app()
     {
         using var root = new TempRoot();
         var migrations = new Dictionary<int, string>(Database.Migrations) { [2] = "CREATE TABLE vocab_entries (entry_id TEXT PRIMARY KEY);" };
-        using (var v1 = Database.Open(root.Paths.Database)) new WindowStateRepository(v1).Save(new WindowPlacement("main", "m", 1, 2, 96));
+        using (var v1 = Database.Open(root.Paths.Database)) { new WindowStateRepository(v1).Save(new WindowPlacement("main", "m", 1, 2, 96)); await v1.FlushAsync(); }
 
         Assert.Throws<SimulatedCrash>(() => Database.Open(root.Paths.Database, new FaultAt("migrate:2"), 2, migrations));
         using (var still = Database.Open(root.Paths.Database))
@@ -528,6 +529,7 @@ public class DatabaseTests
         {
             Assert.Equal(Database.BackupPath(root.Paths.Database, 1), v2.MigrationBackup);
             new WindowStateRepository(v2).Save(new WindowPlacement("main", "m", 9, 9, 96));
+            await v2.FlushAsync();
         }
         var refused = Assert.Throws<DatabaseVersionException>(() => Database.Open(root.Paths.Database));
         Assert.Equal((2, 1), (refused.Found, refused.Supported));

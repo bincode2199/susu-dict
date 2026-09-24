@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsAotCompatible>false</IsAotCompatible>
@@ -16,6 +16,7 @@
     <ProjectReference Include="../../src/Susu.Storage/Susu.Storage.csproj" />
     <ProjectReference Include="../../src/Susu.Net/Susu.Net.csproj" />
     <ProjectReference Include="../../src/Susu.Windows/Susu.Windows.csproj" />
+    <ProjectReference Include="../../src/Susu.Ui/Susu.Ui.csproj" />
     <ProjectReference Include="../Susu.Testing/Susu.Testing.csproj" />
     <ProjectReference Include="../../tools/Susu.ContractsGen/Susu.ContractsGen.csproj" />
   </ItemGroup>

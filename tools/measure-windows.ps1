@@ -1,19 +1,20 @@
-﻿param([ValidateSet('baseline','suspend','low')][string]$MemoryMode='baseline',[int]$Plugins=0,[string]$Executable='artifacts/probes/Susu.Probes.exe',[string]$EvidenceName='')
+﻿param([ValidateSet('baseline','suspend','low')][string]$MemoryMode='baseline',[int]$Plugins=0,[string]$Executable='artifacts/probes/Susu.Probes.exe',[string]$EvidenceName='',[string]$CommandLine='',[string]$Module='F00')
 $ErrorActionPreference = 'Stop'
 # Windows PowerShell 5.1 has no [Environment]::TickCount64; use the same clock as the native events.
 Add-Type -TypeDefinition 'public static class SusuTick { [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern ulong GetTickCount64(); public static long Now() { return (long)GetTickCount64(); } }'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 if (-not $EvidenceName) { $EvidenceName = if ($Plugins -gt 0) { "memory-full-$MemoryMode-$Plugins-plugins" } else { "memory-$MemoryMode" } }
-$evidence = Join-Path $root "docs/evidence/F00/$EvidenceName"
+$evidence = Join-Path $root "docs/evidence/$Module/$EvidenceName"
 New-Item -ItemType Directory -Force $evidence | Out-Null
 $run = Join-Path $root ('artifacts/window-measure-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $run | Out-Null
 $out = Join-Path $run 'events.jsonl'
 $err = Join-Path $run 'stderr.txt'
 # Plugins > 0: PER02 whole-tree workload (sandboxed plugin host with N runtimes + UI windows).
-$arguments = if ($Plugins -gt 0) { @('--measure-full',"$root/ui/dist","$Plugins",$MemoryMode,'full') } else { @('--measure-windows',"$root/ui/dist",$MemoryMode) }
-$process = Start-Process -FilePath (Join-Path $root $Executable) -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+# -CommandLine: any executable that writes an all-hidden event to the file given as {events} (e.g. susu.exe --measure).
+$arguments = if ($CommandLine) { $CommandLine.Replace('{events}', "`"$out`"") } elseif ($Plugins -gt 0) { @('--measure-full',"$root/ui/dist-probe","$Plugins",$MemoryMode,'full') } else { @('--measure-windows',"$root/ui/dist-probe",$MemoryMode) }
+$process = Start-Process -FilePath (Join-Path $root $Executable) -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $(if ($CommandLine) { "$run/stdout.txt" } else { $out }) -RedirectStandardError $err -PassThru
 $processId = $process.Id
 $null = $process.Handle # Windows PowerShell 5.1: cache the handle or ExitCode stays null
 Write-Output "Measurement PID $processId, events $out"
@@ -54,7 +55,7 @@ try {
         }
         Read-TreeSample (([SusuTick]::Now() - [long]$hidden.tick)/1000.0)
     }
-    if (-not $process.WaitForExit(15000)) { throw 'Measurement did not exit within its bounded lifecycle' }
+    if (-not $process.WaitForExit(30000)) { throw 'Measurement did not exit within its bounded lifecycle' }
     if ($process.ExitCode -ne 0) { throw "Measurement failed: $($process.ExitCode)" }
     Copy-Item $out "$evidence/windows-lifecycle.jsonl"
     Write-Output 'Measurement completed. Raw results do not imply target budgets passed.'

@@ -19,3 +19,4 @@ if ($LASTEXITCODE) { throw 'Windows native configure failed' }
 & $cmake --build artifacts/windows-native --config Release
 if ($LASTEXITCODE) { throw 'Windows native build failed' }
 Copy-Item artifacts/windows-native/Release/susu_windows_probe.dll $OutputDirectory
+Copy-Item artifacts/windows-native/Release/susu_native.dll $OutputDirectory

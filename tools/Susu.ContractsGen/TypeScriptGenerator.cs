@@ -30,12 +30,21 @@ public static class TypeScriptGenerator
             var text = new StringBuilder();
             text.Append(Banner).Append('\n');
             if (group == "plugin") text.Append(PluginPreamble);
-            else text.Append($"export const UI_VERSION = {ProtocolVersions.Ui};\n");
+            else text.Append($"export const UI_VERSION = {ProtocolVersions.Ui};\n").Append(UiCommandConstants());
             foreach (var type in needed.Values) text.Append('\n').Append(Declare(type));
             if (group == "plugin") text.Append(PluginModule);
             files[group == "plugin" ? "susu-plugin.d.ts" : $"{group}.ts"] = text.ToString();
         }
         return files;
+    }
+
+    /// <summary>The page-side names of every whitelisted UI command (the host still checks per window).</summary>
+    private static string UiCommandConstants()
+    {
+        var fields = typeof(UiCommands).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral && f.FieldType == typeof(string));
+        var text = new StringBuilder("\nexport const UI_COMMANDS = {\n");
+        foreach (var field in fields) text.Append($"  {field.Name}: '{field.GetRawConstantValue()}',\n");
+        return text.Append("} as const;\n\nexport type UiCommandName = (typeof UI_COMMANDS)[keyof typeof UI_COMMANDS];\n").ToString();
     }
 
     private static void Collect(Type type, SortedDictionary<string, Type> needed)

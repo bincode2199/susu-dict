@@ -1,4 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>susu</AssemblyName>
+    <RootNamespace>Susu.Host</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon Condition="Exists('assets/susu.ico')">assets/susu.ico</ApplicationIcon>
+    <!-- Fixture services and the dev preview exist only in development builds (DEV-PLAN F03.4). -->
+    <DefineConstants Condition="'$(Configuration)' == 'Debug' Or '$(SusuDevPreview)' == 'true'">$(DefineConstants);DEV_PREVIEW</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Susu.Windows/Susu.Windows.csproj" />
     <ProjectReference Include="../Susu.Ui/Susu.Ui.csproj" />
@@ -6,5 +18,11 @@
     <ProjectReference Include="../Susu.Net/Susu.Net.csproj" />
     <ProjectReference Include="../Susu.Plugins/Susu.Plugins.csproj" />
     <ProjectReference Include="../Susu.Runtime/Susu.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="assets/*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Production UI (ui/dist, built by `pnpm run build`) and the native WebView host (tools/build-native.ps1). -->
+    <Content Include="../../ui/dist/**" Link="ui/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../artifacts/windows-native/Release/susu_native.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_native.dll')" Link="susu_native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
