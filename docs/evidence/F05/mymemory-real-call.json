@@ -1,0 +1,7 @@
+{
+  "timestampUtc": "2026-09-24T19:55:40.2890602Z",
+  "origin": "https://api.mymemory.translated.net",
+  "status": 200,
+  "translatedTextLength": 2,
+  "note": "sanitized: no request/response body or headers persisted, only shape/status/length"
+}

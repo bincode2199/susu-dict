@@ -14,7 +14,7 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 | F02 | Complete: settings, secrets, SQLite, leases, logs; 76 tests; exercised inside the AOT `susu.exe`. | [F02](F02/F02.md) |
 | F03 | Complete. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows. Multi-monitor and mixed DPI, a real IME, screen reader, high contrast and PER03 on the real shell moved to the F19 final acceptance on a physical Windows machine (D-67). | [F03](F03/F03.md) |
 | F04 | Complete. Plugin runtime (`Susu.Runtime`), host side (`Susu.Plugins`), production sandbox module `susu_plugin_sandbox.dll`, supervised sessions and `susu-plugin check/test`. X01–X07 re-ran 54/54 against the production module; S09, J04, J06 and J07 pass; 279 tests. Live stream-chunk limits wait for the first streaming capability. | [F04](F04/F04.md) |
-| F05 | In progress: coding agent implementing F05.1–F05.4. | [F05](F05/F05.md) |
+| F05 | In progress. First coding pass done (327 tests; 9 contract probes through the real sandbox; one real MyMemory call). Four in-scope gaps go back to coding (proxy wiring, cancelling a plain `$http` call, S10, S02); then testing. Paused on the usage limit. | [F05](F05/F05.md) |
 
 Environment notes for whoever resumes:
 
