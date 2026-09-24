@@ -65,6 +65,7 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
         EnsureView(window);
         window.View?.Visible(true);
         window.ResizeView();
+        if (activate) window.View?.Focus(); // keyboard input goes to the page, not the empty host window
         return window.SessionId;
     }
 
@@ -178,7 +179,12 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
             if (!env.Ready) { Diagnostic?.Invoke($"webview.environment.failed 0x{env.Status:x8}"); return; }
             var view = new WebViewControl(env, window.Handle, UiHosting.HostFor(window.Kind), hosting.UiFolder, path, hosting.DevTools);
             window.View = view;
-            view.ControllerReady += () => { window.ResizeView(); view.Visible(window.Visible); };
+            view.ControllerReady += () =>
+            {
+                window.ResizeView();
+                view.Visible(window.Visible);
+                if (window.Visible && GetForegroundWindow() == window.Handle) view.Focus();
+            };
             view.Navigated += () => Timing?.Invoke(window.Kind, "PageLoaded", Environment.TickCount64 - started);
             view.Message += json => PageMessage?.Invoke(window.Kind, json);
             view.Failed += hr => Diagnostic?.Invoke($"webview.failed {window.Kind} 0x{hr:x8}");

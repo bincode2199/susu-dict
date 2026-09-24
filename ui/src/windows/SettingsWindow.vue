@@ -95,6 +95,9 @@ const serviceHint = (service: SettingsView['services'][number]) => {
   const state = service.availability === 'Ready' && service.secretNames.length === 0 ? t('services.state.NoCredential') : t(`services.state.${service.availability}`);
   return service.implemented ? state : `${state} · ${t('services.notImplemented')}`;
 };
+/** Name plus capability when one instance offers several services on the page (e.g. Youdao translate + dictionary). */
+const serviceTitle = (service: SettingsView['services'][number]) =>
+  servicesOnPage.value.filter((s) => s.instanceId === service.instanceId).length > 1 ? `${serviceName(service.instanceId)} · ${t(`capability.${service.capability}`)}` : serviceName(service.instanceId);
 const servicesOnPage = computed(() => (view.value?.services ?? []).filter((s) => s.page === page.value));
 const accountSaved = (accountId: string | undefined, name: string) =>
   !!view.value?.accounts.find((a) => a.id === accountId)?.secrets.find((s) => s.name === name)?.saved;
@@ -211,7 +214,7 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
           <h2>{{ t(`services.${page}`) }}</h2>
           <p class="hint-text">{{ t('services.credentialNote') }}</p>
           <div v-for="service in servicesOnPage" :key="service.serviceId" class="service">
-            <SettingRow :title="serviceName(service.instanceId)" :hint="serviceHint(service)">
+            <SettingRow :title="serviceTitle(service)" :hint="serviceHint(service)">
               <Toggle v-model="draft.services[service.serviceId]" :label="t('services.enabled', { name: serviceName(service.instanceId) })" />
               <button v-if="service.secretNames.length" type="button" class="icon-btn" :aria-expanded="expanded === service.serviceId"
                 :aria-label="t('services.details', { name: serviceName(service.instanceId) })" @click="expanded = expanded === service.serviceId ? null : service.serviceId">

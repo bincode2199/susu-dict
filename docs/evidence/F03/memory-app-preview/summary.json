@@ -1,0 +1,40 @@
+{
+  "scope": "Whole susu.exe process tree, dev-preview build: Settings, Main (fixture services) and Tray opened, then hidden (real 10-minute keep-warm release)",
+  "correction": "An unrelated mintty (Git Bash terminal) process was pulled into the sampled tree through PID reuse (its long-exited parent had a PID later reused by a Su-Su process). It is excluded here; raw samples are unchanged. The sampler now requires a child to be newer than its parent.",
+  "excludedMinttyWarmPwsMiB": 0.23,
+  "warm": {
+    "secondsAfterHidden": 300.031,
+    "privateWorkingSetMiB": 23.45,
+    "privateBytesMiB": 173.37,
+    "processCount": 10,
+    "withinTarget": true
+  },
+  "idle": {
+    "secondsAfterHidden": 899.109,
+    "privateWorkingSetMiB": 4.15,
+    "privateBytesMiB": 7.27,
+    "processCount": 1,
+    "withinTarget": true
+  },
+  "warmCpu240to300": {
+    "from": 240.172,
+    "to": 300.031,
+    "cpuSeconds": 0.015625,
+    "percentOneCore": 0.026197981288353843,
+    "percentMachine": 0.0032747476610442304
+  },
+  "warmCpu60to540": {
+    "from": 60.063,
+    "to": 540,
+    "cpuSeconds": 0.0625,
+    "percentOneCore": 0.013013079706674773,
+    "percentMachine": 0.0016266349633343466
+  },
+  "idleCpu": {
+    "from": 840.047,
+    "to": 899.109,
+    "cpuSeconds": 0,
+    "percentOneCore": 0,
+    "percentMachine": 0
+  }
+}

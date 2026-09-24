@@ -1,0 +1,34 @@
+﻿{
+    "scope":  "Whole susu.exe process tree, release build: Settings and Tray windows opened, then hidden (real 10-minute keep-warm release)",
+    "logicalProcessors":  8,
+    "warm":  {
+                 "secondsAfterHidden":  300.047,
+                 "privateWorkingSetMiB":  20.17578125,
+                 "privateBytesMiB":  140.734375,
+                 "processCount":  8,
+                 "withinFixtureMemoryTarget":  true
+             },
+    "idle":  {
+                 "secondsAfterHidden":  899.047,
+                 "privateWorkingSetMiB":  4.66015625,
+                 "privateBytesMiB":  7.23046875,
+                 "processCount":  1,
+                 "withinFixtureMemoryTarget":  true
+             },
+    "warmCpu":  {
+                    "from":  240.172,
+                    "to":  300.047,
+                    "elapsedSeconds":  59.705999999999996,
+                    "cpuSeconds":  0.0625,
+                    "percentOneCore":  0.10467959669044988,
+                    "percentMachine":  0.013084949586306235
+                },
+    "idleCpu":  {
+                    "from":  840.031,
+                    "to":  899.047,
+                    "elapsedSeconds":  58.897999999999996,
+                    "cpuSeconds":  0,
+                    "percentOneCore":  0,
+                    "percentMachine":  0
+                }
+}

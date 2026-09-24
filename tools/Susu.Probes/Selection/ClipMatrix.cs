@@ -251,8 +251,10 @@ internal static partial class ClipMatrix
                 var result = ClipBorrow.Borrow(window, enabled: true, beforeRestore: () => holder = Fixture(2, 0, 1500));
                 double ms = timer.Elapsed.TotalMilliseconds;
                 holder?.WaitForExit(3000);
-                string now = ReadText();
-                Record("C06", "restore blocked by a clipboard holder", "bounded retry, message shown, current content kept", $"{result.Outcome}; restore={result.Restore}; returned after {ms:F0} ms; clipboard now '{(now.Length > 60 ? now[..60] : now)}'; sequence changed after holder={ClipBorrow.GetClipboardSequenceNumber()}", result.Restore?.StartsWith("未能恢复剪贴板", StringComparison.Ordinal) == true && ms < 1200 && now.Contains(Marker, StringComparison.Ordinal), result);
+                // Read CF_UNICODETEXT directly: the snapshot helper refuses clipboards with private formats (the
+                // RichTextBox copy carries RTF/OLE formats), which would wrongly read as empty.
+                string now = ClipBorrow.CurrentText();
+                Record("C06", "restore blocked by a clipboard holder", "bounded retry, message shown, current content kept", $"{result.Outcome}; restore={result.Restore}; returned after {ms:F0} ms; clipboard now '{(now.Length > 60 ? now[..60] : now)}'; sequence after holder={ClipBorrow.GetClipboardSequenceNumber()}", result.Restore?.StartsWith("未能恢复剪贴板", StringComparison.Ordinal) == true && ms < 1200 && now.Contains(Marker, StringComparison.Ordinal), result);
             }
             finally { holder?.Dispose(); }
             Record("C07", "clipboard history / cloud sync", "record observable behaviour; product must not claim exclusion",

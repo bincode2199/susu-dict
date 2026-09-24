@@ -1,0 +1,46 @@
+{
+  "cold_nativeShellMs": {
+    "n": 30,
+    "p50": 38.9,
+    "p95": 59.4,
+    "max": 60.7
+  },
+  "cold_firstFrameMs": {
+    "n": 30,
+    "p50": 715.7,
+    "p95": 791.9,
+    "max": 833.7
+  },
+  "cold_ok": true,
+  "cold_browserExitMs": {
+    "n": 30,
+    "p50": 6276.1,
+    "p95": 6402.4,
+    "max": 6479.1
+  },
+  "hot_contentVisibleMs": {
+    "n": 30,
+    "p50": 41.2,
+    "p95": 57.1,
+    "max": 68.8
+  },
+  "hot_allSuspended": true,
+  "cycles": {
+    "kind": "cycles",
+    "count": 100,
+    "duplicates": 0,
+    "failures": 0,
+    "emptyDom": 0,
+    "treePwsBeforeMiB": 69.305,
+    "treePwsAfterMiB": 70.824
+  },
+  "releaseReopen": {
+    "kind": "release-reopen",
+    "releaseBrowserExitMs": 333.76,
+    "reopened": true,
+    "reopenFirstFrameMs": 705.459,
+    "reopenShownFrames": 1,
+    "dom": 1,
+    "finalBrowserExitMs": 300.574
+  }
+}

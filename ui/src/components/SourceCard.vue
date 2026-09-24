@@ -9,6 +9,8 @@ import { t } from '../locales/i18n';
 const props = defineProps<{ modelValue: string; from: string; to: string; disabled?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [string]; submit: []; swap: []; language: [from: string, to: string] }>();
 const composing = ref(false);
+const area = ref<HTMLTextAreaElement | null>(null);
+defineExpose({ focus: () => area.value?.focus() });
 const count = computed(() => [...props.modelValue].length);
 const languages = ['en', 'zh-Hans'];
 
@@ -43,6 +45,7 @@ function pick(which: 'from' | 'to', value: string): void {
     <label class="sr-only" for="source-text">{{ t('main.source') }}</label>
     <textarea
       id="source-text"
+      ref="area"
       class="input selectable"
       :value="modelValue"
       :placeholder="t('main.placeholder')"

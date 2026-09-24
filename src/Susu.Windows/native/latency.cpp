@@ -1,6 +1,7 @@
 // F00 PER03/PER04 driver: native shell paint, cold WebView first frame, hot resume frame, and
 // keep-warm/release cycles, measured with QPC on one STA thread. Writes JSON lines. Probe only.
 #include <windows.h>
+#include <memory>
 #include <wrl.h>
 #include <WebView2.h>
 #include <dwmapi.h>
@@ -67,14 +68,18 @@ HWND CreateShell() {
 
 // Creates environment + controller in view.hwnd and navigates; returns after the first-frame message.
 bool Open(View& v, const std::wstring& folder, const std::wstring& userData, double* envMs, double* controllerMs, double t0) {
-    bool envDone = false, controllerDone = false;
+    // Heap state shared with the callbacks, which may complete after a wait has timed out.
+    struct State { bool envDone = false, controllerDone = false; HRESULT status = E_PENDING; double envMs = 0, controllerMs = 0; ComPtr<ICoreWebView2Environment> env; ComPtr<ICoreWebView2Controller> controller; };
+    auto state = std::make_shared<State>();
     HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, userData.c_str(), nullptr,
-        Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>([&](HRESULT r, ICoreWebView2Environment* e) -> HRESULT {
-            envDone = true; v.status = r; v.env = e; if (envMs) *envMs = Now() - t0; return S_OK; }).Get());
-    if (FAILED(hr) || !Pump([&] { return envDone; }, 10000) || FAILED(v.status) || !v.env) return false;
-    hr = v.env->CreateCoreWebView2Controller(v.hwnd, Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([&](HRESULT r, ICoreWebView2Controller* c) -> HRESULT {
-        controllerDone = true; v.status = r; v.controller = c; if (controllerMs) *controllerMs = Now() - t0; return S_OK; }).Get());
-    if (FAILED(hr) || !Pump([&] { return controllerDone; }, 10000) || FAILED(v.status) || !v.controller) return false;
+        Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>([state, t0](HRESULT r, ICoreWebView2Environment* e) -> HRESULT {
+            state->envDone = true; state->status = r; state->env = e; state->envMs = Now() - t0; return S_OK; }).Get());
+    if (FAILED(hr) || !Pump([state] { return state->envDone; }, 10000) || FAILED(state->status) || !state->env) return false;
+    v.env = state->env; v.status = state->status; if (envMs) *envMs = state->envMs;
+    hr = v.env->CreateCoreWebView2Controller(v.hwnd, Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([state, t0](HRESULT r, ICoreWebView2Controller* c) -> HRESULT {
+        state->controllerDone = true; state->status = r; state->controller = c; state->controllerMs = Now() - t0; return S_OK; }).Get());
+    if (FAILED(hr) || !Pump([state] { return state->controllerDone; }, 10000) || FAILED(state->status) || !state->controller) return false;
+    v.controller = state->controller; v.status = state->status; if (controllerMs) *controllerMs = state->controllerMs;
     v.controller->get_CoreWebView2(&v.view);
     ComPtr<ICoreWebView2_3> view3; v.view.As(&view3);
     view3->SetVirtualHostNameToFolderMapping(L"susu-probe.example", folder.c_str(), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS);
@@ -116,9 +121,11 @@ double Release(View& v) {
 
 bool Suspend(View& v) {
     ComPtr<ICoreWebView2_3> view3; if (FAILED(v.view.As(&view3))) return false;
-    bool done = false; BOOL ok = FALSE;
-    view3->TrySuspend(Callback<ICoreWebView2TrySuspendCompletedHandler>([&](HRESULT, BOOL s) -> HRESULT { done = true; ok = s; return S_OK; }).Get());
-    return Pump([&] { return done; }, 5000) && ok;
+    // Heap state: a completion arriving after the wait gave up must not write into a dead stack frame.
+    struct State { bool done = false; BOOL ok = FALSE; };
+    auto state = std::make_shared<State>();
+    view3->TrySuspend(Callback<ICoreWebView2TrySuspendCompletedHandler>([state](HRESULT, BOOL s) -> HRESULT { state->done = true; state->ok = s; return S_OK; }).Get());
+    return Pump([state] { return state->done; }, 5000) && state->ok;
 }
 
 unsigned long long TreePws(DWORD root) {
@@ -166,26 +173,29 @@ void Run(const std::wstring& folder, const std::wstring& userData, int coldSampl
     v.hwnd = CreateShell();
     ShowWindow(v.hwnd, SW_SHOWNOACTIVATE);
     if (!Open(v, folder, userData, nullptr, nullptr, Now())) { fprintf(out, "{\"kind\":\"hot-setup-failed\"}\n"); *result = E_FAIL; CoUninitialize(); return; }
-    auto cycle = [&](int seq, bool suspend, double* shownMs, bool* suspended) {
-        v.controller->put_IsVisible(FALSE);
-        ShowWindow(v.hwnd, SW_HIDE);
-        *suspended = suspend ? Suspend(v) : false;
+    auto cycle = [&](View& w, int seq, bool suspend, double* shownMs, bool* suspended) {
+        w.controller->put_IsVisible(FALSE);
+        ShowWindow(w.hwnd, SW_HIDE);
+        *suspended = suspend ? Suspend(w) : false;
         Pump([] { return false; }, 150);
         const double t0 = Now();
-        if (*suspended) { ComPtr<ICoreWebView2_3> view3; v.view.As(&view3); view3->Resume(); }
-        v.controller->put_IsVisible(TRUE);
-        ShowWindow(v.hwnd, SW_SHOWNOACTIVATE);
-        const int before = v.shownFrames;
+        if (*suspended) { ComPtr<ICoreWebView2_3> view3; w.view.As(&view3); view3->Resume(); }
+        w.controller->put_IsVisible(TRUE);
+        ShowWindow(w.hwnd, SW_SHOWNOACTIVATE);
+        const int before = w.shownFrames;
         std::wstring message = L"{\"type\":\"shown\",\"seq\":" + std::to_wstring(seq) + L"}";
-        v.view->PostWebMessageAsJson(message.c_str());
-        bool ok = Pump([&] { return v.lastShownSeq == seq && v.shownFrames > before; }, 5000);
+        w.view->PostWebMessageAsJson(message.c_str());
+        bool ok = Pump([&] { return w.lastShownSeq == seq && w.shownFrames > before; }, 5000);
         *shownMs = ok ? Now() - t0 : -1;
         Pump([] { return false; }, 30); // collect any duplicate frame message
-        return v.shownFrames - before;
+        return w.shownFrames - before;
     };
+    // SUSU_LATENCY_HOT_SUSPEND=0 measures the hot path without TrySuspend (comparison for the G0 decision).
+    wchar_t flag[8]{};
+    const bool hotSuspend = !(GetEnvironmentVariableW(L"SUSU_LATENCY_HOT_SUSPEND", flag, 8) && flag[0] == L'0');
     for (int i = 0; i < hotSamples; ++i) {
         double ms; bool suspended;
-        int frames = cycle(i, true, &ms, &suspended);
+        int frames = cycle(v, i, hotSuspend, &ms, &suspended);
         fprintf(out, "{\"kind\":\"hot\",\"i\":%d,\"suspended\":%s,\"contentVisibleMs\":%.3f,\"frames\":%d,\"dom\":%d}\n", i, suspended ? "true" : "false", ms, frames, v.dom);
         fflush(out);
     }
@@ -194,7 +204,7 @@ void Run(const std::wstring& folder, const std::wstring& userData, int coldSampl
     int duplicates = 0, failures = 0, emptyDom = 0;
     for (int i = 0; i < cycles; ++i) {
         double ms; bool suspended;
-        int frames = cycle(10000 + i, true, &ms, &suspended);
+        int frames = cycle(v, 10000 + i, true, &ms, &suspended);
         if (frames != 1) duplicates += frames > 1 ? 1 : 0;
         if (ms < 0) failures++;
         if (v.dom <= 0) emptyDom++;
@@ -213,7 +223,7 @@ void Run(const std::wstring& folder, const std::wstring& userData, int coldSampl
     bool reopened = Open(again, folder, userData, nullptr, nullptr, t0);
     double reopenMs = Now() - t0;
     int frames = 0;
-    if (reopened) { double ms; bool s; frames = cycle(99999, false, &ms, &s); }
+    if (reopened) { double ms; bool s; frames = cycle(again, 99999, false, &ms, &s); } // the reopened view, not the released one
     const double exit2 = Release(again);
     DestroyWindow(again.hwnd);
     fprintf(out, "{\"kind\":\"release-reopen\",\"releaseBrowserExitMs\":%.3f,\"reopened\":%s,\"reopenFirstFrameMs\":%.3f,\"reopenShownFrames\":%d,\"dom\":%d,\"finalBrowserExitMs\":%.3f}\n",

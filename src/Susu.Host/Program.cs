@@ -74,7 +74,8 @@ internal static class MainMode
         string exeFolder = AppContext.BaseDirectory;
         string assets = Path.Combine(exeFolder, "assets");
         var paths = AppPaths.Resolve(mode.DataRoot, Program.DevelopmentBuild).EnsureCreated();
-        using var instance = SingleInstance.TryAcquire(InstanceName(mode.DataRoot));
+        string instanceName = InstanceName(mode.DataRoot);
+        using var instance = SingleInstance.TryAcquire(instanceName);
         if (instance is null) return 0; // an instance already runs; it has been asked to wake up
 
         var clock = SystemClock.Instance;
@@ -107,7 +108,7 @@ internal static class MainMode
         using var leases = new FileLeases(paths.Cache);
         leases.CleanupStaleSessions();
 
-        using var dispatcher = new UiDispatcher();
+        using var dispatcher = new UiDispatcher(instanceName);
         ShellEnvironment.Initialize(assets, e => log.Event("ui.exception", ("code", e.GetType().Name)));
         using var platform = new WindowPlatform(dispatcher, new UiHosting(Path.Combine(exeFolder, "ui"), paths.WebView, mode.DevTools && Program.DevelopmentBuild),
             new WindowStateRepository(db), () => config.State.Effective.General.UiLanguage);

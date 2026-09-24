@@ -20,12 +20,15 @@ $null = $process.Handle # Windows PowerShell 5.1: cache the handle or ExitCode s
 Write-Output "Measurement PID $processId, events $out"
 $rows = [System.Collections.Generic.List[object]]::new()
 function Read-TreeSample([double]$seconds) {
-    $all = @(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name)
+    $all = @(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CreationDate)
+    $created = @{}; foreach ($item in $all) { $created[[uint32]$item.ProcessId] = $item.CreationDate }
     $ids = [System.Collections.Generic.HashSet[uint32]]::new()
     [void]$ids.Add([uint32]$processId)
     do {
         $added = $false
-        foreach ($item in $all) { if ($ids.Contains([uint32]$item.ParentProcessId) -and $ids.Add([uint32]$item.ProcessId)) { $added = $true } }
+        # A child must be newer than its parent: Windows reuses PIDs, so an old process whose dead parent's PID now
+        # belongs to a tree member (e.g. a terminal) must not be counted.
+        foreach ($item in $all) { if ($ids.Contains([uint32]$item.ParentProcessId) -and $item.CreationDate -ge $created[[uint32]$item.ParentProcessId] -and $ids.Add([uint32]$item.ProcessId)) { $added = $true } }
     } while ($added)
     $counters = @(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $ids.Contains([uint32]$_.IDProcess) })
     $members = @($counters | ForEach-Object {

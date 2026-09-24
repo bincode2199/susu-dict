@@ -10,7 +10,7 @@ Su-Su is a Windows 11 desktop translator. It lives in the system tray. Text come
 | Text capture | UIA → IA2/MSAA → optional clipboard borrowing, isolated in a bounded selection-host process |
 | Distribution | Per-user NSIS installer; license MIT (tentative, confirmed before release) |
 
-**Status (2026-09-24):** F00 feasibility probes are done and the G0 route decisions are recorded; four latency/capture measurements wait for an interactive desktop. F01 (contracts, domain, job framework) is complete; F02 and F03 are in progress. There is no usable translator yet. See [PROGRESS](evidence/PROGRESS.md) for the latest checkpoint and [BUILD](development/BUILD.md) to build.
+**Status (2026-09-24):** F00 feasibility work is done, and its measurements have all run. Two PER03 latency budgets are missed and await a product decision. F01 (contracts, domain, job framework) and F02 (settings, credentials, data) are complete. F03 (NativeAOT `susu.exe` shell, tray, hotkeys, production Vue UI, minimal settings) is pending integration acceptance. Translation adapters arrive in F05/F06, so there is no usable translator yet. See [PROGRESS](evidence/PROGRESS.md) and [BUILD](development/BUILD.md).
 
 ## Repository layout
 
@@ -51,6 +51,7 @@ Every document has exactly one parent. The breadcrumb at the top of each documen
         - [evidence/F00/window-memory-analysis](evidence/F00/window-memory-analysis.md): eight-window UI memory experiment.
       - [evidence/F01/F01](evidence/F01/F01.md): F01 delivery record: contracts, domain and job framework, J/T acceptance mapping.
       - [evidence/F02/F02](evidence/F02/F02.md): F02 delivery record: settings, secrets, database, leases and logs.
+      - [evidence/F03/F03](evidence/F03/F03.md): F03 delivery record: native shell, WebView2 host, production UI, settings.
   - **[vm/WINDOWS-VM-OPERATIONS](vm/WINDOWS-VM-OPERATIONS.md)**: Windows 虚拟机运行与维护手册. Current spec, daily operation, maintenance and troubleshooting of the dev and clean-test VMs.
     - [vm/WINDOWS-VM-DEPLOYMENT](vm/WINDOWS-VM-DEPLOYMENT.md): 部署记录. What was deployed and verified, plus rebuild steps.
     - [vm/WINDOWS-VM-PLAN](vm/WINDOWS-VM-PLAN.md): 安装部署计划 (V5). Decisions, layout, install phases and acceptance criteria.

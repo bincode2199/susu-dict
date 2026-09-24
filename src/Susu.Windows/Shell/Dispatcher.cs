@@ -21,12 +21,12 @@ internal static unsafe class WindowClasses
     public static nint AppIcon { get; set; }
     public static nint AppIconSmall { get; set; }
 
-    public static nint Create(IMessageTarget target, string className, uint exStyle, uint style, int x, int y, int width, int height, nint parent = 0)
+    public static nint Create(IMessageTarget target, string className, uint exStyle, uint style, int x, int y, int width, int height, nint parent = 0, string title = "Su-Su")
     {
         Register(className);
         creating = target;
         nint hwnd;
-        try { hwnd = CreateWindowEx(exStyle, className, "Su-Su", style, x, y, width, height, parent, 0, GetModuleHandleW(0), 0); }
+        try { hwnd = CreateWindowEx(exStyle, className, title, style, x, y, width, height, parent, 0, GetModuleHandleW(0), 0); }
         finally { creating = null; }
         if (hwnd == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
         targets[hwnd] = target;
@@ -80,10 +80,11 @@ public sealed class UiDispatcher : IMessageTarget, IDisposable
     private nuint nextTimer = 1;
     private readonly int threadId = Environment.CurrentManagedThreadId;
 
-    public UiDispatcher()
+    /// <param name="instanceName">Title of the message window, so a second launch wakes only the instance with the same name (data root).</param>
+    public UiDispatcher(string instanceName = "Su-Su.Instance")
     {
         taskbarCreated = RegisterWindowMessage("TaskbarCreated");
-        Handle = WindowClasses.Create(this, MessageClass, 0, 0, 0, 0, 0, 0, HWND_MESSAGE);
+        Handle = WindowClasses.Create(this, MessageClass, 0, 0, 0, 0, 0, 0, HWND_MESSAGE, instanceName);
         SynchronizationContext.SetSynchronizationContext(new DispatcherContext(this));
     }
 
@@ -188,14 +189,17 @@ public sealed class SingleInstance : IDisposable
         int error = Marshal.GetLastPInvokeError();
         if (handle != 0 && error != ERROR_ALREADY_EXISTS) return new SingleInstance(handle);
         if (handle != 0) CloseHandle(handle);
-        SignalExisting();
+        SignalExisting(name);
         return null;
     }
 
-    public static unsafe bool SignalExisting()
+    /// <summary>Asks the instance with this name (never any other Su-Su instance) to wake up.</summary>
+    public static unsafe bool SignalExisting(string name)
     {
-        nint target = FindWindowEx(HWND_MESSAGE, 0, UiDispatcher.MessageClass, null);
+        nint target = FindWindowEx(HWND_MESSAGE, 0, UiDispatcher.MessageClass, name);
         if (target == 0) return false;
+        // This (just launched, foreground) process lets the running instance take the foreground for its window.
+        if (GetWindowThreadProcessId(target, out uint pid) != 0) AllowSetForegroundWindow(pid);
         fixed (char* token = UiDispatcher.ActivateToken)
         {
             var data = new COPYDATASTRUCT { Data = 1, Length = UiDispatcher.ActivateToken.Length * 2, Pointer = (nint)token };

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-23T20:35:20.4184825+00:00",
+  "timestamp": "2026-09-24T13:29:49.6801716+00:00",
   "os": "Microsoft Windows NT 10.0.26200.0",
   "scope": "F00 clipboard-borrowing prototype (C01\u2013C07); not F08 acceptance",
   "cases": [
@@ -23,15 +23,15 @@
       "id": "C02",
       "name": "borrow \u002B restore: plain text",
       "expected": "selection text returned; original formats restored byte-identical; paths not read",
-      "observed": "borrowed; text=marker; restore=restored; 1 formats identical; snapshot 14 ms; copy 49 ms",
+      "observed": "borrowed; text=marker; restore=restored; 1 formats identical; snapshot 24 ms; copy 54 ms",
       "passed": true,
       "borrow": {
         "outcome": "borrowed",
         "text": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)",
         "detail": "candidate from target accepted",
-        "snapshotMs": 13.6162,
-        "copyWaitMs": 49.188,
-        "totalMs": 159.725,
+        "snapshotMs": 23.9581,
+        "copyWaitMs": 53.8651,
+        "totalMs": 178.8895,
         "restore": "restored"
       }
     },
@@ -39,15 +39,15 @@
       "id": "C02",
       "name": "borrow \u002B restore: HTML \u002B text",
       "expected": "selection text returned; original formats restored byte-identical; paths not read",
-      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 14 ms; copy 46 ms",
+      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 25 ms; copy 57 ms",
       "passed": true,
       "borrow": {
         "outcome": "borrowed",
         "text": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)",
         "detail": "candidate from target accepted",
-        "snapshotMs": 13.6068,
-        "copyWaitMs": 46.117,
-        "totalMs": 128.3974,
+        "snapshotMs": 25.1556,
+        "copyWaitMs": 57.3448,
+        "totalMs": 166.2296,
         "restore": "restored"
       }
     },
@@ -55,15 +55,15 @@
       "id": "C02",
       "name": "borrow \u002B restore: RTF \u002B text",
       "expected": "selection text returned; original formats restored byte-identical; paths not read",
-      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 18 ms; copy 49 ms",
+      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 19 ms; copy 55 ms",
       "passed": true,
       "borrow": {
         "outcome": "borrowed",
         "text": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)",
         "detail": "candidate from target accepted",
-        "snapshotMs": 18.1283,
-        "copyWaitMs": 49.0241,
-        "totalMs": 142.2375,
+        "snapshotMs": 18.8766,
+        "copyWaitMs": 55.3833,
+        "totalMs": 146.574,
         "restore": "restored"
       }
     },
@@ -71,15 +71,15 @@
       "id": "C02",
       "name": "borrow \u002B restore: DIB",
       "expected": "selection text returned; original formats restored byte-identical; paths not read",
-      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 11 ms; copy 55 ms",
+      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 21 ms; copy 60 ms",
       "passed": true,
       "borrow": {
         "outcome": "borrowed",
         "text": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)",
         "detail": "candidate from target accepted",
-        "snapshotMs": 11.2129,
-        "copyWaitMs": 55.1113,
-        "totalMs": 146.3607,
+        "snapshotMs": 20.7458,
+        "copyWaitMs": 60.0278,
+        "totalMs": 152.7416,
         "restore": "restored"
       }
     },
@@ -87,15 +87,15 @@
       "id": "C02",
       "name": "borrow \u002B restore: CF_HDROP path list",
       "expected": "selection text returned; original formats restored byte-identical; paths not read",
-      "observed": "borrowed; text=marker; restore=restored; 1 formats identical; snapshot 15 ms; copy 46 ms",
+      "observed": "borrowed; text=marker; restore=restored; 1 formats identical; snapshot 16 ms; copy 50 ms",
       "passed": true,
       "borrow": {
         "outcome": "borrowed",
         "text": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)",
         "detail": "candidate from target accepted",
-        "snapshotMs": 14.6984,
-        "copyWaitMs": 45.9735,
-        "totalMs": 125.6307,
+        "snapshotMs": 16.1115,
+        "copyWaitMs": 49.6259,
+        "totalMs": 140.0221,
         "restore": "restored"
       }
     },
@@ -103,15 +103,15 @@
       "id": "C02",
       "name": "borrow \u002B restore: text \u002B history exclusion marker",
       "expected": "selection text returned; original formats restored byte-identical; paths not read",
-      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 16 ms; copy 66 ms",
+      "observed": "borrowed; text=marker; restore=restored; 2 formats identical; snapshot 20 ms; copy 61 ms",
       "passed": true,
       "borrow": {
         "outcome": "borrowed",
         "text": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)",
         "detail": "candidate from target accepted",
-        "snapshotMs": 16.1937,
-        "copyWaitMs": 66.043,
-        "totalMs": 147.397,
+        "snapshotMs": 19.8321,
+        "copyWaitMs": 60.5169,
+        "totalMs": 162.9031,
         "restore": "restored"
       }
     },
@@ -125,9 +125,9 @@
         "outcome": "cancelled",
         "text": null,
         "detail": "snapshot refused before copy: unsupported format \u0027Su-Su F00 Private Format\u0027",
-        "snapshotMs": 16.1096,
+        "snapshotMs": 23.9552,
         "copyWaitMs": 0,
-        "totalMs": 75.32,
+        "totalMs": 88.5605,
         "restore": null
       }
     },
@@ -141,9 +141,9 @@
         "outcome": "cancelled",
         "text": null,
         "detail": "snapshot refused before copy: virtual files",
-        "snapshotMs": 13.0414,
+        "snapshotMs": 20.1067,
         "copyWaitMs": 0,
-        "totalMs": 77.2811,
+        "totalMs": 91.6474,
         "restore": null
       }
     },
@@ -157,9 +157,9 @@
         "outcome": "cancelled",
         "text": null,
         "detail": "snapshot refused before copy: over 16 MiB",
-        "snapshotMs": 18.2537,
+        "snapshotMs": 25.0756,
         "copyWaitMs": 0,
-        "totalMs": 82.1328,
+        "totalMs": 88.1217,
         "restore": null
       }
     },
@@ -167,15 +167,15 @@
       "id": "C03",
       "name": "refuse before copy: delayed rendering slower than 200 ms",
       "expected": "snapshot helper killed at budget; no copy; caller returns promptly",
-      "observed": "cancelled: snapshot exceeded 200 ms (e.g. slow delayed rendering); helper killed before any copy; untouched=True; borrow returned after 290 ms (snapshot 228 ms)",
+      "observed": "cancelled: snapshot exceeded 200 ms (e.g. slow delayed rendering); helper killed before any copy; untouched=True; borrow returned after 290 ms (snapshot 224 ms)",
       "passed": true,
       "borrow": {
         "outcome": "cancelled",
         "text": null,
         "detail": "snapshot exceeded 200 ms (e.g. slow delayed rendering); helper killed before any copy",
-        "snapshotMs": 228.4634,
+        "snapshotMs": 223.8589,
         "copyWaitMs": 0,
-        "totalMs": 289.5379,
+        "totalMs": 289.8851,
         "restore": null
       }
     },
@@ -189,9 +189,9 @@
         "outcome": "cancelled",
         "text": null,
         "detail": "focus changed during snapshot",
-        "snapshotMs": 10.3249,
+        "snapshotMs": 12.9923,
         "copyWaitMs": 0,
-        "totalMs": 229.117,
+        "totalMs": 224.709,
         "restore": null
       }
     },
@@ -199,15 +199,15 @@
       "id": "C04",
       "name": "another process copies while waiting",
       "expected": "not read as selection; newest content kept, not restored",
-      "observed": "rejected: update owned by pid 0, not the target 11568; latest content kept; clipboard now \u0027Su-Su third-party copy\u0027",
+      "observed": "rejected: update owned by pid 0, not the target 12660; latest content kept; clipboard now \u0027Su-Su third-party copy\u0027",
       "passed": true,
       "borrow": {
         "outcome": "rejected",
         "text": null,
-        "detail": "update owned by pid 0, not the target 11568; latest content kept",
-        "snapshotMs": 24.971,
-        "copyWaitMs": 95.4438,
-        "totalMs": 197.5746,
+        "detail": "update owned by pid 0, not the target 12660; latest content kept",
+        "snapshotMs": 20.8933,
+        "copyWaitMs": 84.0378,
+        "totalMs": 170.6098,
         "restore": "not-restored"
       }
     },
@@ -221,9 +221,9 @@
         "outcome": "rejected",
         "text": null,
         "detail": "2 updates while waiting: source ambiguous; latest content kept",
-        "snapshotMs": 17.3619,
-        "copyWaitMs": 42.5495,
-        "totalMs": 120.252,
+        "snapshotMs": 16.7749,
+        "copyWaitMs": 42.5846,
+        "totalMs": 116.4315,
         "restore": "not-restored"
       }
     },
@@ -231,15 +231,15 @@
       "id": "C05",
       "name": "target does not copy (password box)",
       "expected": "no candidate after 300 ms; clipboard unchanged",
-      "observed": "no-candidate: no clipboard update within 300 ms; nothing changed, nothing restored; copy wait 322 ms; unchanged=True",
+      "observed": "no-candidate: no clipboard update within 300 ms; nothing changed, nothing restored; copy wait 314 ms; unchanged=True",
       "passed": true,
       "borrow": {
         "outcome": "no-candidate",
         "text": null,
         "detail": "no clipboard update within 300 ms; nothing changed, nothing restored",
-        "snapshotMs": 15.1763,
-        "copyWaitMs": 322.3425,
-        "totalMs": 415.8928,
+        "snapshotMs": 13.2211,
+        "copyWaitMs": 314.2878,
+        "totalMs": 369.7252,
         "restore": null
       }
     },
@@ -247,15 +247,15 @@
       "id": "C06",
       "name": "restore blocked by a clipboard holder",
       "expected": "bounded retry, message shown, current content kept",
-      "observed": "borrowed; restore=\u672A\u80FD\u6062\u590D\u526A\u8D34\u677F\uFF0C\u5F53\u524D\u5185\u5BB9\u5DF2\u4FDD\u7559 (clipboard held by another process); returned after 340 ms; clipboard now has marker=False",
-      "passed": false,
+      "observed": "borrowed; restore=\u672A\u80FD\u6062\u590D\u526A\u8D34\u677F\uFF0C\u5F53\u524D\u5185\u5BB9\u5DF2\u4FDD\u7559 (clipboard held by another process); returned after 351 ms; clipboard now \u0027Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdi\u0027; sequence after holder=1374",
+      "passed": true,
       "borrow": {
         "outcome": "borrowed",
         "text": "Su-Su selection marker alpha beta \u4E2D\u6587 gamma (WinForms RichEdit)",
         "detail": "candidate from target accepted",
-        "snapshotMs": 15.4373,
-        "copyWaitMs": 55.3834,
-        "totalMs": 336.5296,
+        "snapshotMs": 18.3935,
+        "copyWaitMs": 63.0112,
+        "totalMs": 343.257,
         "restore": "\u672A\u80FD\u6062\u590D\u526A\u8D34\u677F\uFF0C\u5F53\u524D\u5185\u5BB9\u5DF2\u4FDD\u7559 (clipboard held by another process)"
       }
     },

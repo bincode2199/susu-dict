@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { UI_COMMANDS } from '@protocol/ui';
 import type { Bridge } from '../bridge/bridge';
 import type { UiState } from '../bridge/store';
@@ -11,6 +11,11 @@ import { t } from '../locales/i18n';
 // Main window 520×700 (DESIGN 9): title bar, source card and one result card per service, 32 px status bar.
 const props = defineProps<{ bridge: Bridge; state: UiState }>();
 const text = ref('');
+const source = ref<InstanceType<typeof SourceCard> | null>(null);
+// Typing starts right away when the window opens or is shown again (each show sends a fresh snapshot).
+const focusInput = () => nextTick(() => source.value?.focus());
+onMounted(focusInput);
+watch(() => props.state.window, focusInput);
 const available = computed(() => props.state.window?.features.includes('input-translation') ?? false);
 const from = ref('en');
 const to = ref('zh-Hans');
@@ -39,7 +44,7 @@ function setLanguages(source: string, target: string): void {
     <main class="content">
       <p v-if="state.window?.devPreview" class="preview-note" role="note">{{ t('app.devPreview') }}</p>
       <p v-if="!available" class="preview-note" role="status">{{ t('main.unavailable') }}</p>
-      <SourceCard v-model="text" :from="from" :to="to" :disabled="!available" @submit="submit" @swap="setLanguages(to, from)" @language="setLanguages" />
+      <SourceCard ref="source" v-model="text" :from="from" :to="to" :disabled="!available" @submit="submit" @swap="setLanguages(to, from)" @language="setLanguages" />
       <ResultCard v-for="card in state.translation?.cards ?? []" :key="card.serviceId" :card="card" :from="from" :to="to"
         @toggle="bridge.command(UI_COMMANDS.ToggleCard, { serviceId: card.serviceId })"
         @retry="bridge.command(UI_COMMANDS.RetryCard, { serviceId: card.serviceId })"

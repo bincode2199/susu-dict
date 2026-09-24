@@ -352,6 +352,23 @@ public class ShellCoordinatorTests
         Assert.NotEqual(before, rig.Platform.Session(WindowKind.Settings));
     }
 
+    [Fact] // PER02 measure sequence: three windows open at once, closed in turn → one release timer that releases
+    public void Closing_several_open_windows_starts_one_release_timer()
+    {
+        var provider = new ScriptedProvider("svc", ScriptedProvider.Generous, new Step.Echo("T:"));
+        var config = new ConfigSnapshot(1, 1, 1, 1, TimeSpan.FromSeconds(30));
+        using var rig = new Rig(translateReady: true, sessions: _ => new TranslationSession([provider], new TranslationSessionOptions(config, 1), new InvocationScheduler(new SchedulerLimits()), new ManualClock(), new FixedJitter(), new RecordingUsage()));
+        foreach (var kind in new[] { WindowKind.Settings, WindowKind.Main, WindowKind.Tray }) { rig.Shell.Open(kind); rig.Ready(kind); rig.LastSnapshot(kind); }
+        rig.Shell.OnWindowRequest(WindowKind.Settings, WindowRequest.Close);
+        rig.Shell.OnWindowRequest(WindowKind.Main, WindowRequest.Close);
+        rig.Shell.OnWindowRequest(WindowKind.Tray, WindowRequest.Escape);
+        Assert.Empty(rig.Shell.VisibleWindows);
+        var releaseTimers = rig.Platform.Timers.Where(t => t.Delay == WebViewLifecycle.ReleaseAfter).ToList();
+        var (_, fire) = Assert.Single(releaseTimers);
+        fire();
+        Assert.Contains("release", rig.Platform.Calls);
+    }
+
     [Fact] // J03 window part: "close exits" quits from the main window; minimize only hides
     public void Close_action_exit_quits_and_minimize_hides()
     {
@@ -409,14 +426,44 @@ public class ShellCoordinatorTests
 
 public class Win32ShellTests
 {
-    [Fact] // F03.1: a second instance with the same name is refused (and would signal the first)
-    public void Single_instance_mutex()
+    [Fact] // F03.1: a second instance is refused and wakes only the instance with the same name
+    public void Single_instance_wakes_only_its_own_instance()
     {
-        string name = $"Su-Su.Test.{Guid.NewGuid():N}";
-        using var first = Susu.Windows.Shell.SingleInstance.TryAcquire(name);
-        Assert.NotNull(first);
-        Assert.Null(Susu.Windows.Shell.SingleInstance.TryAcquire(name));
+        Exception? failure = null;
+        var thread = new Thread(() => { try { Body(); } catch (Exception e) { failure = e; } });
+        if (OperatingSystem.IsWindows()) thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) throw failure;
+
+        static void Body()
+        {
+            string mine = $"Su-Su.Test.{Guid.NewGuid():N}", other = $"Su-Su.Test.{Guid.NewGuid():N}";
+            using var first = Susu.Windows.Shell.SingleInstance.TryAcquire(mine);
+            Assert.NotNull(first);
+            using var dispatcher = new Susu.Windows.Shell.UiDispatcher(mine);
+            using var otherDispatcher = new Susu.Windows.Shell.UiDispatcher(other);
+            int woken = 0, wrong = 0;
+            dispatcher.ActivateRequested += () => woken++;
+            otherDispatcher.ActivateRequested += () => wrong++;
+            var sender = new Thread(() => Assert.Null(Susu.Windows.Shell.SingleInstance.TryAcquire(mine))); // second launch
+            sender.Start();
+            while (sender.IsAlive) { PumpOnce(); Thread.Sleep(5); }
+            for (int i = 0; i < 20; i++) { PumpOnce(); Thread.Sleep(5); }
+            Assert.Equal((1, 0), (woken, wrong));
+        }
     }
+
+    private static void PumpOnce()
+    {
+        while (PeekMessage(out var message, 0, 0, 0, 1)) { TranslateMessage(message); DispatchMessage(message); }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct Msg { public nint Hwnd; public uint Message; public nint WParam, LParam; public uint Time; public int X, Y, Private; }
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "PeekMessageW")] private static extern bool PeekMessage(out Msg message, nint hwnd, uint min, uint max, uint remove);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool TranslateMessage(in Msg message);
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "DispatchMessageW")] private static extern nint DispatchMessage(in Msg message);
 
     [Fact] // CFG05: RegisterHotKey success and a visible failure when the chord is already taken
     public void Hotkey_registration_reports_conflicts_with_other_owners()
