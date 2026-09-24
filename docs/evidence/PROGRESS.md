@@ -29,6 +29,7 @@ Environment notes for whoever resumes:
 1. **Resolved (2026-09-24), D-66:** the product owner accepted the two PER03 misses as a known gap. See [F00 § G0 decision](F00/F00.md#g0-decision).
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
 3. **F04 complete (2026-09-24). F05 in progress.** Master agent coordinates one coding agent and one testing agent per module; modules run one at a time. **Now: F05** (network broker, signers, file handles, contract probes), then F06.
+4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window, mostly because one sub-agent ran 370 turns in a single uncompacted context (up to 645k tokens). From now on the master starts a fresh coding agent per sub-item, agents run filtered tests and keep only the tail of the output, and they read files by section. The rules are in [CLAUDE.md](../../CLAUDE.md).
 
 ## History (condensed)
 
