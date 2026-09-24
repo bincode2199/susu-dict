@@ -42,4 +42,30 @@ export default {
     });
     return { blocks: r.body.TextDetections.map(d => ({ text: d.DetectedText })) };
   },
+
+  // ASR multipart (B02-shaped, OpenAI/whisper style): the audio file goes as a real multipart field,
+  // never as a plugin-visible byte array; response is the "segments" output kind.
+  async asrMultipart(req, ctx) {
+    const r = await ctx.$http({
+      method: 'POST',
+      url: req.url,
+      body: { kind: 'multipart', fields: [
+        { name: 'model', text: req.model },
+        { name: 'file', filename: 'audio.wav', contentType: 'audio/wav', file: req.audio.id },
+      ] },
+    });
+    return { kind: 'segments', segments: r.body.segments.map(s => ({ start: s.start, end: s.end, text: s.text })) };
+  },
+
+  // ASR inlineData (B02-shaped, Gemini style): a JSON body with a Base64 audio field, "text" output kind.
+  async asrInline(req, ctx) {
+    const r = await ctx.$http({
+      method: 'POST',
+      url: req.url,
+      headers: { 'content-type': 'application/json' },
+      body: { kind: 'json', value: { InlineAudio: null, Model: req.model } },
+      bodyFiles: [{ pointer: '/InlineAudio', file: req.audio.id }],
+    });
+    return { kind: 'text', text: r.body.text };
+  },
 };

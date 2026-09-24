@@ -155,4 +155,86 @@ public class ContractProbeTests
         }
         finally { session.Shutdown(2000); try { Directory.Delete(leaseDir, recursive: true); } catch (IOException) { } }
     }
+
+    /// <summary>B02-shaped: ASR multipart upload (OpenAI/whisper style) - the audio file goes as a real
+    /// multipart field built from a leased FileHandle, "segments" output kind.</summary>
+    [Fact]
+    public async Task AsrMultipart_uploads_a_real_input_file_handle_through_the_real_broker()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        byte[] audioBytes = System.Text.Encoding.ASCII.GetBytes("RIFF-fake-wav-bytes-0123456789");
+        string leaseDir = Path.Combine(Path.GetTempPath(), "susu-asr-leases-" + Guid.NewGuid().ToString("N"));
+        using var leases = new FileLeases(leaseDir);
+        var lease = leases.Create("asr-input", "wav");
+        File.WriteAllBytes(leases.PathOf(lease), audioBytes);
+
+        LoopbackHttpRequest? seen = null;
+        using var server = new LoopbackHttpServer(req => { seen = req; return LoopbackHttpResponse.Json(200, """{"segments":[{"start":0,"end":1.2,"text":"hi there"}]}"""); });
+        using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false,
+            MakeBroker: () => new Broker(leases: leases)));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load("vendor", "plugins/vendor").Ok);
+            string requestJson = "{\"url\":\"" + server.Origin + "/asr\",\"model\":\"whisper-1\",\"audio\":{\"id\":\"" + lease.Id + "\"}}";
+            var outcome = await CapabilityClient.InvokeAsync(session, "vendor", "asrMultipart", requestJson, "job-asr-multipart",
+                [server.Origin], ContractsJson.Default.AsrResult, handles: [lease.Id], cancellationToken: TestContext.Current.CancellationToken);
+            Assert.True(outcome.Ok, outcome.ErrorDetail);
+            Assert.Equal("segments", outcome.Result!.Kind);
+            Assert.Single(outcome.Result.Segments!);
+            Assert.Equal("hi there", outcome.Result.Segments![0].Text);
+
+            // The real audio bytes and the model field actually reached the server as multipart content
+            // (B02: "整包大小可核验" - the whole upload package, not just a summary, is checkable).
+            Assert.NotNull(FindSubsequence(seen!.Body, audioBytes));
+            Assert.NotNull(FindSubsequence(seen.Body, "whisper-1"u8.ToArray()));
+            Assert.Contains("multipart/form-data", seen.Headers["Content-Type"]);
+        }
+        finally { session.Shutdown(2000); try { Directory.Delete(leaseDir, recursive: true); } catch (IOException) { } }
+    }
+
+    /// <summary>B02-shaped: ASR inlineData (Gemini style) - a JSON Base64 audio field, "text" output kind.</summary>
+    [Fact]
+    public async Task AsrInline_round_trips_a_real_input_file_handle_through_the_real_broker()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        byte[] audioBytes = [1, 2, 3, 4, 5, 6, 7, 8];
+        string leaseDir = Path.Combine(Path.GetTempPath(), "susu-asr-inline-leases-" + Guid.NewGuid().ToString("N"));
+        using var leases = new FileLeases(leaseDir);
+        var lease = leases.Create("asr-input", "wav");
+        File.WriteAllBytes(leases.PathOf(lease), audioBytes);
+
+        LoopbackHttpRequest? seen = null;
+        using var server = new LoopbackHttpServer(req => { seen = req; return LoopbackHttpResponse.Json(200, """{"text":"transcribed text"}"""); });
+        using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false,
+            MakeBroker: () => new Broker(leases: leases)));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load("vendor", "plugins/vendor").Ok);
+            string requestJson = "{\"url\":\"" + server.Origin + "/asr-inline\",\"model\":\"gemini-2.5-flash\",\"audio\":{\"id\":\"" + lease.Id + "\"}}";
+            var outcome = await CapabilityClient.InvokeAsync(session, "vendor", "asrInline", requestJson, "job-asr-inline",
+                [server.Origin], ContractsJson.Default.AsrResult, handles: [lease.Id], cancellationToken: TestContext.Current.CancellationToken);
+            Assert.True(outcome.Ok, outcome.ErrorDetail);
+            Assert.Equal("text", outcome.Result!.Kind);
+            Assert.Equal("transcribed text", outcome.Result.Text);
+
+            var sentBody = System.Text.Json.Nodes.JsonNode.Parse(seen!.Body)!;
+            Assert.Equal(Convert.ToBase64String(audioBytes), sentBody["InlineAudio"]!.GetValue<string>());
+        }
+        finally { session.Shutdown(2000); try { Directory.Delete(leaseDir, recursive: true); } catch (IOException) { } }
+    }
+
+    private static int? FindSubsequence(byte[] haystack, byte[] needle)
+    {
+        for (int i = 0; i + needle.Length <= haystack.Length; i++)
+        {
+            bool match = true;
+            for (int j = 0; j < needle.Length; j++) if (haystack[i + j] != needle[j]) { match = false; break; }
+            if (match) return i;
+        }
+        return null;
+    }
 }
