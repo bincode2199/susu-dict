@@ -365,4 +365,24 @@ public class SupervisorTests
         Assert.NotSame(sessions[0], sessions[1]);
         Assert.False(sessions[0].Disposed); // the crashed session already disconnected itself; Supervisor did not also Dispose it here
     }
+
+    [Fact]
+    public void A_stale_Disconnected_from_a_replaced_session_does_not_disturb_the_new_one()
+    {
+        // Regression: HostSession.Dispose() joins its reader thread, so a just-replaced session's
+        // Disconnected can still fire (from that reader thread) after ManualRestart has already
+        // installed a fresh session under the same Supervisor. Before OnDisconnected checked identity,
+        // this stale notification nulled out - and triggered a spurious restart of - the live session,
+        // corrupting state the caller (PluginProvider.TryGetCurrent) would otherwise see.
+        var clock = new ManualClock();
+        var supervisor = new Supervisor<FakeSession>(() => new FakeSession(), clock);
+        var first = supervisor.Start();
+        var second = supervisor.ManualRestart();
+        Assert.NotSame(first, second);
+
+        first.Crash(); // late/stale notification from the already-replaced session
+
+        Assert.Same(second, supervisor.Current); // still the fresh session, not nulled
+        Assert.False(supervisor.Stopped);
+    }
 }

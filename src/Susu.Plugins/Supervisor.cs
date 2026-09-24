@@ -63,15 +63,20 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
     private TSession LaunchAndWatch()
     {
         var started = launch();
-        started.Disconnected += OnDisconnected;
+        // Capture the specific instance: HostSession.Dispose() joins its reader thread, so a
+        // just-replaced session's Disconnected can still fire after ManualRestart (or a fresh
+        // automatic relaunch) has already installed a new one. Without checking identity here,
+        // that stale notification would null out - and trigger a spurious restart of - the live
+        // session it has nothing to do with.
+        started.Disconnected += () => OnDisconnected(started);
         return started;
     }
 
-    private void OnDisconnected()
+    private void OnDisconnected(TSession source)
     {
         lock (gate)
         {
-            if (disposed || stopped) return;
+            if (disposed || stopped || !ReferenceEquals(session, source)) return;
             session = null;
         }
         _ = RestartAsync();
@@ -105,23 +110,31 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
     /// <summary>Manual recovery after the automatic budget was exhausted (the settings "restart plugin service" action).</summary>
     public TSession ManualRestart()
     {
+        TSession? old;
+        TSession fresh;
         lock (gate)
         {
             stopped = false;
             recentFailures.Clear();
-            session?.Dispose();
-            session = LaunchAndWatch();
-            return session;
+            old = session;
+            session = fresh = LaunchAndWatch();
         }
+        // Disposed outside the lock: HostSession.Dispose() joins its reader thread, and that thread's
+        // own Disconnected handler needs this same lock (now guarded by the identity check above, but
+        // still real work) - disposing while holding the lock would stall this call on that join.
+        old?.Dispose();
+        return fresh;
     }
 
     public void Dispose()
     {
+        TSession? old;
         lock (gate)
         {
             disposed = true;
-            session?.Dispose();
+            old = session;
             session = null;
         }
+        old?.Dispose(); // outside the lock, same reader-thread-join reasoning as ManualRestart
     }
 }
