@@ -1,7 +1,7 @@
 # F00–F03 implementation checkpoint
 
 > Parent: [DEV-PLAN](../development/DEV-PLAN.md) · Catalog: [docs/README](../README.md)  
-> Child documents: [F00](F00/F00.md) · [F01](F01/F01.md) · [F02](F02/F02.md) · [F03](F03/F03.md) · [F04](F04/F04.md)
+> Child documents: [F00](F00/F00.md) · [F01](F01/F01.md) · [F02](F02/F02.md) · [F03](F03/F03.md) · [F04](F04/F04.md) · [F05](F05/F05.md)
 
 Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundation`. Local commits only; **no remote push** is authorized. Dependencies may be fetched from official sources. No rate-limit reset credits are to be used.
 
@@ -14,6 +14,7 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 | F02 | Complete: settings, secrets, SQLite, leases, logs; 76 tests; exercised inside the AOT `susu.exe`. | [F02](F02/F02.md) |
 | F03 | Complete. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows. Multi-monitor and mixed DPI, a real IME, screen reader, high contrast and PER03 on the real shell moved to the F19 final acceptance on a physical Windows machine (D-67). | [F03](F03/F03.md) |
 | F04 | Complete. Plugin runtime (`Susu.Runtime`), host side (`Susu.Plugins`), production sandbox module `susu_plugin_sandbox.dll`, supervised sessions and `susu-plugin check/test`. X01–X07 re-ran 54/54 against the production module; S09, J04, J06 and J07 pass; 279 tests. Live stream-chunk limits wait for the first streaming capability. | [F04](F04/F04.md) |
+| F05 | In progress: coding agent implementing F05.1–F05.4. | [F05](F05/F05.md) |
 
 Environment notes for whoever resumes:
 
@@ -27,7 +28,7 @@ Environment notes for whoever resumes:
 
 1. **Resolved (2026-09-24), D-66:** the product owner accepted the two PER03 misses as a known gap. See [F00 § G0 decision](F00/F00.md#g0-decision).
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
-3. **F04 complete (2026-09-24).** Master agent coordinates one coding agent and one testing agent per module; modules run one at a time. **Next: F05** (network broker, signers, file handles, contract probes), then F06.
+3. **F04 complete (2026-09-24). F05 in progress.** Master agent coordinates one coding agent and one testing agent per module; modules run one at a time. **Now: F05** (network broker, signers, file handles, contract probes), then F06.
 
 ## History (condensed)
 
