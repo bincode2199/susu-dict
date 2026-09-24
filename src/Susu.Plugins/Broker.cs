@@ -5,11 +5,42 @@ using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Susu.Abstractions;
 using Susu.Contracts;
+using Susu.Domain;
 using Susu.Net;
 using Susu.Runtime;
 using Susu.Storage;
 
 namespace Susu.Plugins;
+
+/// <summary>
+/// S02 account/origin binding (PLAN 4.5.4.1), wired into Broker's secret resolution when supplied. The
+/// enforcement rule itself (Susu.Domain.CredentialAuthorizer) was already built and unit-tested in F02;
+/// this just adapts it to what Broker has at resolve time (a grant's plugin id/instance id/signer, a
+/// request's origin and credential target).
+///
+/// No production composition root builds one yet: doing so needs a live view of AppSettings.Accounts/
+/// Instances (from ISettingsStore) plus each loaded package's *confirmed* signer identity, and needs
+/// every Invoke/Issue call site to carry an instance id, not just a package id - none of which exists
+/// yet, because nothing calls Invoke with a real vendor account today (F06 is what will wire real
+/// adapters). Exactly what F07 (or F06, whichever lands the first real paid/keyed adapter) must add:
+/// 1. Thread instanceId through HostSession.Invoke/Broker.Issue (currently only pluginId/package flows).
+/// 2. Resolve each package's confirmed PluginIdentity.Signer from the installed-package record (F16),
+///    not assume "unsigned".
+/// 3. Construct one AccountAuthorization from the live ISettingsStore state (rebuild-on-change, same
+///    shape as NetworkBrokerProvider) and pass it into Broker's constructor.
+/// Until then Broker.ResolveSecret falls back to namespacing secrets by plugin id, documented on
+/// <see cref="Broker"/> itself.
+/// </summary>
+public sealed class AccountAuthorization(Func<(IReadOnlyList<AccountSettings> Accounts, IReadOnlyList<InstanceSettings> Instances)> settings)
+{
+    public (CredentialDecision Decision, string? AccountId) Authorize(string instanceId, string packageId, string signer, string secretName, string origin, string use)
+    {
+        var (accounts, instances) = settings();
+        var instance = instances.FirstOrDefault(i => i.Id == instanceId);
+        if (instance is null) return (CredentialDecision.UnknownAccount, null);
+        return CredentialAuthorizer.Authorize(accounts, instance, new PluginIdentity(packageId, signer), secretName, origin, use);
+    }
+}
 
 /// <summary>
 /// Main-process authorization for plugin API calls (PLAN 4.5.4). Grants are unguessable, bound to
@@ -24,7 +55,7 @@ namespace Susu.Plugins;
 /// </summary>
 public sealed class Broker : IDisposable
 {
-    public sealed class GrantInfo(string grant, string requestId, string pluginId, int callId, HashSet<string> origins, HashSet<string> secrets, HashSet<string> handles, DateTime expires)
+    public sealed class GrantInfo(string grant, string requestId, string pluginId, int callId, HashSet<string> origins, HashSet<string> secrets, HashSet<string> handles, DateTime expires, string instanceId, string signer)
     {
         public string Grant { get; } = grant;
         public string RequestId { get; } = requestId;
@@ -36,6 +67,11 @@ public sealed class Broker : IDisposable
         public DateTime Expires { get; } = expires;
         public bool Revoked { get; set; }
         public int InFlight;
+        /// <summary>S02: which configured instance this call belongs to (defaults to PluginId when the
+        /// caller does not track instances separately from packages yet) and the package's confirmed
+        /// signer identity (defaults to "unsigned:&lt;pluginId&gt;" until F16 tracks real signatures).</summary>
+        public string InstanceId { get; } = instanceId;
+        public string Signer { get; } = signer;
     }
 
     /// <summary>
@@ -64,35 +100,40 @@ public sealed class Broker : IDisposable
     private readonly NetworkBroker? ownedNetwork;
     private readonly FileLeases? leases;
     private readonly ISecretStore? secretStore;
+    private readonly AccountAuthorization? accounts;
     private readonly StreamWindow streamWindow = new();
     private readonly Dictionary<string, StreamState> streams = new(StringComparer.Ordinal);
     private int processInFlight;
 
-    public Broker(NetworkBroker? network = null, FileLeases? leases = null, ISecretStore? secretStore = null)
+    public Broker(NetworkBroker? network = null, FileLeases? leases = null, ISecretStore? secretStore = null, AccountAuthorization? accounts = null)
     {
         ownedNetwork = network ?? new NetworkBroker(new NetworkBrokerOptions());
         getNetwork = () => ownedNetwork;
         this.leases = leases;
         this.secretStore = secretStore;
+        this.accounts = accounts;
     }
 
     /// <summary>Reads the current broker on every call instead of fixing one at construction time, so a
     /// proxy/timeout settings change (<see cref="NetworkBrokerProvider"/>) takes effect for the next
     /// request without restarting the plugin host. The provider owns disposal of the brokers it builds.</summary>
-    public Broker(NetworkBrokerProvider provider, FileLeases? leases = null, ISecretStore? secretStore = null)
+    public Broker(NetworkBrokerProvider provider, FileLeases? leases = null, ISecretStore? secretStore = null, AccountAuthorization? accounts = null)
     {
         getNetwork = () => provider.Current;
         this.leases = leases;
         this.secretStore = secretStore;
+        this.accounts = accounts;
     }
 
     public void ApproveLocalOrigin(string origin) => getNetwork().LocalOrigins.Approve(origin);
 
     /// <param name="expiresAt">Test-only override of the 10-minute default grant lifetime (F04.3 S09: a call token is rejected once expired).</param>
-    public GrantInfo Issue(string requestId, string pluginId, int callId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, IEnumerable<string>? handles = null, DateTime? expiresAt = null)
+    public GrantInfo Issue(string requestId, string pluginId, int callId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, IEnumerable<string>? handles = null,
+        DateTime? expiresAt = null, string? instanceId = null, string? signer = null)
     {
         var info = new GrantInfo(Convert.ToHexString(RandomNumberGenerator.GetBytes(24)), requestId, pluginId, callId,
-            [.. origins.Select(o => Origin(new Uri(o)) ?? throw new ArgumentException($"Invalid origin {o}"))], [.. secrets ?? []], [.. handles ?? []], expiresAt ?? DateTime.UtcNow.AddMinutes(10));
+            [.. origins.Select(o => Origin(new Uri(o)) ?? throw new ArgumentException($"Invalid origin {o}"))], [.. secrets ?? []], [.. handles ?? []],
+            expiresAt ?? DateTime.UtcNow.AddMinutes(10), instanceId ?? pluginId, signer ?? $"unsigned:{pluginId}");
         lock (grants) grants[info.Grant] = info;
         return info;
     }
@@ -437,14 +478,26 @@ public sealed class Broker : IDisposable
 
         foreach (string handle in bodyHandles) if (!grant.Handles.Contains(handle)) throw new BrokerDenyException("file handle not granted to this call");
 
-        return new BrokerHttpRequest(method, uri, headers, body, bodyFiles, credentials, (spec, name) => ResolveSecret(grant, spec, name, resolvedSecretValues), sign, responseType, responseFiles, errorPointer, LocalOriginApproved: true);
+        return new BrokerHttpRequest(method, uri, headers, body, bodyFiles, credentials, (spec, name) => ResolveSecret(grant, spec, name, origin, resolvedSecretValues), sign, responseType, responseFiles, errorPointer, LocalOriginApproved: true);
     }
 
-    private string ResolveSecret(GrantInfo grant, CredentialSpec spec, string secretName, List<string> resolvedSecretValues)
+    private string ResolveSecret(GrantInfo grant, CredentialSpec spec, string secretName, string origin, List<string> resolvedSecretValues)
     {
-        _ = spec;
         if (!grant.Secrets.Contains(secretName)) throw new BrokerDenyException($"secret '{secretName}' is not bound to this plugin/account");
-        if (secretStore is null || !secretStore.TryRead(grant.PluginId, secretName, out string value)) throw new BrokerDenyException($"secret '{secretName}' is not configured");
+        // S02: when a real account-binding model is wired (AccountAuthorization - see its class comment
+        // for exactly what F07 must add), the plugin's declared identity/origin must match a user-confirmed
+        // grant for this exact secret/origin/use; a changed package identity or origin never inherits an
+        // existing account. Without one wired, secrets stay namespaced by plugin id only (documented on
+        // Broker itself) - the pre-F07 simplification, not a silent bypass of this check when it exists.
+        string accountId = grant.PluginId;
+        if (accounts is not null)
+        {
+            var (decision, resolvedAccountId) = accounts.Authorize(grant.InstanceId, grant.PluginId, grant.Signer, secretName, origin, spec.Use);
+            if (decision != CredentialDecision.Allowed || resolvedAccountId is null)
+                throw new BrokerDenyException($"credential '{secretName}' not authorized for this identity/origin: {decision}", "auth");
+            accountId = resolvedAccountId;
+        }
+        if (secretStore is null || !secretStore.TryRead(accountId, secretName, out string value)) throw new BrokerDenyException($"secret '{secretName}' is not configured");
         resolvedSecretValues.Add(value); // S10: known-form leak scan checks the response against every secret actually used
         return value;
     }
