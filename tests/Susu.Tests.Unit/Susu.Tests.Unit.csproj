@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Susu.Contracts/Susu.Contracts.csproj" />
+    <ProjectReference Include="../../src/Susu.Domain/Susu.Domain.csproj" />
+    <ProjectReference Include="../../src/Susu.Abstractions/Susu.Abstractions.csproj" />
+    <ProjectReference Include="../../src/Susu.Jobs/Susu.Jobs.csproj" />
+    <ProjectReference Include="../Susu.Testing/Susu.Testing.csproj" />
+    <ProjectReference Include="../../tools/Susu.ContractsGen/Susu.ContractsGen.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../protocol/**/*" Link="protocol/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

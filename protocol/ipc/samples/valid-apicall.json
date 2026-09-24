@@ -1,0 +1,1 @@
+{"protocolVersion":1,"type":"ApiCall","requestId":"r-0001","jobId":"job-7","generation":2,"sequence":3,"pluginId":"com.example.deepl","grant":"9f1c","payload":{"apiId":1,"callId":1,"op":"http","args":{"method":"POST","url":"https://api.deepl.com/v2/translate"}}}

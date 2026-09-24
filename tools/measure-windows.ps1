@@ -1,15 +1,21 @@
-param([ValidateSet('baseline','suspend','low')][string]$MemoryMode='baseline')
+﻿param([ValidateSet('baseline','suspend','low')][string]$MemoryMode='baseline',[int]$Plugins=0,[string]$Executable='artifacts/probes/Susu.Probes.exe',[string]$EvidenceName='')
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 has no [Environment]::TickCount64; use the same clock as the native events.
+Add-Type -TypeDefinition 'public static class SusuTick { [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern ulong GetTickCount64(); public static long Now() { return (long)GetTickCount64(); } }'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
-$evidence = Join-Path $root "docs/evidence/F00/memory-$MemoryMode"
+if (-not $EvidenceName) { $EvidenceName = if ($Plugins -gt 0) { "memory-full-$MemoryMode-$Plugins-plugins" } else { "memory-$MemoryMode" } }
+$evidence = Join-Path $root "docs/evidence/F00/$EvidenceName"
 New-Item -ItemType Directory -Force $evidence | Out-Null
 $run = Join-Path $root ('artifacts/window-measure-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $run | Out-Null
 $out = Join-Path $run 'events.jsonl'
 $err = Join-Path $run 'stderr.txt'
-$process = Start-Process -FilePath "$root/artifacts/probes/Susu.Probes.exe" -ArgumentList '--measure-windows',"$root/ui/dist",$MemoryMode -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+# Plugins > 0: PER02 whole-tree workload (sandboxed plugin host with N runtimes + UI windows).
+$arguments = if ($Plugins -gt 0) { @('--measure-full',"$root/ui/dist","$Plugins",$MemoryMode,'full') } else { @('--measure-windows',"$root/ui/dist",$MemoryMode) }
+$process = Start-Process -FilePath (Join-Path $root $Executable) -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
 $processId = $process.Id
+$null = $process.Handle # Windows PowerShell 5.1: cache the handle or ExitCode stays null
 Write-Output "Measurement PID $processId, events $out"
 $rows = [System.Collections.Generic.List[object]]::new()
 function Read-TreeSample([double]$seconds) {
@@ -42,11 +48,11 @@ try {
     if (-not $hidden) { throw 'All-window readiness deadline exceeded' }
     foreach ($seconds in @(0,60,240,300,540,600,660,840,899)) {
         $targetTick = [long]$hidden.tick + $seconds * 1000
-        while ([Environment]::TickCount64 -lt $targetTick) {
+        while ([SusuTick]::Now() -lt $targetTick) {
             if ($process.HasExited) { throw "Measurement exited early: $($process.ExitCode)" }
             Start-Sleep -Milliseconds 200
         }
-        Read-TreeSample (([Environment]::TickCount64 - [long]$hidden.tick)/1000.0)
+        Read-TreeSample (([SusuTick]::Now() - [long]$hidden.tick)/1000.0)
     }
     if (-not $process.WaitForExit(15000)) { throw 'Measurement did not exit within its bounded lifecycle' }
     if ($process.ExitCode -ne 0) { throw "Measurement failed: $($process.ExitCode)" }
@@ -59,3 +65,4 @@ finally {
     if (Test-Path $err) { Copy-Item $err "$evidence/windows-measure-errors.txt" }
     $process.Dispose()
 }
+

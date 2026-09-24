@@ -6,5 +6,7 @@
     <PackageVersion Include="Jint" Version="4.16.3" />
     <PackageVersion Include="NSec.Cryptography" Version="26.4.0" />
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <!-- Test-only (never referenced by src/ projects). -->
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(susu_quickjs C)
+# Static CRT: no VC++ redistributable is required on a clean Windows 11 system.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 if(NOT DEFINED QUICKJS_SOURCE)
   message(FATAL_ERROR "QUICKJS_SOURCE must point to the pinned source tree")
 endif()

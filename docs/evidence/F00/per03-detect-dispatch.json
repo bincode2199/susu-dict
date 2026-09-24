@@ -1,0 +1,97 @@
+{
+  "timestamp": "2026-09-23T20:51:06.1621437+00:00",
+  "elsFirstCallMs": 17.141,
+  "rows": [
+    {
+      "case": "english",
+      "path": "unicode-fast-path",
+      "detectMs": {
+        "samples": 30,
+        "p50": 0.014,
+        "p95": 0.017,
+        "max": 0.048,
+        "min": 0.008,
+        "mean": 0.015
+      },
+      "dispatchMs": {
+        "samples": 30,
+        "p50": 0.306,
+        "p95": 0.57,
+        "max": 0.653,
+        "min": 0.22,
+        "mean": 0.338
+      },
+      "totalMs": {
+        "samples": 30,
+        "p50": 0.322,
+        "p95": 0.583,
+        "max": 0.667,
+        "min": 0.228,
+        "mean": 0.353
+      },
+      "detected": "en"
+    },
+    {
+      "case": "chinese",
+      "path": "unicode-fast-path",
+      "detectMs": {
+        "samples": 30,
+        "p50": 0.014,
+        "p95": 0.02,
+        "max": 0.042,
+        "min": 0.011,
+        "mean": 0.015
+      },
+      "dispatchMs": {
+        "samples": 30,
+        "p50": 0.328,
+        "p95": 0.587,
+        "max": 0.6,
+        "min": 0.237,
+        "mean": 0.363
+      },
+      "totalMs": {
+        "samples": 30,
+        "p50": 0.341,
+        "p95": 0.604,
+        "max": 0.614,
+        "min": 0.252,
+        "mean": 0.378
+      },
+      "detected": "zh-Hans"
+    },
+    {
+      "case": "mixed",
+      "path": "els",
+      "detectMs": {
+        "samples": 30,
+        "p50": 0.056,
+        "p95": 0.096,
+        "max": 0.337,
+        "min": 0.043,
+        "mean": 0.069
+      },
+      "dispatchMs": {
+        "samples": 30,
+        "p50": 0.304,
+        "p95": 0.552,
+        "max": 0.568,
+        "min": 0.262,
+        "mean": 0.327
+      },
+      "totalMs": {
+        "samples": 30,
+        "p50": 0.361,
+        "p95": 0.612,
+        "max": 0.627,
+        "min": 0.316,
+        "mean": 0.397
+      },
+      "detected": "zh-Hans"
+    }
+  ],
+  "notes": [
+    "Total = detection \u002B grant issue \u002B Invoke frame serialization and pipe write to the sandboxed plugin host (first request dispatched to the provider).",
+    "ElsFirstCallMs is the one-time service resolution \u002B first recognition in a process; the product should resolve ELS at startup or on first idle, not on the hotkey path."
+  ]
+}

@@ -1,0 +1,399 @@
+{
+  "generated": "2026-09-23T20:47:40.481Z",
+  "lockfiles": [
+    "tools/Susu.Probes/packages.lock.json"
+  ],
+  "nuget": [
+    {
+      "id": "libsodium",
+      "version": "1.0.22",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:ISC",
+      "copyright": "© 2026 Frank Denis",
+      "projectUrl": "https://libsodium.org/",
+      "licenseFiles": [
+        "LICENSE"
+      ],
+      "note": null
+    },
+    {
+      "id": "Microsoft.Data.Sqlite",
+      "version": "10.0.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "projectUrl": "https://docs.microsoft.com/dotnet/standard/data/sqlite/",
+      "licenseFiles": [],
+      "note": null
+    },
+    {
+      "id": "Microsoft.Data.Sqlite.Core",
+      "version": "10.0.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "projectUrl": "https://docs.microsoft.com/dotnet/standard/data/sqlite/",
+      "licenseFiles": [],
+      "note": null
+    },
+    {
+      "id": "Microsoft.DotNet.ILCompiler",
+      "version": "10.0.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": false,
+      "license": "expression:MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "projectUrl": "https://dot.net/",
+      "licenseFiles": [],
+      "note": "build tool; the NativeAOT runtime it links into the executable is .NET (MIT, see .NET ThirdPartyNotices)"
+    },
+    {
+      "id": "Microsoft.NET.ILLink.Tasks",
+      "version": "10.0.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": false,
+      "license": "expression:MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "projectUrl": "https://dot.net/",
+      "licenseFiles": [],
+      "note": "build tool; the NativeAOT runtime it links into the executable is .NET (MIT, see .NET ThirdPartyNotices)"
+    },
+    {
+      "id": "Microsoft.Web.WebView2",
+      "version": "1.0.4191.47",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "file:LICENSE.txt",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "projectUrl": "https://aka.ms/webview",
+      "licenseFiles": [
+        "LICENSE.txt",
+        "NOTICE.txt"
+      ],
+      "note": null
+    },
+    {
+      "id": "NSec.Cryptography",
+      "version": "26.4.0",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:MIT",
+      "copyright": "© 2026 Klaus Hartke",
+      "projectUrl": "https://nsec.rocks/",
+      "licenseFiles": [
+        "LICENSE",
+        "NOTICE"
+      ],
+      "note": null
+    },
+    {
+      "id": "runtime.win-x64.Microsoft.DotNet.ILCompiler",
+      "version": "10.0.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "projectUrl": "https://dot.net/",
+      "licenseFiles": [],
+      "note": "NativeAOT runtime linked into the executable (.NET, MIT; see .NET ThirdPartyNotices)"
+    },
+    {
+      "id": "SQLitePCLRaw.bundle_e_sqlite3",
+      "version": "2.1.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "projectUrl": null,
+      "licenseFiles": [],
+      "note": null
+    },
+    {
+      "id": "SQLitePCLRaw.core",
+      "version": "2.1.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "projectUrl": null,
+      "licenseFiles": [],
+      "note": null
+    },
+    {
+      "id": "SQLitePCLRaw.lib.e_sqlite3",
+      "version": "2.1.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "projectUrl": null,
+      "licenseFiles": [],
+      "note": null
+    },
+    {
+      "id": "SQLitePCLRaw.provider.e_sqlite3",
+      "version": "2.1.12",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:Apache-2.0",
+      "copyright": "Copyright 2014-2024 SourceGear, LLC",
+      "projectUrl": null,
+      "licenseFiles": [],
+      "note": null
+    },
+    {
+      "id": "YamlDotNet",
+      "version": "18.1.0",
+      "usedBy": [
+        "Susu.Probes"
+      ],
+      "redistributed": true,
+      "license": "expression:MIT",
+      "copyright": "Copyright (c) Antoine Aubry and contributors",
+      "projectUrl": "https://github.com/aaubry/YamlDotNet/wiki",
+      "licenseFiles": [],
+      "note": null
+    }
+  ],
+  "native": [
+    {
+      "name": "QuickJS-NG",
+      "version": "v0.17.0 (6d46d07d04041b40f4f49eaa7fdebe44c314c699)",
+      "license": "MIT",
+      "licenseFile": "LICENSE in pinned source",
+      "linkedInto": "susu_quickjs.dll (static)"
+    },
+    {
+      "name": "Microsoft WebView2 loader (static library)",
+      "version": "1.0.4191.47",
+      "license": "Microsoft WebView2 SDK license (LICENSE.txt in package)",
+      "licenseFile": "microsoft.web.webview2/1.0.4191.47/LICENSE.txt",
+      "linkedInto": "susu_windows_probe.dll (static)"
+    },
+    {
+      "name": "MSVC static runtime (CRT/UCRT)",
+      "version": "14.44.35207",
+      "license": "Visual Studio license terms (redistributable code, statically linked)",
+      "licenseFile": "Visual Studio Build Tools license",
+      "linkedInto": "susu_quickjs.dll, susu_windows_probe.dll (/MT since F00)"
+    }
+  ],
+  "npm": [
+    {
+      "name": "@babel/helper-string-parser",
+      "version": "7.29.7",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@babel/helper-validator-identifier",
+      "version": "7.29.7",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@babel/parser",
+      "version": "7.29.9",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@babel/types",
+      "version": "7.29.8",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@jridgewell/sourcemap-codec",
+      "version": "1.6.0",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/compiler-core",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/compiler-dom",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/compiler-sfc",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/compiler-ssr",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/reactivity",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/runtime-core",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/runtime-dom",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/server-renderer",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "@vue/shared",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "csstype",
+      "version": "3.2.3",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "entities",
+      "version": "7.0.1",
+      "license": "BSD-2-Clause",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "estree-walker",
+      "version": "2.0.2",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "magic-string",
+      "version": "0.30.21",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "nanoid",
+      "version": "3.3.19",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "picocolors",
+      "version": "1.1.1",
+      "license": "ISC",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "postcss",
+      "version": "8.5.28",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "source-map-js",
+      "version": "1.2.1",
+      "license": "BSD-3-Clause",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    },
+    {
+      "name": "vue",
+      "version": "3.5.43",
+      "license": "MIT",
+      "licenseFiles": [
+        "LICENSE"
+      ]
+    }
+  ],
+  "unknownLicenses": [],
+  "notes": [
+    "libsodium.dll (via NSec) imports VCRUNTIME140.dll; a clean Windows 11 system does not guarantee the VC++ runtime. Decide app-local VCRUNTIME redistribution or a static Ed25519 verifier before F18.",
+    "Development-only tools (Node, pnpm, Vite, TypeScript, vue-tsc, CMake, MSVC toolchain, Firefox/Electron test targets) are not shipped."
+  ]
+}

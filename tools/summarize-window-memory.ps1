@@ -1,7 +1,7 @@
-param([string]$InputDirectory='docs/evidence/F00/memory-suspend',[int]$LogicalProcessors=8)
+﻿param([string]$InputDirectory='docs/evidence/F00/memory-suspend',[int]$LogicalProcessors=8,[string]$Scope='F00 eight-window UI fixture only; excludes plugin host, services and full production state')
 $ErrorActionPreference='Stop'
 if($LogicalProcessors -le 0){throw 'LogicalProcessors must be positive'}
-$samples=@(Get-Content (Join-Path $InputDirectory 'windows-memory-samples.json') -Raw | ConvertFrom-Json)
+$samples=@(Get-Content (Join-Path $InputDirectory 'windows-memory-samples.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ })
 function At([int]$second){$samples | Sort-Object { [Math]::Abs($_.secondsAfterHidden-$second) } | Select-Object -First 1}
 function CpuBetween($first,$last){
     $before=@($first.processes | Sort-Object pid)
@@ -17,7 +17,7 @@ function CpuBetween($first,$last){
 $warm=At 300
 $idle=At 899
 [pscustomobject]@{
-    scope='F00 eight-window UI fixture only; excludes plugin host, services and full production state'
+    scope=$Scope
     logicalProcessors=$LogicalProcessors
     warm=[pscustomobject]@{secondsAfterHidden=$warm.secondsAfterHidden;privateWorkingSetMiB=$warm.totalPrivateWorkingSet/1MB;privateBytesMiB=$warm.totalPrivateBytes/1MB;processCount=@($warm.processes).Count;withinFixtureMemoryTarget=$warm.totalPrivateWorkingSet -le 60MB}
     idle=[pscustomobject]@{secondsAfterHidden=$idle.secondsAfterHidden;privateWorkingSetMiB=$idle.totalPrivateWorkingSet/1MB;privateBytesMiB=$idle.totalPrivateBytes/1MB;processCount=@($idle.processes).Count;withinFixtureMemoryTarget=$idle.totalPrivateWorkingSet -le 25MB}

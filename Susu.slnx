@@ -12,7 +12,12 @@
     <Project Path="src/Susu.Ui/Susu.Ui.csproj" />
     <Project Path="src/Susu.Windows/Susu.Windows.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Susu.Testing/Susu.Testing.csproj" />
+    <Project Path="tests/Susu.Tests.Unit/Susu.Tests.Unit.csproj" />
+  </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/Susu.ContractsGen/Susu.ContractsGen.csproj" />
     <Project Path="tools/Susu.Probes/Susu.Probes.csproj" />
   </Folder>
 </Solution>

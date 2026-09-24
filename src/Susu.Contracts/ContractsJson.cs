@@ -1,0 +1,32 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace Susu.Contracts;
+
+/// <summary>Source-generated (NativeAOT-safe) serialization for every contract type.</summary>
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, AllowOutOfOrderMetadataProperties = false, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
+[JsonSerializable(typeof(IpcEnvelope))]
+[JsonSerializable(typeof(HelloPayload))]
+[JsonSerializable(typeof(ChunkPayload))]
+[JsonSerializable(typeof(AckPayload))]
+[JsonSerializable(typeof(ProviderError))]
+[JsonSerializable(typeof(TranslateRequest))]
+[JsonSerializable(typeof(TranslateChunk))]
+[JsonSerializable(typeof(TranslateResult))]
+[JsonSerializable(typeof(TranslateBatchRequest))]
+[JsonSerializable(typeof(TranslateBatchResult))]
+[JsonSerializable(typeof(DictionaryResult))]
+[JsonSerializable(typeof(DetectCandidate[]))]
+[JsonSerializable(typeof(OcrResult))]
+[JsonSerializable(typeof(AsrResult))]
+[JsonSerializable(typeof(OptionsRequest))]
+[JsonSerializable(typeof(OptionsResult))]
+[JsonSerializable(typeof(VocabRequest))]
+[JsonSerializable(typeof(VocabResult))]
+[JsonSerializable(typeof(Voice[]))]
+[JsonSerializable(typeof(UiEnvelope))]
+[JsonSerializable(typeof(TranslationSnapshot))]
+[JsonSerializable(typeof(CardPatch))]
+[JsonSerializable(typeof(CommandResult))]
+[JsonSerializable(typeof(JsonElement))]
+public partial class ContractsJson : JsonSerializerContext;

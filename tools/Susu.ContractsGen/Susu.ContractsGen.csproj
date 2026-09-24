@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Build tool: generates protocol/generated/*.ts from Susu.Contracts. Not shipped. -->
+  <PropertyGroup><OutputType>Exe</OutputType><IsAotCompatible>false</IsAotCompatible><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Susu.Contracts/Susu.Contracts.csproj" /></ItemGroup>
+</Project>

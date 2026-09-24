@@ -1,0 +1,101 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace Susu.Contracts;
+
+[TsExport("ui")]
+[JsonConverter(typeof(JsonStringEnumConverter<WindowKind>))]
+public enum WindowKind { Main, Selection, Clipboard, Ocr, Voice, Transcribe, Settings, Error, Tray }
+
+[TsExport("ui")]
+[JsonConverter(typeof(JsonStringEnumConverter<UiMessageKind>))]
+public enum UiMessageKind { Ready, Command, Result, Snapshot, Patch, Event }
+
+/// <summary>
+/// UI bridge envelope (ARCHITECTURE 6). Grants, secrets and real file paths never appear in it.
+/// Host → page: Snapshot(revision) then Patch(sequence); page → host: Ready, Command(correlationId).
+/// </summary>
+[TsExport("ui")]
+public sealed record UiEnvelope(
+    int UiVersion,
+    UiMessageKind Kind,
+    string WindowSessionId,
+    long Sequence = 0,
+    string? Name = null,
+    string? CorrelationId = null,
+    JsonElement? Payload = null);
+
+[TsExport("ui")]
+[JsonConverter(typeof(JsonStringEnumConverter<CardState>))]
+public enum CardState { CollapsedIdle, Queued, Loading, Streaming, Ready, Failed, Cancelled, Unsupported }
+
+[TsExport("ui")]
+public sealed record CardSnapshot(
+    string ServiceId,
+    string DisplayName,
+    CardState State,
+    bool Collapsed,
+    string Text,
+    ErrorKind? Error = null,
+    bool Chunked = false,
+    bool Dictionary = false);
+
+[TsExport("ui")]
+public sealed record TranslationSnapshot(
+    long Revision,
+    long Generation,
+    string SourceText,
+    string From,
+    string To,
+    CardSnapshot[] Cards,
+    bool Offline = false);
+
+[TsExport("ui")]
+public sealed record CardPatch(long Revision, long Generation, CardSnapshot Card);
+
+[TsExport("ui")]
+public sealed record CommandResult(bool Ok, string? Error = null, JsonElement? Value = null);
+
+/// <summary>
+/// Per-window command whitelist (ARCHITECTURE 6, PLAN 4.5.5). Credential commands are accepted only
+/// from the Settings window; nothing offers a generic HTTP/file/code proxy.
+/// </summary>
+public static class UiCommands
+{
+    public const string SubmitText = "Translation.SubmitText", ToggleCard = "Translation.ToggleCard", RetryCard = "Translation.RetryCard",
+        SelectLanguage = "Translation.SelectLanguage", CopyText = "Window.CopyText", Close = "Window.Close", Pin = "Window.Pin",
+        Minimize = "Window.Minimize", Maximize = "Window.Maximize",
+        SettingsRead = "Settings.Read", SettingsSave = "Settings.Save", ValidateProvider = "Settings.ValidateProvider",
+        LoadOptions = "Settings.LoadOptions", BindAccount = "Settings.BindAccount",
+        SecretWriteNew = "Secret.WriteNew", SecretDelete = "Secret.Delete", SecretExportEncrypted = "Secret.ExportEncrypted", SecretImportEncrypted = "Secret.ImportEncrypted",
+        BeginCapture = "Capture.BeginCapture", StartRecording = "Audio.StartRecording", PauseRecording = "Audio.PauseRecording", StopRecording = "Audio.StopRecording",
+        PickMedia = "Transcription.PickMedia", StartTranscription = "Transcription.Start", PauseTranscription = "Transcription.Pause",
+        ChangeTranslator = "Transcription.ChangeTranslator", Export = "Transcription.Export",
+        Collect = "Vocab.Collect", Speak = "Vocab.Speak", TrayOpen = "Tray.Open", TrayExit = "Tray.Exit";
+
+    private static readonly WindowKind[] resultWindows = [WindowKind.Main, WindowKind.Selection, WindowKind.Clipboard, WindowKind.Ocr, WindowKind.Voice];
+    private static readonly WindowKind[] allWindows = Enum.GetValues<WindowKind>();
+
+    private static readonly Dictionary<string, WindowKind[]> allowed = new(StringComparer.Ordinal)
+    {
+        [SubmitText] = resultWindows, [ToggleCard] = resultWindows, [RetryCard] = resultWindows, [SelectLanguage] = resultWindows,
+        [CopyText] = [.. resultWindows, WindowKind.Transcribe],
+        [Collect] = resultWindows, [Speak] = resultWindows,
+        [Close] = allWindows, [Pin] = [WindowKind.Main, WindowKind.Selection, WindowKind.Clipboard],
+        [Minimize] = [WindowKind.Main, WindowKind.Settings, WindowKind.Transcribe], [Maximize] = [WindowKind.Main, WindowKind.Settings, WindowKind.Transcribe],
+        [SettingsRead] = [WindowKind.Settings], [SettingsSave] = [WindowKind.Settings], [ValidateProvider] = [WindowKind.Settings],
+        [LoadOptions] = [WindowKind.Settings], [BindAccount] = [WindowKind.Settings],
+        [SecretWriteNew] = [WindowKind.Settings], [SecretDelete] = [WindowKind.Settings],
+        [SecretExportEncrypted] = [WindowKind.Settings], [SecretImportEncrypted] = [WindowKind.Settings],
+        [BeginCapture] = [WindowKind.Ocr], [StartRecording] = [WindowKind.Voice], [PauseRecording] = [WindowKind.Voice], [StopRecording] = [WindowKind.Voice],
+        [PickMedia] = [WindowKind.Transcribe], [StartTranscription] = [WindowKind.Transcribe], [PauseTranscription] = [WindowKind.Transcribe],
+        [ChangeTranslator] = [WindowKind.Transcribe], [Export] = [WindowKind.Transcribe],
+        [TrayOpen] = [WindowKind.Tray], [TrayExit] = [WindowKind.Tray],
+    };
+
+    public static IReadOnlyCollection<string> All => allowed.Keys;
+
+    /// <summary>True only for a known command sent from a window kind that may issue it.</summary>
+    public static bool IsAllowed(WindowKind window, string? command)
+        => command is not null && allowed.TryGetValue(command, out var kinds) && Array.IndexOf(kinds, window) >= 0;
+}

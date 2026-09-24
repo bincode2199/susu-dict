@@ -1,0 +1,34 @@
+﻿{
+    "scope":  "Whole Su-Su process tree: eight suspended WebView windows plus AppContainer plugin host with 21 QuickJS plugin runtimes (FullWorkload); stdout redirection conhosts included",
+    "logicalProcessors":  8,
+    "warm":  {
+                 "secondsAfterHidden":  300.172,
+                 "privateWorkingSetMiB":  38.125,
+                 "privateBytesMiB":  330.06640625,
+                 "processCount":  17,
+                 "withinFixtureMemoryTarget":  true
+             },
+    "idle":  {
+                 "secondsAfterHidden":  899.172,
+                 "privateWorkingSetMiB":  12.0078125,
+                 "privateBytesMiB":  19.15234375,
+                 "processCount":  4,
+                 "withinFixtureMemoryTarget":  true
+             },
+    "warmCpu":  {
+                    "from":  240.063,
+                    "to":  300.172,
+                    "elapsedSeconds":  59.361,
+                    "cpuSeconds":  0.03125,
+                    "percentOneCore":  0.052643991846498546,
+                    "percentMachine":  0.0065804989808123182
+                },
+    "idleCpu":  {
+                    "from":  840.047,
+                    "to":  899.172,
+                    "elapsedSeconds":  58.998,
+                    "cpuSeconds":  0,
+                    "percentOneCore":  0,
+                    "percentMachine":  0
+                }
+}

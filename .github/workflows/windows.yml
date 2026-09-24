@@ -1,7 +1,7 @@
-name: Windows NativeAOT probes
+name: Windows NativeAOT build and probes
 on: [push, pull_request, workflow_dispatch]
 jobs:
-  probes:
+  build:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -11,23 +11,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.19.0
+      - name: Install pinned pnpm
+        run: npm install -g pnpm@11.19.0
       - name: Restore locked dependencies
         shell: pwsh
         run: ./tools/dev.ps1 restore
+      - name: Unit and contract tests
+        shell: pwsh
+        run: ./tools/dev.ps1 test
       - name: Fetch pinned native source
         shell: pwsh
         run: ./tools/fetch-f00-dependencies.ps1
-      - name: Build native bridge
+      - name: Build native libraries (static CRT)
         shell: pwsh
         run: node tools/run-clean-env.mjs pwsh -NoProfile -File tools/build-native.ps1
-      - name: Publish NativeAOT
+      - name: Publish NativeAOT probe executable
         shell: pwsh
         run: node tools/run-clean-env.mjs pwsh -NoProfile -File tools/dev.ps1 publish
+      - name: Build UI (locked)
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm run build:probe
       - name: Execute published probes
         shell: pwsh
         run: |
           ./artifacts/probes/Susu.Probes.exe | Tee-Object artifacts/probes/result.json
-          exit $LASTEXITCODE
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: AppContainer access matrix (X01-X07 prototype)
+        shell: pwsh
+        run: ./artifacts/probes/Susu.Probes.exe --x-matrix artifacts/probes/x-matrix.json
+      - name: License inventory
+        run: node tools/license-inventory.mjs artifacts/probes/license-inventory.json tools/Susu.Probes/packages.lock.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

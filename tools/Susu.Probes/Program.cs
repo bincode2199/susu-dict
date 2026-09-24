@@ -13,7 +13,14 @@ if (args.Length == 2 && args[0] == "--x-matrix") return Susu.Probes.PluginHost.X
 if (args.Length == 5 && args[0] == "--engine-bench") return Susu.Probes.PluginHost.EngineBench.Run(args[1], args[2], args[3], int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture));
 if (args.Length == 3 && args[0] == "--webview-bench") return Susu.Probes.PluginHost.EngineBench.RunWebView(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));
 if (args.Length == 4 && args[0] == "--sel-provider") return Susu.Probes.Selection.ProviderProbe.Run(args[1], (nint)long.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), args[3]);
+if (args.Length == 1 && args[0] == "--clip-snapshot") return Susu.Probes.Selection.ClipBorrow.HelperMain();
+if (args.Length >= 4 && args[0] == "--clip-fixture") return Susu.Probes.Selection.ClipMatrix.FixtureMain(args[1..]);
+if (args.Length == 2 && args[0] == "--clip-matrix") return Susu.Probes.Selection.ClipMatrix.Run(args[1]);
 if (args.Length is 3 or 4 && args[0] == "--sel-matrix") return Susu.Probes.Selection.SelMatrix.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), args.Length == 4 ? args[3] : null);
+if (args.Length == 5 && args[0] == "--measure-full") return Susu.Probes.PluginHost.FullWorkload.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), args[3] switch { "suspend" => 1, "low" => 2, _ => 0 }, args[4] == "full");
+if (args.Length == 6 && args[0] == "--latency") { string data = Path.GetFullPath(Path.Combine("artifacts", "probe-data", "latency", Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(data); LatencyProbe.Run(Path.GetFullPath(args[1]), data, int.Parse(args[2]), int.Parse(args[3]), int.Parse(args[4]), Path.GetFullPath(args[5])); return 0; }
+if (args.Length == 3 && args[0] == "--capture") { CaptureProbe.Run(int.Parse(args[1]), Path.GetFullPath(args[2])); return 0; }
+if (args.Length == 3 && args[0] == "--detect-dispatch") return Susu.Probes.PluginHost.DetectDispatch.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));
 if (args.Length == 2 && args[0] == "--calibrate-budget") return Susu.Probes.PluginHost.EngineBench.Calibrate(args[1]);
 
 if (args.Length == 3 && args[0] == "--sandbox-child") return SandboxChild.Run(args[1], int.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture));

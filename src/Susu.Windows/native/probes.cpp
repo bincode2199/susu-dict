@@ -158,3 +158,36 @@ extern "C" __declspec(dllexport) HRESULT susu_webview_probe(const wchar_t* userD
     worker.join();
     return result;
 }
+
+// Ranked ELS language candidates for text (NUL-separated, double-NUL terminated in `output`).
+// The service list is resolved once per process; MappingRecognizeText is the per-call cost.
+extern "C" __declspec(dllexport) HRESULT susu_els_detect(const wchar_t* text, wchar_t* output, unsigned int capacity) {
+    static MAPPING_SERVICE_INFO* services = nullptr;
+    static DWORD count = 0;
+    if (!text || !output || capacity < 2) return E_INVALIDARG;
+    output[0] = output[1] = 0;
+    if (!services) {
+        GUID language = ELS_GUID_LANGUAGE_DETECTION;
+        MAPPING_ENUM_OPTIONS options{};
+        options.Size = sizeof(options);
+        options.pGuid = &language;
+        HRESULT hr = MappingGetServices(&options, &services, &count);
+        if (FAILED(hr)) { services = nullptr; return hr; }
+        if (!count) return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    }
+    MAPPING_PROPERTY_BAG bag{};
+    bag.Size = sizeof(bag);
+    HRESULT hr = MappingRecognizeText(services, text, static_cast<DWORD>(wcslen(text)), 0, nullptr, &bag);
+    if (FAILED(hr)) return hr;
+    size_t used = 0;
+    for (DWORD i = 0; i < bag.dwRangesCount && bag.prgResultRanges; ++i) {
+        const auto& range = bag.prgResultRanges[i];
+        const size_t chars = range.dwDataSize / sizeof(wchar_t);
+        if (used + chars + 1 >= capacity) break;
+        memcpy(output + used, range.pData, chars * sizeof(wchar_t));
+        used += chars;
+    }
+    output[used] = 0;
+    if (used + 1 < capacity) output[used + 1] = 0;
+    return MappingFreePropertyBag(&bag);
+}

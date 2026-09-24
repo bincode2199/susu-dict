@@ -26,3 +26,21 @@ public static partial class ExtendedPlatformProbes
         return samples;
     }
 }
+
+public static partial class LatencyProbe
+{
+    [LibraryImport("susu_windows_probe", EntryPoint = "susu_latency_run", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int RunNative(string folder, string userData, int coldSamples, int hotSamples, int cycles, string outputPath);
+
+    /// <summary>PER03/PER04 driver; writes JSON lines to outputPath.</summary>
+    public static void Run(string folder, string userData, int coldSamples, int hotSamples, int cycles, string outputPath)
+        => Marshal.ThrowExceptionForHR(RunNative(folder, userData, coldSamples, hotSamples, cycles, outputPath));
+}
+
+public static partial class CaptureProbe
+{
+    [LibraryImport("susu_windows_probe", EntryPoint = "susu_capture_probe", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int RunNative(int samples, string outputPath);
+
+    public static void Run(int samples, string outputPath) => Marshal.ThrowExceptionForHR(RunNative(samples, outputPath));
+}

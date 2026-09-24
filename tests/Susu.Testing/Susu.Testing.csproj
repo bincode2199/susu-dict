@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Deterministic test doubles shared by test projects (F01.4). Never referenced by src/ or the product. -->
+  <PropertyGroup><IsAotCompatible>false</IsAotCompatible><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Susu.Abstractions/Susu.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
