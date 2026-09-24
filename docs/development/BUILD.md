@@ -19,6 +19,6 @@ Restore/fetch require network access. Run Windows probes as the actual dev user:
 
 `tools/Susu.JintProbe` is a separate strict NativeAOT comparison, currently failing AOT/trim analysis. It is intentionally not part of the passing solution build. Do not suppress those diagnostics to label the engine compatible.
 
-Use the published probe runner for current checks. The domain/unit test harness will be added with F01.
+Unit and contract tests: `./tools/dev.ps1 test` (xunit v3 on Microsoft.Testing.Platform). Contract drift: `dotnet run --project tools/Susu.ContractsGen -c Release -- . --check`.
 
 To rebuild while another probe executable is running, supply `-OutputDirectory artifacts/selection-probes` to both native build and managed publish scripts. Run the executable from that directory so it uses matching native DLLs. `--selection` checks UIA selection, MSAA protected/unsupported controls, IA2 ABI bounds and helper timeout. `--msaa-diagnostic` is a diagnostic-only longer deadline and does not replace acceptance. `--read-selection <HWND>` and `--read-ia2 <HWND>` run external-window acquisition through the bounded helper; use synthetic data and record the target build and expected result separately.

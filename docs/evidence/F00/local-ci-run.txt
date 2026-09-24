@@ -1,0 +1,15 @@
+Local CI-equivalent run, 2026-09-24 03:09 UTC, Windows dev VM, base commit 23f36f5 plus the dev.ps1 `dotnet test --solution` fix.
+Steps mirror .github/workflows/windows.yml (Windows PowerShell 5.1 used where the workflow says pwsh; the VM has no pwsh).
+
+tools/dev.ps1 restore (--locked-mode)                      exit 0
+tools/dev.ps1 build  (Release, solution)                   exit 0, 0 warnings, 0 errors
+tools/dev.ps1 test   (Microsoft.Testing.Platform, xunit v3) exit 0, 111 total / 111 succeeded / 0 failed
+Susu.ContractsGen --check (TS drift)                       exit 0
+tools/build-native.ps1 (static CRT)                        exit 0
+tools/dev.ps1 publish (NativeAOT win-x64)                  exit 0
+artifacts/probes/Susu.Probes.exe                           exit 0, 12/12 probes passed
+Susu.Probes.exe --x-matrix                                 exit 0, 54/54 X01-X07 prototype cases passed
+ui: pnpm install --frozen-lockfile; pnpm run build:probe   exit 0
+tools/license-inventory.mjs                                13 NuGet, 3 native, 23 npm production packages; unknown licenses 0
+
+The GitHub workflow itself has not been run remotely (no push is authorized).

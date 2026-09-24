@@ -18,9 +18,9 @@
 
 | 模块 | 功能交付 | 硬依赖 | 当前状态 | 体量参考 |
 |---|---|---|---|---|
-| F00 | 工程骨架、工具链与 M0 可行性原型 | 无 | 进行中（见 [F00 证据](../evidence/F00/F00.md)；G0 未通过） | L |
-| F01 | 领域模型、协议、任务调度 | F00 / G0 通过 | 待开始 | M |
-| F02 | 配置、账户、凭据与数据库基础 | F01 | 待开始 | M |
+| F00 | 工程骨架、工具链与 M0 可行性原型 | 无 | 待集成验收（见 [F00 证据](../evidence/F00/F00.md)；G0 路线已定，PER03/PER04、截图后端、C06 待交互桌面复测） | L |
+| F01 | 领域模型、协议、任务调度 | F00 / G0 通过 | 完成（见 [F01 证据](../evidence/F01/F01.md)） | M |
+| F02 | 配置、账户、凭据与数据库基础 | F01 | 进行中 | M |
 | F03 | Win32 壳、生产 UI、窗口与设置基础 | F02 | 待开始 | L |
 | F04 | 插件运行时、IPC、沙箱与监护 | F02 | 待开始 | L |
 | F05 | 网络代理、签名、文件句柄与契约探针 | F04 | 待开始 | L |
@@ -84,9 +84,9 @@ flowchart LR
 
 输入：ARCHITECTURE 1/2/4/9/11，PLAN M0，43 张画板。
 
-- [ ] F00.1 建 `src/`、`ui/`、`native/`、`protocol/`、`tests/`、`tools/`，锁定 .NET SDK、NuGet、Node LTS、pnpm/Vue/TS/Vite、原生工具链和 QuickJS-NG commit；提交 lockfile、构建说明、许可清单。基线 `win-x64`，Windows CI 必须 publish NativeAOT，不以 Debug/JIT 编译替代。
-- [ ] F00.2 最小 HWND/WebView2、UIA/MTA、IA2 手写 COM 边界、SAPI ISpVoice、WASAPI/MF 初始化、ELS、DPAPI、SQLite、YAML、Ed25519 向量分别打通 AOT 探针；未用到的 WinRT 绑定不为了“架构完整”提前引入。
-- [ ] F00.3 实现可丢弃的 AppContainer/IPC/JSRuntime 探针；QuickJS-NG、Jint、WebView 插件备选三条路线测加载、取消、往返、内存；确定引擎后把已验证薄绑定迁入产品。
+- [x] F00.1 建 `src/`、`ui/`、`native/`、`protocol/`、`tests/`、`tools/`，锁定 .NET SDK、NuGet、Node LTS、pnpm/Vue/TS/Vite、原生工具链和 QuickJS-NG commit；提交 lockfile、构建说明、许可清单。基线 `win-x64`，Windows CI 必须 publish NativeAOT，不以 Debug/JIT 编译替代。
+- [x] F00.2 最小 HWND/WebView2、UIA/MTA、IA2 手写 COM 边界、SAPI ISpVoice、WASAPI/MF 初始化、ELS、DPAPI、SQLite、YAML、Ed25519 向量分别打通 AOT 探针；未用到的 WinRT 绑定不为了“架构完整”提前引入。
+- [x] F00.3 实现可丢弃的 AppContainer/IPC/JSRuntime 探针；QuickJS-NG、Jint、WebView 插件备选三条路线测加载、取消、往返、内存；确定引擎后把已验证薄绑定迁入产品。
 - [ ] F00.4 临时取词助手、无激活等待壳、UIA→IA2→可选借用剪贴板；10 个程序含 Firefox 和旧 Electron；阻塞/焦点变化/格式恢复/超时/助手回收。
 - [ ] F00.5 用拟用全部窗口的代表页面测暖态、冷态、保温释放；选择系统截图后端并验多屏坐标。记录硬件与失败指标，不只测一个空白 WebView。
 
@@ -94,10 +94,10 @@ flowchart LR
 
 ### F01 · 协议、领域与任务框架
 
-- [ ] F01.1 定义 Contracts/Domain/Abstractions，生成 TS DTO 与 plugin d.ts；版本协商、API schema、未知消息拒绝、兼容样例。
-- [ ] F01.2 实现 package/account/instance/service/invocation 身份与能力解析；配置快照、语言码、限制单位、Unicode 分片和字幕 ID 纯逻辑。
-- [ ] F01.3 Job 串行状态归约、generation/attempt/seq、取消/暂停、全局与服务限额、公平队列、retry deadline；定义 UiSnapshot 投影，不引用窗口实例。
-- [ ] F01.4 注册功能模块与测试 fixture，建立确定性时钟/失败网络替身；不实现具体供应商与系统能力。
+- [x] F01.1 定义 Contracts/Domain/Abstractions，生成 TS DTO 与 plugin d.ts；版本协商、API schema、未知消息拒绝、兼容样例。
+- [x] F01.2 实现 package/account/instance/service/invocation 身份与能力解析；配置快照、语言码、限制单位、Unicode 分片和字幕 ID 纯逻辑。
+- [x] F01.3 Job 串行状态归约、generation/attempt/seq、取消/暂停、全局与服务限额、公平队列、retry deadline；定义 UiSnapshot 投影，不引用窗口实例。
+- [x] F01.4 注册功能模块与测试 fixture，建立确定性时钟/失败网络替身；不实现具体供应商与系统能力。
 
 交付：可离线运行的任务/协议测试与 typed contracts。出口：J01–J06、T01/T03–T05 的纯逻辑部分；旧片、重试重复、无限排队均被测试覆盖。
 

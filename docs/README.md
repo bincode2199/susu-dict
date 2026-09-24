@@ -10,7 +10,7 @@ Su-Su is a Windows 11 desktop translator. It lives in the system tray. Text come
 | Text capture | UIA → IA2/MSAA → optional clipboard borrowing, isolated in a bounded selection-host process |
 | Distribution | Per-user NSIS installer; license MIT (tentative, confirmed before release) |
 
-**Status (2026-09-23):** the product plan, design, architecture and module plan are complete. Implementation is at **F00, the foundation and feasibility probes**, and the G0 gate has **not** passed. There is no usable translator yet. See [PROGRESS](evidence/PROGRESS.md) for the latest checkpoint and [BUILD](development/BUILD.md) to build the probe harness.
+**Status (2026-09-24):** F00 feasibility probes are done and the G0 route decisions are recorded; four latency/capture measurements wait for an interactive desktop. F01 (contracts, domain, job framework) is complete; F02 and F03 are in progress. There is no usable translator yet. See [PROGRESS](evidence/PROGRESS.md) for the latest checkpoint and [BUILD](development/BUILD.md) to build.
 
 ## Repository layout
 
@@ -49,6 +49,7 @@ Every document has exactly one parent. The breadcrumb at the top of each documen
     - [evidence/PROGRESS](evidence/PROGRESS.md): F00–F03 implementation checkpoints and handoff notes.
       - [evidence/F00/F00](evidence/F00/F00.md): F00 delivery record: probes implemented, observations, reproduction, acceptance ledger. Raw evidence files sit beside it.
         - [evidence/F00/window-memory-analysis](evidence/F00/window-memory-analysis.md): eight-window UI memory experiment.
+$l
   - **[vm/WINDOWS-VM-OPERATIONS](vm/WINDOWS-VM-OPERATIONS.md)**: Windows 虚拟机运行与维护手册. Current spec, daily operation, maintenance and troubleshooting of the dev and clean-test VMs.
     - [vm/WINDOWS-VM-DEPLOYMENT](vm/WINDOWS-VM-DEPLOYMENT.md): 部署记录. What was deployed and verified, plus rebuild steps.
     - [vm/WINDOWS-VM-PLAN](vm/WINDOWS-VM-PLAN.md): 安装部署计划 (V5). Decisions, layout, install phases and acceptance criteria.

@@ -1,3 +1,4 @@
+﻿using System.Text.Json;
 using Susu.Abstractions;
 using Susu.Contracts;
 using Susu.Domain;
@@ -152,17 +153,42 @@ public class TranslationSessionTests
         Assert.Single(patches, p => p.Card.State == CardState.Ready); // terminal committed once
     }
 
+    [Fact] // J01: a rebuilt window restores from snapshot and applies only newer patches
+    public async Task Rebuilt_window_converges_from_snapshot_plus_newer_patches()
+    {
+        var release = new TaskCompletionSource();
+        var slow = new ScriptedProvider("slow", ScriptedProvider.Generous, new Step.Gate(release, "SLOW"));
+        var fast = new ScriptedProvider("fast", ScriptedProvider.Generous, new Step.Succeed("FAST"));
+        var (session, _, _, patches) = Create(2, slow, fast);
+        await session.SubmitAsync("hello", "en", "zh-Hans");
+        await Until(async () => (await CardOf(session, "fast")).State == CardState.Ready);
+        var rebuilt = await session.SnapshotAsync(); // window recreated mid-job
+        var cards = rebuilt.Cards.ToDictionary(c => c.ServiceId);
+        long revision = rebuilt.Revision;
+        release.TrySetResult();
+        await session.IdleAsync();
+        CardPatch[] later;
+        lock (patches) later = [.. patches];
+        foreach (var patch in later.Where(p => p.Revision > revision && p.Generation == rebuilt.Generation).OrderBy(p => p.Revision))
+            cards[patch.Card.ServiceId] = patch.Card;
+        var final = await session.SnapshotAsync();
+        Assert.Equal(final.Cards, rebuilt.Cards.Select(c => cards[c.ServiceId]));
+        Assert.Equal("SLOW", cards["slow"].Text);
+        var json = JsonSerializer.Serialize(final, ContractsJson.Default.TranslationSnapshot);
+        Assert.DoesNotContain("attempt", json, StringComparison.OrdinalIgnoreCase); // projection carries no internal job identity
+    }
+
     [Fact] // J02
     public async Task Partial_stream_then_network_failure_retries_once_with_reset_and_per_attempt_usage()
     {
         var provider = new ScriptedProvider("ai", ScriptedProvider.Generous,
             new Step.StreamThenFail(["Hel", "lo "], new ProviderError(ErrorKind.Network)),
-            new Step.Stream(["你", "好"], "你好"));
+            new Step.Stream(["ä½ ", "å¥½"], "ä½ å¥½"));
         var (session, clock, usage, patches) = Create(1, provider);
         await session.SubmitAsync("hello", "en", "zh-Hans");
         await Until(async () => (await CardOf(session, "ai")).State == CardState.Ready, clock, 100);
         await session.IdleAsync();
-        Assert.Equal("你好", (await CardOf(session, "ai")).Text); // never "Hello 你好"
+        Assert.Equal("ä½ å¥½", (await CardOf(session, "ai")).Text); // never "Hello ä½ å¥½"
         Assert.Equal(2, provider.Calls.Count);
         Assert.Contains(patches, p => p.Card.State == CardState.Loading && p.Card.Text == ""); // reset before the new stream
         var records = usage.Records.ToArray();
@@ -257,7 +283,7 @@ public class TranslationSessionTests
     {
         var provider = new ScriptedProvider("svc", ScriptedProvider.Generous, new Step.Succeed("x")) { Pairs = (from, to) => from == "en" };
         var (session, _, _, _) = Create(1, provider);
-        await session.SubmitAsync("你好", "zh-Hans", "en");
+        await session.SubmitAsync("ä½ å¥½", "zh-Hans", "en");
         await session.IdleAsync();
         Assert.Equal(CardState.Unsupported, (await CardOf(session, "svc")).State);
         Assert.Empty(provider.Calls);
