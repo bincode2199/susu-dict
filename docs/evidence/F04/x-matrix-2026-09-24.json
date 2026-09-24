@@ -1,0 +1,386 @@
+{
+  "timestamp": "2026-09-24T18:26:33.7185288+00:00",
+  "os": "Microsoft Windows NT 10.0.26200.0",
+  "scope": "F00 disposable plugin-host prototype; not F04 production acceptance",
+  "testingAgentNote": "Re-run 2026-09-24 by the F04 testing agent after eb77353/c59f6d6. src/Susu.Windows/ContainerHost.cs's LibraryImport targets susu_plugin_sandbox (the production native module, shared by this probe and by Susu.Plugins.HostSession), so this harness now exercises the production native sandbox end to end, not the old probe-only sandbox.cpp. The managed IPC/Broker/ChildHost above the native layer is still the disposable F00 probe copy (Susu.Probes.PluginHost.HostSession/Broker), not the production Susu.Plugins.HostSession/Broker - X07 coverage against the production Broker over the production channel is separately proven by tests/Susu.Tests.Unit/PluginHostIntegrationTests.cs: A_malicious_plugin_is_denied_by_the_host_broker_for_an_ungranted_origin (commit e168845).",
+  "cases": [
+    {
+      "id": "X01",
+      "name": "first start creates profile, host authenticates and serves a call",
+      "expected": "created profile; authenticated pipe; call completes",
+      "observed": "created=True; loaded=True; completed=True; cleanShutdown=True",
+      "passed": true
+    },
+    {
+      "id": "X01",
+      "name": "restart reuses the existing profile and SID",
+      "expected": "created=false; same SID; call completes",
+      "observed": "reused=True; completed=True",
+      "passed": true
+    },
+    {
+      "id": "X01",
+      "name": "uninstall deletes profile and its container folder; reinstall creates anew",
+      "expected": "profile folder removed; next open creates",
+      "observed": "folderBefore=True; folderRemoved=True; recreated=True",
+      "passed": true
+    },
+    {
+      "id": "X01",
+      "name": "broken install (missing native library) fails startup; no unsandboxed retry; no process left",
+      "expected": "start throws; failed child terminated; no fallback launch",
+      "observed": "EndOfStreamException: No Hello.; processesFromBrokenInstall=0",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "runs as AppContainer",
+      "expected": "allowed(appcontainer)",
+      "observed": "allowed(appcontainer)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "required read-only resource Susu.Probes.exe",
+      "expected": "allowed",
+      "observed": "allowed",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "required read-only resource susu_quickjs.dll",
+      "expected": "allowed",
+      "observed": "allowed",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "required read-only resource main.js",
+      "expected": "allowed",
+      "observed": "allowed",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "sensitive read settings.yaml (Su-Su-F00-probe-e41b1551581c4f1caca1c3c495d6d395)",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "sensitive read secrets.dat (Su-Su-F00-probe-e41b1551581c4f1caca1c3c495d6d395)",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "sensitive read susu.db (Su-Su-F00-probe-e41b1551581c4f1caca1c3c495d6d395)",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "sensitive read capture.wav (cache)",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "sensitive read Su-Su-F00-probe-e41b1551581c4f1caca1c3c495d6d395.txt (Documents)",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "program/plugin write main.js",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "program/plugin write injected.js",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "program/plugin write susu_quickjs.dll",
+      "expected": "denied",
+      "observed": "denied(access)",
+      "passed": true
+    },
+    {
+      "id": "X02",
+      "name": "resource ACL is not opened to all packages or everyone",
+      "expected": "only the container SID was added",
+      "observed": "containerAce=True; broadAce=False",
+      "passed": true
+    },
+    {
+      "id": "X03",
+      "name": "container-owned LocalState file \u002B private registry round trip",
+      "expected": "allowed (expected AppContainer behaviour; synthetic data only)",
+      "observed": "allowed(C:\\Users\\<user>\\AppData\\Local\\Packages\\susu.f00.x.1c3be1e2edf64221a1d0efd73cb9031b.x2\\AC\\LocalState)",
+      "passed": true
+    },
+    {
+      "id": "X04",
+      "name": "direct Internet TCP 1.1.1.1:443",
+      "expected": "denied (parent control ok)",
+      "observed": "denied(socket access)",
+      "passed": true
+    },
+    {
+      "id": "X04",
+      "name": "direct DNS resolution",
+      "expected": "denied (parent control ok)",
+      "observed": "denied(socket HostNotFound)",
+      "passed": true
+    },
+    {
+      "id": "X04",
+      "name": "direct LAN UDP to 10.0.2.3:53",
+      "expected": "denied (parent control ok)",
+      "observed": "denied(deadline without connection)",
+      "passed": true
+    },
+    {
+      "id": "X04",
+      "name": "direct loopback TCP",
+      "expected": "no connection (parent control True)",
+      "observed": "denied(deadline without connection); receiverAccepted=False",
+      "passed": true
+    },
+    {
+      "id": "X04",
+      "name": "direct loopback UDP",
+      "expected": "no datagram delivered",
+      "observed": "submitted; receiverGotDatagram=False",
+      "passed": true
+    },
+    {
+      "id": "X04",
+      "name": "no loopback exemption configured for the container",
+      "expected": "container absent from LoopbackExempt list",
+      "observed": "listed=False",
+      "passed": true
+    },
+    {
+      "id": "X06",
+      "name": "child process creation",
+      "expected": "denied (Job active-process limit 1)",
+      "observed": "denied(win32 1816)",
+      "passed": true
+    },
+    {
+      "id": "X06",
+      "name": "256 MiB commit under 128 MiB Job limit",
+      "expected": "denied",
+      "observed": "denied(win32 1455)",
+      "passed": true
+    },
+    {
+      "id": "X05",
+      "name": "unlisted inheritable handle is not inherited (control: listed handle is)",
+      "expected": "unlisted denied; listed allowed",
+      "observed": "unlisted=denied(not present); listedControl=allowed(inherited)",
+      "passed": true
+    },
+    {
+      "id": "X05",
+      "name": "pipe DACL: other users and non-matching containers cannot open the pipe",
+      "expected": "different container SID denied; DACL lists only user \u002B this container",
+      "observed": "otherContainer=denied(access); connected=False",
+      "passed": true
+    },
+    {
+      "id": "X05",
+      "name": "same-user plain process and same-SID container process not launched by the host are rejected",
+      "expected": "both verdict 2 (PID mismatch) and disconnected",
+      "observed": "plain verdict=2 pid=11600/11600; container verdict=2 pid=3172/3172",
+      "passed": true
+    },
+    {
+      "id": "X05",
+      "name": "host session start survives a rogue client that connects first",
+      "expected": "rogue rejected, legitimate child authenticated",
+      "observed": "started; rejectedClients=1; loaded=True",
+      "passed": true
+    },
+    {
+      "id": "X05",
+      "name": "child refuses a server whose PID is not the launcher\u0027s",
+      "expected": "child exits 20 before sending Hello",
+      "observed": "exit=20; helloBytes=0; diagnostics=server-pid-mismatch expected=18080 actual=18076",
+      "passed": true
+    },
+    {
+      "id": "X05",
+      "name": "pre-created (squatted) pipe name blocks host startup",
+      "expected": "CreateNamedPipe first-instance failure; no child launched",
+      "observed": "squatter=squat=ready; hostCreate=COMException 0x800700E7",
+      "passed": true
+    },
+    {
+      "id": "X05",
+      "name": "remote (SMB) pipe clients rejected; control without flag connects",
+      "expected": "flagged: denied; control: connected",
+      "observed": "flagged=failed UnauthorizedAccessException; control=ok",
+      "passed": true
+    },
+    {
+      "id": "X06",
+      "name": "abnormal parent termination kills the container child (Job kill-on-close)",
+      "expected": "child exits within 2 s of parent TerminateProcess",
+      "observed": "childExited=True after 7 ms; staleProfileLeft=True (removed by recovery)",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "adversarial plugin loads",
+      "expected": "loaded",
+      "observed": "loaded",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt importOutsidePackage",
+      "expected": "denied",
+      "observed": "denied: module escapes plugin root",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt importAbsolutePath",
+      "expected": "denied",
+      "observed": "denied: module specifier not allowed",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt importUrl",
+      "expected": "denied",
+      "observed": "denied: module specifier not allowed",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt unapprovedOrigin",
+      "expected": "denied",
+      "observed": "denied: denied: origin https://evil.example:443 not granted",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt fileUrl",
+      "expected": "denied",
+      "observed": "denied: denied: scheme \u0027file\u0027 not allowed",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt pathField",
+      "expected": "denied",
+      "observed": "denied: denied: field \u0027path\u0027 is not part of the request contract",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt unboundSecret",
+      "expected": "denied",
+      "observed": "denied: denied: secret \u0027apiKey\u0027 is not bound to this plugin/account",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt forgedFileHandle",
+      "expected": "denied",
+      "observed": "denied: denied: file handle not granted to this call",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt otherLoopbackPort",
+      "expected": "denied",
+      "observed": "denied: denied: plain HTTP only for an approved local origin",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt httpDowngrade",
+      "expected": "denied",
+      "observed": "denied: denied: plain HTTP only for an approved local origin",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt urlUserinfo",
+      "expected": "denied",
+      "observed": "denied: denied: URL userinfo rejected",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt headerInjection",
+      "expected": "denied",
+      "observed": "denied: denied: header \u0027X-A\u0027 rejected",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt hostHeader",
+      "expected": "denied",
+      "observed": "denied: denied: header \u0027Host\u0027 rejected",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt evalGlobal",
+      "expected": "denied",
+      "observed": "denied: eval is undefined",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt functionConstructor",
+      "expected": "denied",
+      "observed": "denied: constructor is undefined",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt fetchGlobal",
+      "expected": "denied",
+      "observed": "denied: fetch is undefined",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "plugin attempt approvedLocalOrigin",
+      "expected": "allowed through host proxy",
+      "observed": "allowed",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "grant revoked when the call terminates",
+      "expected": "0 active grants",
+      "observed": "0 active",
+      "passed": true
+    },
+    {
+      "id": "X07",
+      "name": "compromised host process: forged grant/plugin/call, revoked grant, late and unknown frames",
+      "expected": "all forged API calls denied; late frame dropped; unknown type disconnects",
+      "observed": "denies=[deny unknown or revoked grant; deny grant not bound to this request/plugin/call; deny grant not bound to this request/plugin/call; deny unknown or revoked grant]; dropped=1; reader=InvalidDataException: Unknown frame type \u0027Evil\u0027.",
+      "passed": true
+    }
+  ]
+}
