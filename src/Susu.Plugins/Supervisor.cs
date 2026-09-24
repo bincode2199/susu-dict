@@ -41,6 +41,15 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
 
     public TSession Current { get { lock (gate) return session ?? throw new InvalidOperationException("Plugin host is not running."); } }
 
+    /// <summary>
+    /// Non-launching read: true with the live session, or false while a crashed session is between
+    /// backoff and its scheduled relaunch (or automatic restart has stopped). Callers that only ever
+    /// want to *use* a session - never to start one - should call this instead of <see cref="Start"/>,
+    /// so a call arriving mid-backoff gets an explicit "not available yet" instead of racing a second
+    /// concurrent launch against the one <see cref="RestartAsync"/> already scheduled.
+    /// </summary>
+    public bool TryGetCurrent(out TSession? current) { lock (gate) { current = session; return current is not null; } }
+
     public TSession Start()
     {
         lock (gate)

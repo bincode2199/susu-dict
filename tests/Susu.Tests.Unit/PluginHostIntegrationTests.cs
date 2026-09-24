@@ -342,4 +342,80 @@ public class PluginHostIntegrationTests
         }
         finally { session.Shutdown(2000); }
     }
+
+    /// <summary>
+    /// J07, live and through the production path a caller actually uses (Supervisor&lt;HostSession&gt;,
+    /// not FakeSession/ManualClock): repeatedly kill the real child process and check Supervisor relaunches
+    /// it with real 1/2/4 s backoff, then stops trying after the threshold and says so instead of hanging.
+    /// </summary>
+    [Fact]
+    public async Task Supervisor_relaunches_the_real_child_with_backoff_then_stops_after_the_threshold()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        string host = Path.Combine(staged, "susu.exe");
+        var options = new HostSession.Options(host, staged, "quickjs", KeepProfile: false);
+        using var supervisor = new Supervisor<HostSession>(() => HostSession.Start(options), Susu.Jobs.SystemClock.Instance);
+
+        var first = supervisor.Start();
+        Assert.True(first.Load("echo", "plugins/echo").Ok);
+        int pid1 = first.ChildPid;
+
+        // 1st crash: relaunch after ~1 s backoff.
+        Kill(pid1);
+        var second = await WaitForNewSession(supervisor, pid1, TimeSpan.FromSeconds(5));
+        Assert.NotEqual(pid1, second.ChildPid);
+        Assert.False(supervisor.Stopped);
+        Assert.True(second.Load("echo", "plugins/echo").Ok); // Supervisor only replaces the process; reloading packages is the caller's job
+
+        // 2nd crash: relaunch after ~2 s backoff.
+        int pid2 = second.ChildPid;
+        Kill(pid2);
+        var third = await WaitForNewSession(supervisor, pid2, TimeSpan.FromSeconds(6));
+        Assert.NotEqual(pid2, third.ChildPid);
+        Assert.False(supervisor.Stopped);
+
+        // 3rd crash: relaunch after ~4 s backoff.
+        int pid3 = third.ChildPid;
+        Kill(pid3);
+        var fourth = await WaitForNewSession(supervisor, pid3, TimeSpan.FromSeconds(8));
+        Assert.NotEqual(pid3, fourth.ChildPid);
+        Assert.False(supervisor.Stopped);
+
+        // 4th crash inside the 60 s window: automatic restart stops instead of relaunching again -
+        // exactly the "visible stopped state instead of hanging" the caller (PluginProvider) checks.
+        Kill(fourth.ChildPid);
+        bool stoppedInTime = await WaitUntil(() => supervisor.Stopped, TimeSpan.FromSeconds(3));
+        Assert.True(stoppedInTime, "Supervisor.Stopped must latch after the fourth crash in the window");
+        Assert.False(supervisor.TryGetCurrent(out _)); // no fifth relaunch; a caller sees "not available", never a hang
+    }
+
+    private static void Kill(int pid)
+    {
+        using var process = System.Diagnostics.Process.GetProcessById(pid);
+        process.Kill();
+        process.WaitForExit(5000);
+    }
+
+    private static async Task<HostSession> WaitForNewSession(Supervisor<HostSession> supervisor, int previousPid, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (supervisor.TryGetCurrent(out var current) && current is not null && current.ChildPid != previousPid) return current;
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+        throw new TimeoutException($"Supervisor did not relaunch a new session within {timeout}.");
+    }
+
+    private static async Task<bool> WaitUntil(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition()) return true;
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+        return condition();
+    }
 }

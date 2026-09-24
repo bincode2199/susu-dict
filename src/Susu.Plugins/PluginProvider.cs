@@ -8,10 +8,17 @@ namespace Susu.Plugins;
 /// <summary>
 /// A plugin package's <c>translate</c> capability exposed as <see cref="ITranslationProvider"/>
 /// (F04.4: the channel F05/F06 build real adapters against). One instance per configured
-/// provider instance/capability; the JS engine call happens on <see cref="HostSession"/>'s child
-/// process, never on the calling thread.
+/// provider instance/capability; the JS engine call happens on the plugin-host child process,
+/// never on the calling thread.
+///
+/// Goes through <see cref="Supervisor{HostSession}"/> rather than holding a session directly
+/// (J07): a crash fails every in-flight call explicitly through the normal timeout/IOException
+/// paths below (HostSession.ReadLoop faults its own waiters; nothing here ever resends a call to
+/// a new process), the crashed child is replaced with 1/2/4 s backoff, and after the threshold
+/// <see cref="Supervisor{TSession}.Stopped"/> is surfaced to the caller as
+/// <see cref="ErrorKind.Unavailable"/> instead of hanging or silently retrying forever.
 /// </summary>
-public sealed class PluginProvider(string pluginId, string serviceId, string displayName, TranslationLimits limits, Func<HostSession> session, IReadOnlyList<string> hostOrigins) : ITranslationProvider
+public sealed class PluginProvider(string pluginId, string serviceId, string displayName, TranslationLimits limits, Supervisor<HostSession> supervisor, IReadOnlyList<string> hostOrigins) : ITranslationProvider
 {
     public string ServiceId { get; } = serviceId;
     public string DisplayName { get; } = displayName;
@@ -23,13 +30,22 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
 
     public async Task<ProviderOutcome> TranslateAsync(TranslateCall call, Func<string, ValueTask> onChunk, CancellationToken cancellationToken)
     {
-        var host = session();
+        if (supervisor.Stopped) return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host stopped after repeated crashes; restart it in Settings"));
+        // Read-only: never launches a session here, so a call arriving mid-backoff does not race
+        // the relaunch Supervisor already scheduled for itself.
+        if (!supervisor.TryGetCurrent(out var host) || host is null)
+            return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host is restarting"));
+
         string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text), ContractsJson.Default.TranslateRequest);
-        var (requestId, callId, task) = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins);
-        await using var registration = cancellationToken.Register(() => host.Cancel(pluginId, requestId, call.AttemptId, callId));
+        (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
+        try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins); }
+        catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }
+        var (requestId, callId, task) = invocation;
+        await using var registration = cancellationToken.Register(() => { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } });
         IpcEnvelope envelope;
         try { envelope = await task.WaitAsync(call.Timeout, cancellationToken); }
-        catch (TimeoutException) { host.Cancel(pluginId, requestId, call.AttemptId, callId); return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Timeout)); }
+        catch (TimeoutException) { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Timeout)); }
+        catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); } // crash mid-call: no replay, Supervisor is already relaunching
         var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
         if (!completed.Ok || completed.Result is null)
         {
