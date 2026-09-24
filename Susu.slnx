@@ -19,6 +19,7 @@
   <Folder Name="/tools/">
     <Project Path="tools/Susu.ContractsGen/Susu.ContractsGen.csproj" />
     <Project Path="tools/Susu.IconGen/Susu.IconGen.csproj" />
+    <Project Path="tools/Susu.PluginCli/Susu.PluginCli.csproj" />
     <Project Path="tools/Susu.Probes/Susu.Probes.csproj" />
   </Folder>
 </Solution>

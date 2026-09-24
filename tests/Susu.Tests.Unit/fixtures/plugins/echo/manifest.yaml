@@ -1,0 +1,7 @@
+id: com.example.echo
+name: Echo
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - translate

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>susu-plugin</AssemblyName>
+    <RootNamespace>Susu.PluginCli</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Susu.Contracts/Susu.Contracts.csproj" />
+    <ProjectReference Include="../../src/Susu.Domain/Susu.Domain.csproj" />
+    <ProjectReference Include="../../src/Susu.Plugins/Susu.Plugins.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- susu-plugin.exe itself creates the AppContainer profile (ContainerHost.Open), so it needs the
+         sandbox native module next to it, same as susu.exe (F04.1). -->
+    <Content Include="../../artifacts/windows-native/Release/susu_plugin_sandbox.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_plugin_sandbox.dll')" Link="susu_plugin_sandbox.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
