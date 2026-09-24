@@ -1,0 +1,9 @@
+id: app.susu.mymemory
+name: MyMemory
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - translate
+hosts:
+  - api.mymemory.translated.net

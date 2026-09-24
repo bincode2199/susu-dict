@@ -21,6 +21,8 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="assets/*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Built-in plugin packages (F06.1: MyMemory, the default keyless translation service). -->
+    <Content Include="plugins/**" Link="plugins/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- Production UI (ui/dist, built by `pnpm run build`) and the native WebView host (tools/build-native.ps1). -->
     <Content Include="../../ui/dist/**" Link="ui/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../artifacts/windows-native/Release/susu_native.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_native.dll')" Link="susu_native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
