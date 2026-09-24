@@ -105,6 +105,42 @@ public class PluginHostIntegrationTests
         }
     }
 
+    /// <summary>
+    /// F04.2 gap: the execution budget is a wall-clock deadline, not a per-top-level-call reset, so it
+    /// must also interrupt a call that never runs a synchronous loop and instead re-schedules itself
+    /// forever as microtasks (Promise.resolve().then(again)). Mirrors the synchronous-loop budget test
+    /// above; a second package must stay unaffected, same as J06.
+    /// </summary>
+    [Fact]
+    public async Task An_infinite_microtask_chain_also_trips_the_execution_budget_and_other_calls_survive()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        string host = Path.Combine(staged, "susu.exe");
+
+        using var session = HostSession.Start(new HostSession.Options(host, staged, "quickjs", KeepProfile: false));
+        try
+        {
+            Assert.True(session.Load("echo", "plugins/echo").Ok);
+            Assert.True(session.Load("second", "plugins/second").Ok);
+
+            var (_, _, spinTask) = session.Invoke("echo", "spinMicrotask", "{}", jobId: "job-spin-mt", origins: []);
+            var (_, _, secondTask) = session.Invoke("second", "translate", "{\"text\":\"still-alive\"}", jobId: "job-second-mt", origins: []);
+
+            var spinResult = await spinTask.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            Assert.Equal(Susu.Contracts.IpcMessageType.Failed, spinResult.Type); // interrupted despite never running a synchronous loop
+
+            var secondResult = await secondTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal(Susu.Contracts.IpcMessageType.Completed, secondResult.Type); // unrelated package unaffected
+
+            // The rebuilt "echo" runtime still works for a fresh call afterwards.
+            var (_, _, retry) = session.Invoke("echo", "translate", "{\"text\":\"again\"}", jobId: "job-retry-mt", origins: []);
+            var retryEnvelope = await retry.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal(Susu.Contracts.IpcMessageType.Completed, retryEnvelope.Type);
+        }
+        finally { session.Shutdown(2000); }
+    }
+
     /// <summary>F04.2: the module lockdown (native/quickjs-bridge bootstrap) removes eval/Function/process/require.</summary>
     [Fact]
     public async Task The_restricted_Web_API_surface_has_no_dynamic_code_execution()

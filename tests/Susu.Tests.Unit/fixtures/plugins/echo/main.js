@@ -33,4 +33,10 @@ export default {
   async spin() {
     for (;;) { /* trips the execution budget on purpose */ }
   },
+  // F04.2 gap check: an infinite *microtask* chain (never a synchronous loop) must still trip the
+  // execution budget - the interrupt check must not be skipped while only microtask jobs are running.
+  async spinMicrotask() {
+    function again() { return Promise.resolve().then(again); }
+    await again();
+  },
 };
