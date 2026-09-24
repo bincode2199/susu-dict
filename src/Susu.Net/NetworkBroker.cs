@@ -261,7 +261,7 @@ public sealed class NetworkBroker : IDisposable
                 if (authorized || location is null) return await BuildResultAsync(request, response, cancellationToken, redirectUrl: location);
                 var next = new Uri(location, UriKind.Absolute);
                 if (hop + 1 >= 5) return new BrokerFailure("network", "redirect limit (5) exceeded");
-                if (uri.Scheme == "https" && next.Scheme != "https") return new BrokerFailure("network", "redirect would downgrade HTTPS to HTTP");
+                if (IsHttpsToHttpDowngrade(uri, next)) return new BrokerFailure("network", "redirect would downgrade HTTPS to HTTP");
                 uri = next;
                 if (response.StatusCode == System.Net.HttpStatusCode.SeeOther) { method = "GET"; body = []; }
                 continue;
@@ -392,6 +392,12 @@ public sealed class NetworkBroker : IDisposable
         int written = decoder.GetChars(buffer, 0, count, chars, 0, flush: false);
         if (written > 0) accumulated.Append(chars, 0, written);
     }
+
+    /// <summary>S04: a redirect chain that starts https:// must never end up at plain http:// - checked
+    /// per hop (not just the final destination) so an intermediate downgrade cannot slip through even if
+    /// a later hop redirects back to https://. internal so a test can call the exact production check
+    /// directly instead of restating its condition.</summary>
+    internal static bool IsHttpsToHttpDowngrade(Uri from, Uri to) => from.Scheme == "https" && to.Scheme != "https";
 
     private bool IsAllowedForRequest(BrokerHttpRequest request, Uri uri)
     {
