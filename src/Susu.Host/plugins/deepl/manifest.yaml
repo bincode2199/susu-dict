@@ -1,0 +1,12 @@
+id: app.susu.deepl
+name: DeepL
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - translate
+hosts:
+  - api-free.deepl.com
+  - api.deepl.com
+credentialUse:
+  - apiKey

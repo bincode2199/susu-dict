@@ -1,0 +1,12 @@
+id: app.susu.tencent-translate
+name: Tencent Translator
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - translate
+hosts:
+  - tmt.tencentcloudapi.com
+credentialUse:
+  - secretId
+  - secretKey
