@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { UI_COMMANDS, type CommandResult, type SettingsIssueView, type SettingsView } from '@protocol/ui';
+import { UI_COMMANDS, type CommandResult, type NetworkTestView, type SettingsIssueView, type SettingsView } from '@protocol/ui';
 import type { Bridge } from '../bridge/bridge';
 import type { UiState } from '../bridge/store';
 import TitleBar from '../components/TitleBar.vue';
@@ -11,14 +11,15 @@ import Stepper from '../components/Stepper.vue';
 import SecretField from '../components/SecretField.vue';
 import ServiceDetails from '../components/ServiceDetails.vue';
 import HotkeyField from '../components/HotkeyField.vue';
+import PromptSettings from '../components/PromptSettings.vue';
 import { t, serviceName } from '../locales/i18n';
 
 // Settings 900×700 (DESIGN 9): centered each time, 190 px navigation, content padding 20/26. F03 provides the
 // minimal pages (DEV-PLAN F03.4); pages of features not built yet are not offered. Credentials are one-way.
 const props = defineProps<{ bridge: Bridge; state: UiState }>();
-type Page = 'general' | 'hotkeys' | 'engines' | 'ai' | 'ocr' | 'speech' | 'vocab' | 'network';
+type Page = 'general' | 'hotkeys' | 'engines' | 'ai' | 'prompt' | 'ocr' | 'speech' | 'vocab' | 'network';
 const pages: { id: Page; icon: IconName }[] = [
-  { id: 'general', icon: 'settings' }, { id: 'hotkeys', icon: 'keyboard' }, { id: 'engines', icon: 'grid' }, { id: 'ai', icon: 'sparkle' },
+  { id: 'general', icon: 'settings' }, { id: 'hotkeys', icon: 'keyboard' }, { id: 'engines', icon: 'grid' }, { id: 'ai', icon: 'sparkle' }, { id: 'prompt', icon: 'prompt' },
   { id: 'ocr', icon: 'ocr' }, { id: 'speech', icon: 'audio' }, { id: 'vocab', icon: 'book' }, { id: 'network', icon: 'globe' },
 ];
 const page = ref<Page>('general');
@@ -131,6 +132,21 @@ const hotkeyConflict = (action: string) => {
   const shared = new Set(['selectionTranslate', 'clipboardTranslate']);
   return Object.entries(draft.hotkeys).some(([other, value]) => other !== action && value === chord && !(shared.has(other) && shared.has(action)));
 };
+// SetNetwork test (F07.3, CFG05): the proxy settings as edited (saved password) against each enabled service's
+// origin, through the host's network broker. One line per path; a failure disables nothing.
+const networkTest = ref<NetworkTestView | null>(null);
+const networkTesting = ref(false);
+const networkTestError = ref<string | null>(null);
+async function testNetwork(): Promise<void> {
+  networkTesting.value = true;
+  networkTestError.value = null;
+  try {
+    const result = await props.bridge.command(UI_COMMANDS.TestNetwork, { network: draft.network });
+    if (result.ok) networkTest.value = result.value as NetworkTestView;
+    else networkTestError.value = t(result.error === 'proxy-address' ? 'network.test.address' : 'network.test.failed');
+  } finally { networkTesting.value = false; }
+}
+const testedAt = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
 const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; draft.general.sourceLanguage = targetLanguage; draft.general.targetLanguage = sourceLanguage; };
 </script>
 
@@ -246,7 +262,22 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
           <SettingRow :title="t('network.timeout')" :hint="t('network.timeoutHint')">
             <Stepper v-model="draft.network.aiTimeoutSeconds" :min="5" :max="600" :step="5" :label="t('network.timeout')" />
           </SettingRow>
+          <SettingRow :title="t('network.test.title')" :hint="networkTest ? t('network.test.last', { time: testedAt(networkTest.testedAt) }) : t('network.test.hint')">
+            <button type="button" class="btn" :disabled="networkTesting" data-test-network @click="testNetwork">{{ networkTesting ? t('network.test.running') : t('network.test.run') }}</button>
+          </SettingRow>
+          <p v-if="networkTestError" class="error-text small" role="alert">{{ networkTestError }}</p>
+          <ul v-if="networkTest" class="paths" :aria-label="t('network.test.title')">
+            <li v-for="path in networkTest.paths" :key="path.origin" :data-origin="path.origin" :class="path.ok ? 'ok' : 'failed'">
+              <Icon :name="path.ok ? 'check' : 'warning'" :size="13" />
+              <span class="origin">{{ path.origin }}</span>
+              <span class="tag">{{ t(`network.route.${path.route}`) }}</span>
+              <span class="hint-text">{{ path.services.map((s) => serviceName(s.split('/')[0])).join('、') }}</span>
+              <span :class="path.ok ? 'hint-text' : 'error-text'" class="result">{{ path.ok ? t('network.test.ok', { ms: path.elapsedMs ?? 0 }) : t(`error.${path.error ?? 'network'}`) }}</span>
+            </li>
+          </ul>
         </section>
+
+        <PromptSettings v-else-if="page === 'prompt' && view.prompt" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
 
         <section v-else class="group">
           <h2>{{ t(`services.${page}`) }}</h2>
@@ -301,6 +332,12 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
 .result-order .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .result-order .state { flex: 1; font-size: 11px; }
 .port { width: 90px; }
+.paths { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.paths li { min-height: 28px; display: flex; align-items: center; gap: 8px; }
+.paths li.failed { color: var(--error, inherit); }
+.paths .origin { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paths .result { margin-left: auto; font-size: 11px; }
+.small { font-size: 11px; }
 .issues { font-size: 11px; padding-left: 18px; }
 .savebar { height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 20px; border-top: 1px solid var(--line); font-size: 11px; }
 .spacer { flex: 1; }

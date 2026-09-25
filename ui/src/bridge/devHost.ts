@@ -109,6 +109,22 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     network: { proxyMode: 'system', proxyHost: '', proxyPort: 0, proxyUsername: '', proxyPasswordSaved: false, aiTimeoutSeconds: 30 },
     services: [],
     accounts: [],
+    prompt: {
+      level: '', profile: '', scope: ['openai', 'glm', 'gemini', 'claude', 'ollama'],
+      levels: ['literal', 'free', 'ielts-6.5', 'ielts-7.0', 'toefl-100', 'cet-6', 'academic'], aiServices: ['openai', 'glm', 'gemini', 'claude', 'ollama'], profiles: [],
+      defaultTemplate: '你是一名专业译者。把下面的原文从 {{from}} 译成 {{to}}。按 {{level}} 对应的书写水平选词与造句：句式自然，不堆砌生僻词，不解释、不加注，只输出译文。\n\n原文：\n{{text}}',
+      variables: ['text', 'from', 'to', 'level'],
+    },
+  };
+  // Dev-only stand-in for the host's single-pass renderer (Susu.Domain.PromptTemplate): values are never rescanned.
+  const renderPrompt = (template: string, values: Record<string, string>, text: string) => {
+    let inserted = false;
+    const out = template.replace(/\{\{(.*?)\}\}/g, (whole, raw: string) => {
+      const name = raw.trim();
+      if (name === 'text') { if (inserted) return whole; inserted = true; return text; }
+      return values[name] ?? whole;
+    });
+    return inserted ? out : `${out}\n\n${text}`;
   };
   const project = (): SettingsView => {
     settings.services = [
@@ -225,6 +241,30 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         }
         openaiRevision++;
         ok(project());
+        return;
+      }
+      case 'Settings.PreviewPrompt': {
+        const template = String(payload?.template ?? '') || settings.prompt!.defaultTemplate;
+        const level = String(payload?.level ?? '');
+        const rendered = renderPrompt(template, { from: 'English', to: 'Chinese (Simplified)', level: level || '通用' }, String(payload?.text ?? ''));
+        const unknown = [...template.matchAll(/\{\{(.*?)\}\}/g)].map((m) => m[1].trim()).filter((n, i, all) => !['text', 'from', 'to', 'level'].includes(n) && all.indexOf(n) === i);
+        ok({ rendered, unknown });
+        return;
+      }
+      case 'Settings.SavePrompt':
+        settings.revision++;
+        settings.prompt = { ...settings.prompt!, level: String(payload?.level), profile: String(payload?.profile), scope: payload?.scope as string[], profiles: payload?.profiles as NonNullable<SettingsView['prompt']>['profiles'] };
+        ok(project());
+        return;
+      case 'Settings.TestNetwork': {
+        const mode = (payload?.network as SettingsView['network'] | undefined)?.proxyMode;
+        setTimeout(() => ok({
+          testedAt: new Date().toISOString(),
+          paths: [
+            { origin: 'https://api.mymemory.translated.net:443', services: ['mymemory/translate'], route: mode === 'none' ? 'direct' : 'proxy', ok: true, status: 200, elapsedMs: 182 },
+            { origin: 'https://api.openai.com:443', services: ['openai/translate'], route: mode === 'none' ? 'direct' : 'proxy', ok: false, error: 'timeout', elapsedMs: 10000 },
+          ],
+        }), 600);
         return;
       }
       case 'Settings.LoadOptions': {
