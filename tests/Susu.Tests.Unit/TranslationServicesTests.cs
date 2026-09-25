@@ -219,7 +219,7 @@ public class TranslationSessionServiceStateTests
 /// <summary>F06.3a settings commands: key entry with grants, DeepL plan, account binding, reorder, validate.</summary>
 public class TranslationSettingsCommandTests
 {
-    private sealed class Rig : IDisposable
+    internal sealed class Rig : IDisposable
     {
         public readonly TempRoot Root = new();
         public readonly FakePlatform Platform = new();

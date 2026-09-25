@@ -20,7 +20,7 @@ namespace Susu.Tests.Unit;
 /// </summary>
 public class PromptNetworkSettingsTests
 {
-    private sealed class Rig : IDisposable
+    internal sealed class Rig : IDisposable
     {
         public readonly TempRoot Root = new();
         public readonly FakePlatform Platform = new();
