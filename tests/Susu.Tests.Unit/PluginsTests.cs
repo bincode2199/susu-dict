@@ -260,6 +260,17 @@ public class SupervisorTests
     // pattern in JobsTests.cs.
     private static Task Settle() => Task.Delay(30, TestContext.Current.CancellationToken);
 
+    // A fixed 30 ms settle is enough when the machine is idle, but in a full parallel run (sandbox
+    // processes and other classes busy on the thread pool) the continuation can take longer and the
+    // next assertion fails (seen in F06 testing). Where a test expects something to happen, poll for it
+    // with a generous ceiling instead; the assertion that follows still reports a real failure.
+    private static async Task SettleUntil(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!condition() && DateTime.UtcNow < deadline)
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task Restarts_with_1_2_4_second_backoff_after_each_crash()
     {
@@ -274,17 +285,17 @@ public class SupervisorTests
         await Settle();
         Assert.Equal(1, launches); // still short of the 1 s backoff
         clock.Advance(TimeSpan.FromMilliseconds(2));
-        await Settle();
+        await SettleUntil(() => launches == 2);
         Assert.Equal(2, launches); // relaunched after 1 s
 
         supervisor.Current.Crash();
         clock.Advance(TimeSpan.FromSeconds(2));
-        await Settle();
+        await SettleUntil(() => launches == 3);
         Assert.Equal(3, launches); // second failure backs off 2 s
 
         supervisor.Current.Crash();
         clock.Advance(TimeSpan.FromSeconds(4));
-        await Settle();
+        await SettleUntil(() => launches == 4);
         Assert.Equal(4, launches); // third failure backs off 4 s
         Assert.False(supervisor.Stopped);
     }
@@ -298,12 +309,12 @@ public class SupervisorTests
         supervisor.Stalled += () => stalled = true;
         var session = supervisor.Start();
 
-        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await Settle();
-        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(2)); await Settle();
-        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(4)); await Settle();
+        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await SettleUntil(() => supervisor.TryGetCurrent(out _));
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(2)); await SettleUntil(() => supervisor.TryGetCurrent(out _));
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(4)); await SettleUntil(() => supervisor.TryGetCurrent(out _));
         // A fourth crash inside the 60 s window stops automatic restart instead of relaunching.
         supervisor.Current.Crash();
-        await Settle();
+        await SettleUntil(() => supervisor.Stopped);
         Assert.True(supervisor.Stopped);
         Assert.True(stalled);
         Assert.Throws<InvalidOperationException>(() => supervisor.Current);
@@ -317,13 +328,13 @@ public class SupervisorTests
         var supervisor = new Supervisor<FakeSession>(() => { launches++; return new FakeSession(); }, clock);
         var session = supervisor.Start();
 
-        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await Settle();
+        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await SettleUntil(() => supervisor.TryGetCurrent(out _));
         Assert.Equal(2, launches);
         // Nothing else fails for over 60 s: the failure history should have aged out.
         clock.Advance(TimeSpan.FromSeconds(61));
         supervisor.Current.Crash();
         clock.Advance(TimeSpan.FromSeconds(1)); // first-failure backoff again, not stalled
-        await Settle();
+        await SettleUntil(() => launches == 3);
         Assert.Equal(3, launches);
         Assert.False(supervisor.Stopped);
     }
@@ -334,11 +345,11 @@ public class SupervisorTests
         var clock = new ManualClock();
         var supervisor = new Supervisor<FakeSession>(() => new FakeSession(), clock);
         var session = supervisor.Start();
-        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await Settle();
-        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(2)); await Settle();
-        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(4)); await Settle();
+        session.Crash(); clock.Advance(TimeSpan.FromSeconds(1)); await SettleUntil(() => supervisor.TryGetCurrent(out _));
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(2)); await SettleUntil(() => supervisor.TryGetCurrent(out _));
+        supervisor.Current.Crash(); clock.Advance(TimeSpan.FromSeconds(4)); await SettleUntil(() => supervisor.TryGetCurrent(out _));
         supervisor.Current.Crash(); // stalls
-        await Settle();
+        await SettleUntil(() => supervisor.Stopped);
         Assert.True(supervisor.Stopped);
 
         var restarted = supervisor.ManualRestart();
@@ -360,7 +371,7 @@ public class SupervisorTests
         var first = supervisor.Start();
         first.Crash();
         clock.Advance(TimeSpan.FromSeconds(1));
-        await Settle();
+        await SettleUntil(() => sessions.Count == 2);
         Assert.Equal(2, sessions.Count);
         Assert.NotSame(sessions[0], sessions[1]);
         Assert.False(sessions[0].Disposed); // the crashed session already disconnected itself; Supervisor did not also Dispose it here
@@ -414,7 +425,7 @@ public class SupervisorTests
         Assert.False(host.Disposed); // not yet at the idle window
 
         clock.Advance(TimeSpan.FromMilliseconds(1));
-        await Settle();
+        await SettleUntil(() => host.Disposed);
         Assert.True(host.Disposed);
 
         // A later call starts a fresh session rather than reusing the released one.
@@ -465,7 +476,7 @@ public class SupervisorTests
         Assert.Equal(1, launches);
 
         clock.Advance(TimeSpan.FromSeconds(1));
-        await Settle();
+        await SettleUntil(() => launches == 2);
         Assert.Equal(2, launches); // RestartAsync's own relaunch, not Acquire's
 
         var resumed = supervisor.Acquire()!;

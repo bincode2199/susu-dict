@@ -383,7 +383,9 @@ public class StreamChunkLimiterTests
         var pump = Task.Run(async () =>
         {
             await channel.Writer.WriteAsync(first, ct);
-            await Task.Delay(NetworkBroker.CoalesceWindow * 5, ct);
+            // Far beyond the window, not a small multiple: Windows timers tick every ~15.6 ms, so a 4 ms
+            // window and a 20 ms pause could fire on the same tick under load and merge the two pieces.
+            await Task.Delay(TimeSpan.FromMilliseconds(250), ct);
             await channel.Writer.WriteAsync(second, ct);
             channel.Writer.Complete();
         }, ct);

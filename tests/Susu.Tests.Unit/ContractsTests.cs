@@ -164,7 +164,9 @@ public class TypeScriptSnapshotTests
         {
             string path = Path.Combine(folder, name);
             Assert.True(File.Exists(path), $"{name} missing: run tools/Susu.ContractsGen");
-            Assert.Equal(content, File.ReadAllText(path).Replace("\r\n", "\n"));
+            // Normalize both sides: with core.autocrlf the generator's own raw-string header is checked
+            // out with CRLF too, so the generated side can carry \r\n as well as the committed file.
+            Assert.Equal(content.Replace("\r\n", "\n"), File.ReadAllText(path).Replace("\r\n", "\n"));
         }
     }
 

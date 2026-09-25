@@ -169,7 +169,13 @@ public class NetworkBrokerIntegrationTests
             Assert.Equal(IpcMessageType.Completed, envelope.Type);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.True(completed.Ok, completed.Error?.Detail);
-            Assert.Equal(piece, completed.Result!.Value.GetProperty("first").GetString());
+            // The first piece is whatever the broker's first socket read returned: PLAN 4.5 does not
+            // promise one piece per server write, and the server usually has written two or more 1 KiB
+            // writes before the pump's first read (that assumption made this test fail about 40% of runs).
+            // Only its shape is fixed: non-empty, all server bytes, no more than the server sent.
+            string first = completed.Result!.Value.GetProperty("first").GetString()!;
+            Assert.InRange(first.Length, 1, piece.Length * 5);
+            Assert.All(first, c => Assert.Equal('z', c));
             Assert.Equal(0, session.Broker.ActiveStreams); // Revoke cleaned it up; nothing left dangling
         }
         finally { session.Shutdown(2000); }
