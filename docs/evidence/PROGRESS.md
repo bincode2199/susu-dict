@@ -1,9 +1,12 @@
-# F00–F03 implementation checkpoint
+# Progress
 
-> Parent: [DEV-PLAN](../development/DEV-PLAN.md) · Catalog: [docs/README](../README.md)  
-> Child documents: [F00](F00/F00.md) · [F01](F01/F01.md) · [F02](F02/F02.md) · [F03](F03/F03.md) · [F04](F04/F04.md) · [F05](F05/F05.md) · [F06](F06/F06.md)
+> Parent: [Evidence](README.md) · Root: [README](../../README.md)
 
-Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundation`. Local commits only; **no remote push** is authorized. Dependencies may be fetched from official sources. No rate-limit reset credits are to be used.
+Where the project stands, what to do next, and how it got here. This is the one place that records project status; specs and plans link here.
+
+**Summary (2026-09-24):** F00–F04 are complete. F05 is waiting for integration acceptance (vendor accounts). F06, the first product loop, is paused halfway: real translation with MyMemory works in `susu.exe`; the remaining adapters and the UI are next. Resume at [F06 § Handoff](F06/F06.md#handoff).
+
+Ground rules: work started 2026-09-22 in the Windows development VM on branch `work/f00-f03-foundation`. Local commits only; **no remote push** is authorized. Dependencies may be fetched from official sources. No rate-limit reset credits are to be used.
 
 ## Current state (2026-09-24)
 
@@ -17,20 +20,14 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 | F05 | Pending integration acceptance. Network broker (origin, DNS and redirect policy; proxy; cancel; SSE), signers checked against official vectors, file handles and transforms, S10 credential-leak interception, 9 contract probes through the real sandbox, one real MyMemory call; 380 tests. Vendor accounts are missing, so A01–A04 and the other real calls are not executed. | [F05](F05/F05.md) |
 | F06 | In progress, **paused**. F06.1 (composition root, ELS detection, MyMemory, real loop) and F06.2a (lazy plugin host, key validation, OpenAI streaming) done; 411 tests. Remaining: F06.2b, F06.3, testing. | [F06](F06/F06.md) |
 
-Environment notes for whoever resumes:
-
-- Use Windows PowerShell 5.1 with `. ./tools/env.ps1`, which puts `.tools/dotnet` and `.tools/node` on PATH. There is no `pwsh`. In Git Bash use `.tools/node/node.exe`.
-- The RDP session is sometimes non-interactive: `SetCursorPos` fails, there is no foreground window, and DXGI returns `E_ACCESSDENIED`. Input-driven probes need a visible desktop.
-- Build `susu.exe` and run it with its own data root (`--data-root`), as described in [BUILD](../development/BUILD.md). Don't run the unit tests while a `--measure` run is in progress: the single-instance test signals message windows, and before the fix it woke an unrelated instance.
-- `tools/Susu.SelectionFixtures` needs `DOTNET_ROOT` set to `.tools/dotnet`.
-- Never commit machine names, account names or IPs; see [SENSITIVE.example](../SENSITIVE.example.md).
+Environment notes for building and running (PowerShell setup, non-interactive RDP sessions, data roots) are in [BUILD § Environment notes](../development/BUILD.md#environment-notes).
 
 ## Decisions and next steps
 
 1. **Resolved (2026-09-24), D-66:** the product owner accepted the two PER03 misses as a known gap. See [F00 § G0 decision](F00/F00.md#g0-decision).
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
-3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24).** Work was paused at the product owner's request, to be resumed manually. How the work is organized: a master agent coordinates the work, writes the docs and watches the usage limits. A fresh coding agent handles each sub-item, and an independent testing agent verifies each module. Modules run one at a time.
-4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window, mostly because one sub-agent ran 370 turns in a single uncompacted context (up to 645k tokens). From now on the master starts a fresh coding agent per sub-item, agents run filtered tests and keep only the tail of the output, and they read files by section. The rules are in [CLAUDE.md](../../CLAUDE.md).
+3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24)** at the product owner's request, to be resumed manually. A master agent coordinates, writes the docs and watches the usage limits; a fresh coding agent handles each sub-item and an independent testing agent verifies each module. Modules run one at a time.
+4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window because one sub-agent ran 370 turns in a single uncompacted context. The rules that prevent a repeat are in [CLAUDE.md](../../CLAUDE.md).
 5. **Resume here:** follow [F06 § Handoff](F06/F06.md#handoff): F06.2b (Tencent, DeepL), then F06.3 (UI and dynamic providers), then the F06 testing agent. After F06 (G1), per DEV-PLAN: F07, then F08–F18 (after F07, OCR, recording and vocab do not depend on each other), then F19 on a physical machine. Before starting a sub-agent, check the 5-hour and weekly usage windows. At about 90 %, have agents commit and stop, and pause until the reset.
 6. **Open items carried forward:**
    - F05 real vendor calls and A01–A04 need accounts.

@@ -1,6 +1,6 @@
 # Production UI
 
-> Parent: [ARCHITECTURE](ARCHITECTURE.md) (section 9, windows and production UI) · Catalog: [docs/README](../README.md)
+> Parent: [Architecture](README.md) · Root: [README](../../README.md)
 
 `ui/` holds two separate builds:
 

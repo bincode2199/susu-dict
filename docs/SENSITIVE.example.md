@@ -1,6 +1,6 @@
 # Sensitive values (template)
 
-> Parent: [docs/README](README.md)
+> Parent: [CONVENTIONS](CONVENTIONS.md) · Root: [README](../README.md)
 
 Committed docs use `<PLACEHOLDER>` tokens instead of machine-specific or private values. The real values live in `docs/SENSITIVE.md`, which is listed in `.gitignore` and exists only on machines that need it. To create it, copy this file to `docs/SENSITIVE.md` and fill in the **Value** column.
 

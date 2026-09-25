@@ -1,6 +1,6 @@
 # Su-Su 技术方案评审
 
-> 上级：[PLAN](PLAN.md) · 文档目录：[docs/README](../README.md)
+> 上级：[产品](README.md) · 根目录：[README](../../README.md)
 
 评审对象：当前 `PLAN.md`、`DESIGN.md`、`RECORD.md`，以及 `design/` 中的原型源码与说明。评审日期：2026-09-18。
 

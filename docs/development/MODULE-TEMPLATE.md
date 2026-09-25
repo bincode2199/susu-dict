@@ -1,6 +1,6 @@
 # Fxx · 模块交付记录模板
 
-> 上级：[DEV-PLAN](DEV-PLAN.md) · 文档目录：[docs/README](../README.md)
+> 上级：[开发](README.md) · 根目录：[README](../../README.md)
 
 复制到 `docs/evidence/Fxx/Fxx.md`。本模板不是验收报告；未实施的项目保持“未执行”。
 

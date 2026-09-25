@@ -1,10 +1,10 @@
 # Development build
 
-> Parent: [DEV-PLAN](DEV-PLAN.md) · Catalog: [docs/README](../README.md)
+> Parent: [Development](README.md) · Root: [README](../../README.md)
 
 Windows 11 x64; .NET SDK **10.0.401** (`global.json`); VS 2022 Build Tools C++ workload, MSVC **14.44.35207**, Windows SDK **10.0.26100.0**. Node **24.19.0** is used by the child-environment wrapper. The UI toolchain (Vue, Vite, TypeScript, Vitest) is pinned in `ui/package.json` and `ui/pnpm-lock.yaml`; see [UI](../architecture/UI.md).
 
-The app shell (`susu.exe`) exists from F03, but translation adapters arrive in F05/F06, so it is not yet a usable translator. Follow [progress](../evidence/PROGRESS.md).
+What `susu.exe` can do at the moment is in [PROGRESS](../evidence/PROGRESS.md).
 
 ```powershell
 # SDK may be installed globally or under .tools/dotnet.
@@ -18,6 +18,14 @@ node tools/run-clean-env.mjs pwsh -NoProfile -File tools/dev.ps1 publish
 Restore/fetch require network access. Run Windows probes as the actual dev user: a restricted token cannot access the user's DPAPI key store. Native libraries must remain next to the published executable. No user settings directory is accessed by the harness; all input data is synthetic. DPAPI uses the current Windows user's OS key store.
 
 `tools/Susu.JintProbe` is a separate strict NativeAOT comparison, currently failing AOT/trim analysis. It is intentionally not part of the passing solution build. Do not suppress those diagnostics to label the engine compatible.
+
+## Environment notes
+
+- Use Windows PowerShell 5.1 with `. ./tools/env.ps1`, which puts `.tools/dotnet` and `.tools/node` on PATH. There is no `pwsh`. In Git Bash use `.tools/node/node.exe`.
+- The RDP session is sometimes non-interactive: `SetCursorPos` fails, there is no foreground window, and DXGI returns `E_ACCESSDENIED`. Input-driven probes need a visible desktop.
+- Run `susu.exe` with its own data root (`--data-root`, see [susu.exe](#susuexe-f03)). Don't run the unit tests while a `--measure` run is in progress: the single-instance test signals message windows, and before the fix it woke an unrelated instance.
+- `tools/Susu.SelectionFixtures` needs `DOTNET_ROOT` set to `.tools/dotnet`.
+- Never commit machine names, account names or IPs; see [CONVENTIONS](../CONVENTIONS.md#sensitive-values).
 
 ## susu.exe (F03)
 

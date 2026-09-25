@@ -1,6 +1,6 @@
 # Su-Su agent working rules
 
-Project docs start at [docs/README.md](docs/README.md); current state is in [docs/evidence/PROGRESS.md](docs/evidence/PROGRESS.md). These rules keep module work inside the usage budget. F05's coding agent ran 370 turns in one context that grew to 645k tokens without compaction; re-reading that context each turn cost about 4x what the same work needed.
+Project docs start at [README.md](README.md); current state is in [docs/evidence/PROGRESS.md](docs/evidence/PROGRESS.md). These rules keep module work inside the usage budget. F05's coding agent ran 370 turns in one context that grew to 645k tokens without compaction; re-reading that context each turn cost about 4x what the same work needed.
 
 ## Master agent: keep sub-agent contexts short
 
@@ -24,3 +24,14 @@ Project docs start at [docs/README.md](docs/README.md); current state is in [doc
 - Don't re-read a file you already have in context unless it changed.
 - For docs, read the section named in the task (`DEV-PLAN § F05`, specific TEST-PLAN rows), not the whole document.
 - Prefer `Edit` over rewriting whole files with `Write`.
+
+## Writing docs
+
+Full rules are in [docs/CONVENTIONS.md](docs/CONVENTIONS.md). The principles:
+
+- **Hierarchy.** The root [README.md](README.md) indexes every document. Each `docs/` folder has a `README.md` that indexes its documents and is their parent. A new or moved document is listed in its parent index and in the root index, and carries a breadcrumb under its title (`> Parent: [Folder](README.md) · Root: [README](../../README.md)`, or `> 上级：… · 根目录：…`).
+- **Progressive disclosure.** Every document opens with its purpose and conclusion in one or two sentences, then a summary (table or short list), then the detail. A reader should be able to stop after the summary.
+- **One purpose per document.** If new content answers a different question or serves a different reader, put it in its own document or in the document that already owns that purpose.
+- **Status lives in one place.** Project and module status goes in [PROGRESS](docs/evidence/PROGRESS.md) and the module records (`docs/evidence/Fxx/Fxx.md`). Specs and plans link there instead of stating their own status.
+- **Stable section numbers.** Code comments cite `ARCHITECTURE 5.1`, `PLAN 4.5.1` and similar. Don't renumber the numbered specs; when a section moves out, leave its heading with a one-line pointer.
+- **No sensitive values.** Use a `<PLACEHOLDER>` listed in [SENSITIVE.example](docs/SENSITIVE.example.md); never commit IPs, account names, machine IDs, private links or credentials.

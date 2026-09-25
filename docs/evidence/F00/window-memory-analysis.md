@@ -1,6 +1,6 @@
 # Eight-window UI memory experiment
 
-> Parent: [F00](F00.md) · Catalog: [docs/README](../../README.md)
+> Parent: [F00](F00.md) · Root: [README](../../../README.md)
 
 This is a partial F00 experiment, not PER02 or G0 acceptance. It uses eight representative Vue pages with one WebView environment. It does not yet include the default/full 21-package plugin workloads, real services, production state, or production lifecycle implementation.
 

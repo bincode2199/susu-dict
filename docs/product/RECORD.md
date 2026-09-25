@@ -1,6 +1,6 @@
 # Su-Su · 方案记录
 
-> 上级：[PLAN](PLAN.md) · 文档目录：[docs/README](../README.md)
+> 上级：[产品](README.md) · 根目录：[README](../../README.md)
 
 这里保存**决策的来龙去脉**：为什么这么定、否决过什么、调研与实测拿到的数据。
 

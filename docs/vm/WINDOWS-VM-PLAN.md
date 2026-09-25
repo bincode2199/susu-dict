@@ -1,7 +1,6 @@
 # Windows 虚拟机安装部署计划
 
-> 上级：[WINDOWS-VM-OPERATIONS](WINDOWS-VM-OPERATIONS.md) · 文档目录：[docs/README](../README.md)  
-> 子文档：[WINDOWS-VM-REVIEW](WINDOWS-VM-REVIEW.md)  
+> 上级：[虚拟机](README.md) · 根目录：[README](../../README.md)  
 > 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
 
 初版日期：2026-09-19（America/Toronto）。版本：V5（故障路径复审）。状态：已于 2026-09-21 按方案实施，实际证据和差异见 [部署记录](WINDOWS-VM-DEPLOYMENT.md)。范围：在宿主机上部署两台可供多项目复用的 Windows 11 虚拟机，首个使用项目为 susu-dict。第 2 节保留实施前的只读调查快照，不代表当前状态。

@@ -1,6 +1,6 @@
 # Dependency and license inventory (F00)
 
-> Parent: [DEV-PLAN](DEV-PLAN.md) · Catalog: [docs/README](../README.md)
+> Parent: [Development](README.md) · Root: [README](../../README.md)
 
 Pinned versions live in `global.json`, `Directory.Packages.props`, each project's `packages.lock.json`, `native/dependencies.json` and `ui/pnpm-lock.yaml`. The machine-generated inventory is [`evidence/F00/license-inventory.json`](../evidence/F00/license-inventory.json), produced from the locked graph by:
 

@@ -1,7 +1,6 @@
 # Su-Su · 设计基础
 
-> 上级：[docs/README](../README.md)  
-> 子文档：[ARTBOARDS](ARTBOARDS.md)  
+> 上级：[设计](README.md) · 根目录：[README](../../README.md)  
 > 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
 
 本文件是后续所有界面设计与前端实现的基准。新界面一律从这里取值，不要另起一套。

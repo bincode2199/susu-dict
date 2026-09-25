@@ -1,9 +1,8 @@
 # Su-Su · 模块开发计划
 
-> 上级：[docs/README](../README.md)  
-> 子文档：[BUILD](BUILD.md) · [TEST-PLAN](TEST-PLAN.md) · [MODULE-TEMPLATE](MODULE-TEMPLATE.md) · [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES.md) · [PROGRESS](../evidence/PROGRESS.md)
+> 上级：[开发](README.md) · 根目录：[README](../../README.md)
 
-版本 D1 · 2026-09-19。依据 PLAN 第四版、ARCHITECTURE A1、DESIGN 与线上第 17 版的 43 张画板。当前只有方案与原型，**尚未开始应用开发，所有验收未执行**。
+版本 D1 · 2026-09-19。依据 PLAN 第四版、ARCHITECTURE A1、DESIGN 与线上第 17 版的 43 张画板。实施进度与验收结果见 [PROGRESS](../evidence/PROGRESS.md)，本文不记录状态。
 
 本计划按功能纵向交付：每个模块同时完成所需的 Job、系统/插件适配、设置、UI、错误处理和验收，交付可演示的功能。公共基础先做，功能模块按硬依赖选取；不用等所有服务插件完成才开始下一个功能。M0–M5 是质量关卡，F00–F19 才是可派发的工作单元。
 

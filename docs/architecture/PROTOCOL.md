@@ -1,10 +1,10 @@
 # Protocol sources
 
-> Parent: [ARCHITECTURE](ARCHITECTURE.md) (section 6, IPC and UI protocol) · Catalog: [docs/README](../README.md)
+> Parent: [Architecture](README.md) · Root: [README](../../README.md)
 
 Covers the repository folder `protocol/`: `protocol/generated/` (generated TypeScript contracts) and `protocol/ipc/samples/` (IPC compatibility samples).
 
-API v1 is not frozen. Contracts and generated TypeScript must be verified together before F01 acceptance. Plugin protocol, UI protocol and manifest schema have separate version fields; UI never receives invocation grants or stored credentials.
+API v1 is not frozen until G1. Contracts and generated TypeScript are verified together (`dotnet run --project tools/Susu.ContractsGen -c Release -- . --check`). Plugin protocol, UI protocol and manifest schema have separate version fields; UI never receives invocation grants or stored credentials.
 
 ## IPC compatibility samples
 

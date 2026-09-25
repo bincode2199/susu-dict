@@ -1,7 +1,6 @@
 # Windows 虚拟机运行与维护手册
 
-> 上级：[docs/README](../README.md)  
-> 子文档：[WINDOWS-VM-DEPLOYMENT](WINDOWS-VM-DEPLOYMENT.md) · [WINDOWS-VM-PLAN](WINDOWS-VM-PLAN.md)  
+> 上级：[虚拟机](README.md) · 根目录：[README](../../README.md)  
 > 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
 
 基线日期：2026-09-21（America/Toronto）。本手册记录**已经部署**的两台通用 Windows 虚拟机，供后续项目开发、测试、维护和故障恢复使用。首次使用项目是 susu-dict；虚拟机名称与配置不依赖该项目。实际参数以各机 `/data/vm/<名称>/config/deployment.json` 和 `vm.py` 为准；修改配置或系统后，应同步更新本手册和[部署记录](WINDOWS-VM-DEPLOYMENT.md)。原安装决策见[计划](WINDOWS-VM-PLAN.md)，实施审阅见[审阅记录](WINDOWS-VM-REVIEW.md)。
@@ -98,4 +97,14 @@ Windows 日常使用 `<OWNER_USER>` 标准账户。涉及系统配置时，使�
 
 代码应由未来项目的版本管理流程保存；本方案不做定期整机备份、快照或本地代码复制。不能再生成的资料、配置、许可证材料等，先通过 `--transfer` 导出到本机 `backups/critical/` 并核对哈希与可读性，再由机主放到受控的离机位置。**同一 `/data` 内的暂存不能防止整盘故障**。若日后启用 BitLocker 保护，先安全导出恢复密钥，再进行固件、TPM 或系统盘维护。
 
-重建会销毁目标 VM 当前 Windows 系统和账户。具体已验证的 clean 重建边界、样例导出/恢复哈希、介质与顺序见[部署记录的“将来重建”](WINDOWS-VM-DEPLOYMENT.md#将来重建)及 clean 的 `evidence/rebuild-reset.json`、`evidence/rebuild-sample-restore-guest.txt`。开始前必须确认目标名称、VM 已关机、关键数据已离机验证；只替换**该机**的 `disks/system.qcow2`、`firmware/OVMF_VARS.fd`、`tpm/`，保留另一台 VM 和目标机的配置、介质、关键导出。旧 `<VM_ADMIN>` 加密凭据对应旧系统，重装后需要重新创建并验证维护账户、轮换凭据。删除敏感安装 seed 后的手工安装分支已在控制器中支持，但没有作为本次重建演练路径验证；不要将它与已实测的自动重建混淆。
+重建会销毁目标 VM 当前 Windows 系统和账户。步骤见下文 6.1；已验证的样例导出/恢复哈希见 clean 的 `evidence/rebuild-reset.json`、`evidence/rebuild-sample-restore-guest.txt`。开始前必须确认目标名称、VM 已关机、关键数据已离机验证；只替换**该机**的 `disks/system.qcow2`、`firmware/OVMF_VARS.fd`、`tpm/`，保留另一台 VM 和目标机的配置、介质、关键导出。旧 `<VM_ADMIN>` 加密凭据对应旧系统，重装后需要重新创建并验证维护账户、轮换凭据。删除敏感安装 seed 后的手工安装分支已在控制器中支持，但没有作为本次重建演练路径验证；不要将它与已实测的自动重建混淆。
+
+### 6.1 重建步骤
+
+以下步骤的导出、重装、恢复已在 clean 上用自动回答介质演练，证据见[部署记录](WINDOWS-VM-DEPLOYMENT.md)；其中的手工安装分支未经演练。
+
+本次 clean 的完整导出、重装、恢复证据可作为步骤清单，不能把当前系统盘当作可随意重置的空白演练盘。先用该机 `start --transfer` 导出不可再生成的数据，正常关机后用 mtools 在宿主读取并核对哈希、可读性与必要的解密材料；未完成验证就保留原盘。备份目录与系统盘同处 `/data`，唯一数据还需由机主放到受控的离机位置。原系统若启用 BitLocker 保护，先把恢复密钥安全移出 guest；不要将旧 VARS/TPM 与新系统盘混配。
+
+确认导出后，在目标 VM 停机且 `status` 显示 QEMU/swtpm 均不存活时，逐项核对 VM 名称、真实目录、`findmnt` UUID 和准备替换的三个目标：`disks/system.qcow2`、`firmware/OVMF_VARS.fd`、`tpm/`。为该机新建原容量稀疏 qcow2，将 `/usr/share/OVMF/OVMF_VARS_4M.ms.fd` 复制为独占的 VARS，清空该机旧 TPM 状态，并只在 `config/deployment.json` 中把 `windows_installed` 设为 false、`storage_bus` 设为 `sata`；保留 config、ISO、backups、transfer、evidence 与另一台 VM。旧加密维护凭据对应旧 Windows，重装时需要轮换。此步骤有意销毁目标 VM 的旧系统状态，须先完成数据验证。
+
+`python3 /data/vm/<名称>/config/vm.py start --install` 在已安装标志为 true 时拒绝运行；完成明确重置后，即使安装回答介质已删除，也会挂载官方 Windows ISO 与 VirtIO ISO，进入手工安装。若 UEFI 先选择 VirtIO DVD，在 Boot Manager 中选 Windows DVD-ROM；不要对 USB 交换盘分区。手工安装对应 Windows 11 Pro、创建用户、安装签名版 VirtIO 驱动和 Guest Agent，然后立即将 `windows_installed` 标回 true。先用小型 VirtIO 测试盘验证新系统驱动，正常关机后才把 `storage_bus` 切到 `virtio-blk`。执行 Windows Update 与所需的真实重启，验证 Secure Boot、TPM、设备、DNS、账户、正常启动/停止；创建新 `<VM_ADMIN>` 并验证登录后才把 `<OWNER_USER>` 留在 Users。最后用 `--transfer` 恢复文件并逐一比对导出哈希，普通启动不挂载交换盘。手工安装分支是为将来恢复而提供；本次实际演练使用私有自动回答介质，完成后因其含初始密码而删除。

@@ -1,9 +1,11 @@
 # Windows 虚拟机计划多轮 review
 
-> 上级：[WINDOWS-VM-PLAN](WINDOWS-VM-PLAN.md) · 文档目录：[docs/README](../README.md)  
+> 上级：[虚拟机](README.md) · 根目录：[README](../../README.md)  
 > 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
 
 日期：2026-09-19。对象：[WINDOWS-VM-PLAN.md](WINDOWS-VM-PLAN.md)。方式：同一执行者分轮进行环境、项目契约、安全、恢复和交付审查；不是独立专家审核，也不是 Windows 实测报告。
+
+**结论**：计划经多轮审查修订为 V5，于 2026-09-21 实施；实施后两轮复审发现的问题已在控制器与文档中修订。各轮按时间顺序排列，最新结论在文末；当前操作以[运行与维护手册](WINDOWS-VM-OPERATIONS.md)为准。
 
 > 版本说明：第 1–3 轮及 V2 审查保留历史记录，不是当前实施要求。当前执行依据为 WINDOWS-VM-PLAN.md V5；GitHub、开发环境和项目验收已移出范围，见文末 V5 审查。
 

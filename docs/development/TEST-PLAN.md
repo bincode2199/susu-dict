@@ -1,8 +1,8 @@
 # Su-Su · 开发与发布验收计划
 
-> 上级：[DEV-PLAN](DEV-PLAN.md) · 文档目录：[docs/README](../README.md)
+> 上级：[开发](README.md) · 根目录：[README](../../README.md)
 
-范围：PLAN 第四版、ARCHITECTURE A1、DEV-PLAN F00–F19。保留 R01–R06 的原始 47 项并补充任务、性能、UIA、设置、UI、存储、媒体与更新验收。**全部未执行**：当前没有应用实现，本文件定义开发出口条件，不是通过报告。每模块按 DEV-PLAN 选取用例；同一用例的原型、纯逻辑、契约回放和真实端到端结果分别记录。
+范围：PLAN 第四版、ARCHITECTURE A1、DEV-PLAN F00–F19。保留 R01–R06 的原始 47 项并补充任务、性能、UIA、设置、UI、存储、媒体与更新验收。本文件定义开发出口条件，不是通过报告；各用例的执行结果记在模块交付记录（`docs/evidence/Fxx/Fxx.md`）中，汇总见 [PROGRESS](../evidence/PROGRESS.md)。每模块按 DEV-PLAN 选取用例；同一用例的原型、纯逻辑、契约回放和真实端到端结果分别记录。
 
 运行记录须注明应用/插件 commit、.NET/引擎/WebView2 版本、Windows build、CPU 架构、服务/model/API 版本和日期。凭据使用测试账户；日志、录制响应与失败附件均脱敏。真实调用结果和录制响应测试结果分别记录，不能互相替代。
 

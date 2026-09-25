@@ -1,10 +1,11 @@
 # 画板源文件（`design/`）
 
-> 上级：[DESIGN](DESIGN.md) · 文档目录：[docs/README](../README.md)  
-> 子文档：[ARTBOARD-REVISIONS](ARTBOARD-REVISIONS.md)  
+> 上级：[设计](README.md) · 根目录：[README](../../README.md)  
 > 敏感值（IP、账户、UUID、私有链接等）以 `<占位符>` 表示，实际值见本地 [SENSITIVE.md](../SENSITIVE.md)（已 gitignore，不入库）。
 
-仓库根目录的 `design/` 保存设计画板的源文件备份，用于版本管理和灾难恢复；本文说明这些文件。设计规范本身在 [DESIGN.md](DESIGN.md)，取值请看那份。
+仓库根目录的 `design/` 保存设计画板的源文件备份，用于版本管理和灾难恢复。本文说明这些文件是什么、怎么查看和恢复、怎么修改。设计规范本身在 [DESIGN.md](DESIGN.md)，取值请看那份。
+
+要点：线上画板是唯一的编辑入口；`design/` 是它的导出副本（线上第 17 版，43 张画板 + `canvas.json`）；这些文件不能直接在浏览器里正常渲染；线上画板丢失时可从这里重建。
 
 在线画板：`<DESIGN_CANVAS_URL>`（私有，需登录；地址见本地 [SENSITIVE.md](../SENSITIVE.md)）
 
@@ -20,9 +21,7 @@
 | 深色主题 | `DarkStyle.dc.html`（token 表与切换要求）+ 以上除 `Style` / `Icon` 外每张画板的 `Dark*` 版，共 21 张 |
 | 布局 | `canvas.json` —— 画板在画布上的坐标、标题、批注 |
 
-对应线上画板第 17 版（2026-09-19，按 [ARTBOARD-REVISIONS.md](ARTBOARD-REVISIONS.md) 同步 PLAN 第四版 D-52–D-57；此前改动见 `RECORD.md` D-51）。
-
-**同步状态**：第四版 D-52–D-57 已按 [ARTBOARD-REVISIONS.md](ARTBOARD-REVISIONS.md) 完成第 17 版同步，取舍见 RECORD D-58。后续 A1 架构补充的状态/排序/窗口行为见 [DESIGN.md](DESIGN.md) 第 13 节；这些新增细节尚未重新出画板，开发按该节实现验收。本次只补实施文档，不直接修改画板存档。
+对应线上画板第 17 版（2026-09-19）。各轮修订改了什么见[画板修订记录](ARTBOARD-REVISIONS.md)。A1 架构补充的状态/排序/窗口行为只写在 [DESIGN.md](DESIGN.md) 第 13 节，尚未画入画板，开发按该节实现验收。
 
 `Dark*.dc.html` 是脚本从浅色画板按 `DESIGN.md` 第 2 节的 token 对照表逐色映射生成的（只有 `DarkStyle` 手写）。改浅色画板后要重新生成深色版，不要单独手改深色版。
 
@@ -36,7 +35,7 @@
 
 直接双击打开只能看到个大概——强调色边框会因为 `{{accent}}` 不是合法 CSS 值而消失，底部脚本会因为 `DCLogic` 未定义而报错（无害）。要看真实效果请开线上画板。
 
-> 我之前说这些文件可以直接在浏览器打开，说错了。如果需要一份不依赖运行时、双击就能看的静态版，可以再导出。
+如果需要一份不依赖运行时、双击就能看的静态版，可以从线上另行导出。
 
 ## 恢复画板
 
@@ -53,4 +52,4 @@
 
 后续新界面往同一个画板加 artboard，不要另起画布。布局约定：同一行画板之间留 80px，行与行之间留 120px 以上，行标题（`kind: "title1"`）要在本行上方留 223px 以上。
 
-[ARTBOARD-REVISIONS.md](ARTBOARD-REVISIONS.md) 是第四版同步清单，已全部落实。[DESIGN.md](DESIGN.md) 第 12 节末尾的「尚未画的」现在是空的。
+改完之后在[画板修订记录](ARTBOARD-REVISIONS.md)记下本轮清单，并更新 [DESIGN.md](DESIGN.md) 第 12 节的画板索引。
