@@ -24,8 +24,15 @@ public sealed record PackageManifest(
     IReadOnlyList<string> Capabilities,
     IReadOnlyList<string> Hosts,
     IReadOnlyList<string> CredentialUse,
-    string Entry)
+    string Entry,
+    IReadOnlyList<Susu.Domain.ConfigField>? Config = null)
 {
+    /// <summary>The schema's properties in declaration order (empty when the package declares no config).</summary>
+    public IReadOnlyList<Susu.Domain.ConfigField> ConfigFields => Config ?? [];
+
+    /// <summary>True when the package declares the optional <c>options</c> method through some field's optionsSource (DEV-PLAN 5).</summary>
+    public bool DeclaresOptions => ConfigFields.Any(f => f.Options?.Method == Susu.Domain.OptionsSource.OptionsMethod);
+
     /// <summary>Reads and validates one manifest.yaml. Never throws; problems come back as issues.</summary>
     public static (PackageManifest? Manifest, IReadOnlyList<ManifestIssue> Issues) Parse(string yaml)
     {
@@ -53,10 +60,123 @@ public sealed record PackageManifest(
             if (!Enum.GetNames<Susu.Contracts.Capability>().Any(n => string.Equals(n, c, StringComparison.OrdinalIgnoreCase)))
                 issues.Add(new ManifestIssue("capabilities", "unknown", $"'{c}' is not a published capability"));
         if (!LooksLikeSafeRelativePath(entry)) issues.Add(new ManifestIssue("entry", "invalid", $"'{entry}' is not a safe relative path"));
+        var config = ParseConfig(root.Get("config"), credentialUse, issues);
 
         if (issues.Count > 0 || id is null || name is null) return (null, issues);
-        return (new PackageManifest(id, name, apiVersion, minHost, capabilities, hosts, credentialUse, entry), issues);
+        return (new PackageManifest(id, name, apiVersion, minHost, capabilities, hosts, credentialUse, entry, config), issues);
     }
+
+    public const int MaxConfigFields = 64;
+    private static readonly string[] allowedPropertyKeys = ["type", "title", "description", "default", "enum", "format", "minimum", "maximum", "x-susu"];
+    private static readonly string[] allowedExtensionKeys = ["group", "secret", "showWhen", "placeholder", "help", "optionsSource"];
+
+    /// <summary>
+    /// <c>config</c> (PLAN 4.6): <c>type: object</c> with scalar-typed <c>properties</c>. Only data is accepted:
+    /// unknown keywords are rejected so a package cannot smuggle UI behaviour in (no executable UI, PLAN 4.6).
+    /// <c>x-susu.optionsSource.dependsOn</c> may name only this package's own fields or declared secrets
+    /// (ARCHITECTURE 3.1); <c>method</c> is <c>options</c> (default) or <c>voices</c>.
+    /// </summary>
+    private static IReadOnlyList<Susu.Domain.ConfigField> ParseConfig(YNode? node, IReadOnlyList<string> secrets, List<ManifestIssue> issues)
+    {
+        if (node is null) return [];
+        if (node is not YMap map) { issues.Add(new ManifestIssue("config", "type", "'config' must be a mapping")); return []; }
+        foreach (var entry in map.Entries)
+            if (entry.Key is not ("type" or "properties")) issues.Add(new ManifestIssue($"config.{entry.Key}", "unknown-field", "config accepts only type and properties"));
+        if (map.Get("type") is not YScalar { Value: "object" }) issues.Add(new ManifestIssue("config.type", "invalid", "config type must be object"));
+        if (map.Get("properties") is not YMap properties) { issues.Add(new ManifestIssue("config.properties", "missing", "config.properties must be a mapping")); return []; }
+        if (properties.Entries.Count > MaxConfigFields) issues.Add(new ManifestIssue("config.properties", "too-many", $"at most {MaxConfigFields} fields"));
+
+        var fields = new List<Susu.Domain.ConfigField>();
+        var names = properties.Entries.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var (fieldName, value) in properties.Entries)
+        {
+            string path = $"config.properties.{fieldName}";
+            if (!IsFieldName(fieldName)) { issues.Add(new ManifestIssue(path, "invalid", "field names are letters, digits and '_' starting with a letter")); continue; }
+            if (value is not YMap p) { issues.Add(new ManifestIssue(path, "type", "a property must be a mapping")); continue; }
+            foreach (var key in p.Entries.Select(e => e.Key).Where(k => !allowedPropertyKeys.Contains(k)))
+                issues.Add(new ManifestIssue($"{path}.{key}", "unknown-field", "unsupported schema keyword"));
+            string? typeName = (p.Get("type") as YScalar)?.Value;
+            Susu.Domain.ConfigFieldType type;
+            switch (typeName)
+            {
+                case "string": type = Susu.Domain.ConfigFieldType.String; break;
+                case "integer": type = Susu.Domain.ConfigFieldType.Integer; break;
+                case "number": type = Susu.Domain.ConfigFieldType.Number; break;
+                case "boolean": type = Susu.Domain.ConfigFieldType.Boolean; break;
+                default: issues.Add(new ManifestIssue($"{path}.type", "invalid", "type must be string, integer, number or boolean")); continue;
+            }
+            string? Text(YMap m, string key, string at)
+            {
+                var n = m.Get(key);
+                if (n is null) return null;
+                if (n is YScalar s) return s.Value;
+                issues.Add(new ManifestIssue($"{at}.{key}", "type", $"'{key}' must be a scalar"));
+                return null;
+            }
+            double? Number(string key)
+            {
+                string? raw = Text(p, key, path);
+                if (raw is null) return null;
+                if (double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) && double.IsFinite(v)) return v;
+                issues.Add(new ManifestIssue($"{path}.{key}", "type", $"'{key}' must be a number"));
+                return null;
+            }
+            IReadOnlyList<string>? enumValues = null;
+            if (p.Get("enum") is { } enumNode)
+            {
+                if (enumNode is YSeq seq && seq.Items.All(i => i is YScalar) && seq.Items.Count is > 0 and <= 200) enumValues = [.. seq.Items.Cast<YScalar>().Select(s => s.Value)];
+                else issues.Add(new ManifestIssue($"{path}.enum", "type", "enum must be 1-200 scalars"));
+            }
+            string? format = Text(p, "format", path);
+            if (format is not null and not "uri") issues.Add(new ManifestIssue($"{path}.format", "invalid", "only format: uri is supported"));
+
+            string? group = null, placeholder = null, help = null, showField = null, showEquals = null;
+            bool secret = false;
+            Susu.Domain.OptionsSource? options = null;
+            if (p.Get("x-susu") is { } extNode)
+            {
+                string ext = $"{path}.x-susu";
+                if (extNode is not YMap x) { issues.Add(new ManifestIssue(ext, "type", "x-susu must be a mapping")); continue; }
+                foreach (var key in x.Entries.Select(e => e.Key).Where(k => !allowedExtensionKeys.Contains(k)))
+                    issues.Add(new ManifestIssue($"{ext}.{key}", "unknown-field", "unsupported x-susu keyword"));
+                group = Text(x, "group", ext);
+                placeholder = Text(x, "placeholder", ext);
+                help = Text(x, "help", ext);
+                secret = Text(x, "secret", ext) == "true";
+                if (x.Get("showWhen") is { } showNode)
+                {
+                    if (showNode is YMap show && Text(show, "field", $"{ext}.showWhen") is { } f && names.Contains(f) && f != fieldName)
+                    { showField = f; showEquals = Text(show, "equals", $"{ext}.showWhen") ?? ""; }
+                    else issues.Add(new ManifestIssue($"{ext}.showWhen", "invalid", "showWhen needs field (another declared field) and equals"));
+                }
+                if (x.Get("optionsSource") is { } sourceNode)
+                {
+                    string at = $"{ext}.optionsSource";
+                    if (sourceNode is not YMap source) { issues.Add(new ManifestIssue(at, "type", "optionsSource must be a mapping")); continue; }
+                    foreach (var key in source.Entries.Select(e => e.Key).Where(k => k is not ("dependsOn" or "method")))
+                        issues.Add(new ManifestIssue($"{at}.{key}", "unknown-field", "optionsSource accepts dependsOn and method"));
+                    string method = Text(source, "method", at) ?? Susu.Domain.OptionsSource.OptionsMethod;
+                    if (method is not (Susu.Domain.OptionsSource.OptionsMethod or Susu.Domain.OptionsSource.VoicesMethod))
+                        issues.Add(new ManifestIssue($"{at}.method", "invalid", "method must be options or voices"));
+                    var dependsOn = StringList(source, "dependsOn", issues, required: false);
+                    foreach (var d in dependsOn.Where(d => d == fieldName || !names.Contains(d) && !secrets.Contains(d)))
+                        issues.Add(new ManifestIssue($"{at}.dependsOn", "invalid", $"'{d}' is not another field or declared secret of this package"));
+                    if (type != Susu.Domain.ConfigFieldType.String) issues.Add(new ManifestIssue(at, "invalid", "dynamic options need a string field"));
+                    options = new Susu.Domain.OptionsSource(method, dependsOn);
+                }
+            }
+            if (secret && options is not null) issues.Add(new ManifestIssue(path, "invalid", "a secret field cannot have dynamic options"));
+            var field = new Susu.Domain.ConfigField(fieldName, type, Text(p, "title", path), Text(p, "default", path), enumValues, format,
+                Number("minimum"), Number("maximum"), group, placeholder, help ?? Text(p, "description", path), showField, showEquals, secret, options);
+            if (field.Default is { } d0 && !secret && Susu.Domain.ConfigSchema.Check(field, d0) is { } bad)
+                issues.Add(new ManifestIssue($"{path}.default", "invalid", $"default does not satisfy the field ({bad})"));
+            fields.Add(field);
+        }
+        return fields;
+    }
+
+    private static bool IsFieldName(string name)
+        => name.Length is > 0 and <= 64 && char.IsAsciiLetter(name[0]) && name.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
 
     private static bool LooksLikeSafeRelativePath(string name)
         => name.Length > 0 && !name.Contains('\\') && !name.Contains(':') && !Path.IsPathRooted(name) && !name.Split('/').Contains("..");

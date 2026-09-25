@@ -9,3 +9,22 @@ hosts:
   - api.openai.com
 credentialUse:
   - apiKey
+config:
+  type: object
+  properties:
+    model:
+      type: string
+      title: Model
+      default: gpt-4o-mini
+      x-susu:
+        placeholder: gpt-4o-mini
+        optionsSource:
+          dependsOn: [baseUrl, apiKey]
+    baseUrl:
+      type: string
+      format: uri
+      title: API address
+      x-susu:
+        group: advanced
+        placeholder: https://api.openai.com
+        help: An OpenAI-compatible server; leave empty for api.openai.com.
