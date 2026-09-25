@@ -49,17 +49,19 @@ public sealed record ShellOptions(bool DevelopmentBuild, bool DevPreview, TimeSp
 /// from the given settings whether or not it is enabled, for Settings.ValidateProvider. MonthlyUsage: local
 /// characters sent this month by a service id (DATA04), shown next to the service. Schemas (F07.2): each wired
 /// instance's manifest config schema, from which the settings controls are generated. Options: the dynamic
-/// option loader for fields with an optionsSource (Settings.LoadOptions).
+/// option loader for fields with an optionsSource (Settings.LoadOptions). TestNetwork (F07.3): probes the given
+/// paths through a network broker built from the given (unsaved) proxy settings (Settings.TestNetwork).
 /// </summary>
 public sealed record TranslationBackend(bool RuntimeAvailable, Func<AppSettings, string, ITranslationProvider?> ValidationProvider, Func<string, long>? MonthlyUsage = null,
-    IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? Schemas = null, OptionsBroker? Options = null);
+    IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? Schemas = null, OptionsBroker? Options = null,
+    Func<NetworkSettings, IReadOnlyList<NetworkProbeTarget>, CancellationToken, Task<IReadOnlyList<NetworkProbeResult>>>? TestNetwork = null);
 
 /// <summary>
 /// The UI brain on the message thread: window sessions, snapshot + patch sequencing, command dispatch,
 /// close/minimize semantics, keep-warm/release, tray menu model and hotkey registration. It never touches
 /// Win32 or COM directly (<see cref="IWindowPlatform"/>) and never hands a page a secret, grant or path.
 /// </summary>
-public sealed class ShellCoordinator
+public sealed partial class ShellCoordinator
 {
     public static readonly TimeSpan PatchInterval = TimeSpan.FromMilliseconds(33); // ≤ 30 streaming updates per second
 
@@ -300,6 +302,9 @@ public sealed class ShellCoordinator
             case UiCommands.ValidateProvider: return await ValidateAsync(Read(payload, ContractsJson.Default.ValidateProviderRequest));
             case UiCommands.SaveServiceConfig: return SaveServiceConfig(Read(payload, ContractsJson.Default.ServiceConfigRequest));
             case UiCommands.LoadOptions: return await LoadOptionsAsync(Read(payload, ContractsJson.Default.LoadOptionsRequest));
+            case UiCommands.SavePrompt: return SavePrompt(Read(payload, ContractsJson.Default.PromptSaveRequest));
+            case UiCommands.PreviewPrompt: return PreviewPrompt(Read(payload, ContractsJson.Default.PromptPreviewRequest));
+            case UiCommands.TestNetwork: return await TestNetworkAsync(Read(payload, ContractsJson.Default.NetworkTestRequest));
             case UiCommands.TrayOpen: return TrayOpen(Read(payload, ContractsJson.Default.TrayOpenRequest).Id);
             case UiCommands.TrayExit: platform.Exit(); return Ok();
             default: return new CommandResult(false, "unavailable"); // whitelisted but its module is not built yet
@@ -650,6 +655,70 @@ public sealed class ShellCoordinator
         return Ok(JsonSerializer.SerializeToElement(view, ContractsJson.Default.OptionsView));
     }
 
+    // ---------- SetPrompt and SetNetwork (F07.3) ----------
+
+    /// <summary>
+    /// Settings.SavePrompt (CFG04): level, template choice, scope and the custom templates, checked here. Saving
+    /// changes only later tasks: a running task's providers hold the snapshot they were built with.
+    /// </summary>
+    private CommandResult SavePrompt(PromptSaveRequest request)
+    {
+        if (request.Level.Length > 0 && PromptCatalog.FindLevel(request.Level) is null) throw new ArgumentException("level");
+        if (request.Scope.Any(id => !PromptCatalog.AiInstances.Contains(id)) || request.Scope.Distinct(StringComparer.Ordinal).Count() != request.Scope.Length) throw new ArgumentException("scope");
+        if (request.Profiles.Length > PromptCatalog.MaxProfiles) throw new ArgumentException("profiles");
+        var issues = new List<SettingsIssueView>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var profile in request.Profiles)
+        {
+            if (!PromptIdFormat().IsMatch(profile.Id) || !ids.Add(profile.Id)) throw new ArgumentException("profile-id");
+            string name = profile.Name.Trim();
+            if (name.Length == 0 || name.Length > PromptCatalog.MaxNameLength) issues.Add(new SettingsIssueView($"prompts.{profile.Id}.name", "length", "", 0));
+            if (PromptCatalog.CheckTemplate(profile.Template) is { } problem) issues.Add(new SettingsIssueView($"prompts.{profile.Id}.template", problem, "", 0));
+        }
+        if (request.Profile.Length > 0 && !ids.Contains(request.Profile)) throw new ArgumentException("profile");
+        if (issues.Count > 0) return new CommandResult(false, "invalid", JsonSerializer.SerializeToElement(issues.ToArray(), ContractsJson.Default.SettingsIssueViewArray));
+        var s = config.State.Effective;
+        var proposed = s with
+        {
+            Prompts = [.. request.Profiles.Select(p => new PromptProfile(p.Id, p.Name.Trim(), p.Template))],
+            Prompt = new PromptSettings(request.Level, request.Profile, [.. PromptCatalog.AiInstances.Where(request.Scope.Contains)]),
+        };
+        return Outcome(config.Save(proposed, request.ExpectedRevision, request.ExpectedFileHash));
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("^[a-z0-9][a-z0-9-]{0,31}$")]
+    private static partial System.Text.RegularExpressions.Regex PromptIdFormat();
+
+    /// <summary>Settings.PreviewPrompt: the same single-pass renderer a task uses (<see cref="PromptSnapshot.Render"/>).</summary>
+    private static CommandResult PreviewPrompt(PromptPreviewRequest request)
+    {
+        if (request.Text.Length > 2000 || request.Template.Length > PromptCatalog.MaxTemplateLength * 2) throw new ArgumentException("length");
+        string template = request.Template.Length > 0 ? request.Template : PromptCatalog.DefaultTemplate;
+        string level = PromptCatalog.FindLevel(request.Level)?.Value ?? PromptCatalog.NoLevel;
+        string rendered = new PromptSnapshot(0, template, level).Render(request.Text, request.From, request.To);
+        var unknown = PromptTemplate.Names(template).Where(n => !PromptTemplate.Variables.Contains(n)).ToArray();
+        var view = new PromptPreviewView(rendered, unknown, PromptCatalog.CheckTemplate(request.Template));
+        return Ok(JsonSerializer.SerializeToElement(view, ContractsJson.Default.PromptPreviewView));
+    }
+
+    /// <summary>
+    /// Settings.TestNetwork (CFG05): the proxy settings on the page (saved password) are tried against the origins
+    /// of the enabled services, one result per path. Nothing is saved and no service is disabled by a failure.
+    /// </summary>
+    private async Task<CommandResult> TestNetworkAsync(NetworkTestRequest request)
+    {
+        if (backend?.TestNetwork is not { } test) return new CommandResult(false, "unavailable");
+        if (!Enum.TryParse<ProxyMode>(request.Network.ProxyMode, true, out var mode) || !Enum.IsDefined(mode)) throw new ArgumentException("proxy-mode");
+        var s = config.State.Effective;
+        var network = s.Network with { ProxyMode = mode, ProxyHost = request.Network.ProxyHost.Trim(), ProxyPort = request.Network.ProxyPort, ProxyUsername = request.Network.ProxyUsername };
+        if (mode is ProxyMode.Http or ProxyMode.Socks5 && (network.ProxyHost.Length == 0 || network.ProxyPort is <= 0 or > 65535 || Uri.CheckHostName(network.ProxyHost) == UriHostNameType.Unknown))
+            return new CommandResult(false, "proxy-address");
+        var results = await test(network, NetworkPaths.For(s), CancellationToken.None);
+        var view = new NetworkTestView([.. results.Select(r => new NetworkPathView(r.Origin, [.. r.Services], r.Route, r.Ok, r.Error, r.Status, r.ElapsedMs))],
+            DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:sszzz", System.Globalization.CultureInfo.InvariantCulture));
+        return Ok(JsonSerializer.SerializeToElement(view, ContractsJson.Default.NetworkTestView));
+    }
+
     private CommandResult DeleteSecret(SecretDeleteRequest request)
     {
         if (request.InstanceId == ProxySecretInstance)
@@ -728,7 +797,7 @@ public sealed class ShellCoordinator
             string status = chord.Length == 0 ? "unassigned"
                 : conflicts.Contains(action) ? "conflict"
                 : featureState != FeatureState.Available ? "unavailable"
-                : hotkeyResults.TryGetValue(action, out bool registered) && !registered ? "failed" : "ok";
+                : RegistrationOf(action, chord, s.Hotkeys) == false ? "failed" : "ok";
             return new HotkeyView(action, chord, status, status == "unavailable" ? reason : null);
         }).ToArray();
         var translationOrder = s.TranslationOrder.ToList();
@@ -767,7 +836,9 @@ public sealed class ShellCoordinator
             new GeneralView(g.UiLanguage, g.SourceLanguage, g.TargetLanguage, g.DefaultExpandedCards, g.AllowClipboardBorrowing, g.CloseAction == CloseAction.Exit ? "exit" : "hide", g.LaunchAtStartup),
             hotkeys,
             new NetworkView(s.Network.ProxyMode.ToString().ToLowerInvariant(), s.Network.ProxyHost, s.Network.ProxyPort, s.Network.ProxyUsername, config.Secrets.Has(NetworkSettings.ProxyAccountId, "password"), s.Network.AiTimeoutSeconds),
-            services, accounts);
+            services, accounts,
+            new PromptView(s.Prompt.Level, s.Prompt.Profile, [.. s.Prompt.Scope], [.. PromptCatalog.Levels.Select(l => l.Id)], [.. PromptCatalog.AiInstances],
+                [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]));
     }
 
     // ---------- tray and hotkeys ----------
@@ -804,6 +875,18 @@ public sealed class ShellCoordinator
         var (state, reason) = features.Resolve(feature, capabilityReady);
         if (state == FeatureState.InDevelopment && options.DevPreview) return (FeatureState.Available, null);
         return (state, reason);
+    }
+
+    /// <summary>
+    /// The RegisterHotKey result behind an action (CFG05): clipboard translation sharing selection's chord has no
+    /// registration of its own, so it reports selection's. Null: not registered by this run (e.g. unavailable).
+    /// </summary>
+    private bool? RegistrationOf(string action, string chord, HotkeySettings hotkeys)
+    {
+        if (hotkeyResults.TryGetValue(action, out bool registered)) return registered;
+        if (action == "clipboardTranslate" && hotkeys.Chords.TryGetValue("selectionTranslate", out var shared) && shared == chord
+            && hotkeyResults.TryGetValue("selectionTranslate", out bool viaSelection)) return viaSelection;
+        return null;
     }
 
     /// <summary>Registers chords only for available features; selection and clipboard share one registration.</summary>

@@ -19,8 +19,11 @@ public enum Capability
 // ---- Plugin API v1 candidate (PLAN 4.4, ARCHITECTURE 3.1 / 8.3). Frozen only at G1. ----
 
 /// <summary><c>From</c>/<c>To</c> are canonical BCP-47 codes (Susu.Domain.Languages) the host has already
-/// resolved (detected or user-selected); a plugin that ignores them falls back to its own default pair.</summary>
-[TsExport("plugin")] public sealed record TranslateRequest(string Text, string? From = null, string? To = null);
+/// resolved (detected or user-selected); a plugin that ignores them falls back to its own default pair.
+/// <c>Prompt</c> (F07.3, AI services only): the complete instruction the host rendered from SetPrompt, with the
+/// text already inserted once. A plugin sends it as is and never templates it again; absent means the plugin's
+/// own default instruction applies.</summary>
+[TsExport("plugin")] public sealed record TranslateRequest(string Text, string? From = null, string? To = null, string? Prompt = null);
 [TsExport("plugin")] public sealed record TranslateChunk(string Text, bool? Done = null);
 [TsExport("plugin")] public sealed record TranslateResult(string Text, string? DetectedFrom = null, JsonElement? Raw = null);
 [TsExport("plugin")] public sealed record BatchItem(string Id, string Text);

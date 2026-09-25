@@ -22,9 +22,14 @@ namespace Susu.Plugins;
 /// passes the secret names its account binding grants (Broker.Issue/ResolveSecret enforce S02) and its
 /// instance config (model/baseUrl/prompt/...) through to every Invoke; a keyless service like MyMemory
 /// leaves both empty/default. Streamed pieces the plugin pushes via ctx.$emit reach <c>onChunk</c>.
+///
+/// <paramref name="prompt"/> (F07.3): the SetPrompt snapshot captured when this provider was built, so a task
+/// keeps the prompt it started with. Each call (each chunk) renders it once with that call's text and languages
+/// and sends the result as <see cref="TranslateRequest.Prompt"/>; the plugin never templates it again.
 /// </summary>
 public sealed class PluginProvider(string pluginId, string serviceId, string displayName, TranslationLimits limits, Supervisor<HostSession> supervisor, IReadOnlyList<string> hostOrigins,
-    string? instanceId = null, string? signer = null, IReadOnlyList<string>? secrets = null, IReadOnlyDictionary<string, string>? config = null) : ITranslationProvider
+    string? instanceId = null, string? signer = null, IReadOnlyList<string>? secrets = null, IReadOnlyDictionary<string, string>? config = null,
+    PromptSnapshot? prompt = null) : ITranslationProvider
 {
     private readonly IReadOnlyList<string> secrets = secrets ?? [];
     private readonly string configJson = config is { Count: > 0 } ? JsonSerializer.Serialize(new Dictionary<string, string>(config), ContractsJson.Default.DictionaryStringString) : "{}";
@@ -54,7 +59,7 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
             return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host is restarting"));
         try
         {
-            string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text, call.From, call.To), ContractsJson.Default.TranslateRequest);
+            string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text, call.From, call.To, prompt?.Render(call.Text, call.From, call.To)), ContractsJson.Default.TranslateRequest);
             (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
             try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins, secrets: secrets, configJson: configJson, instanceId: instanceId, signer: signer, onChunk: onChunk); }
             catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }

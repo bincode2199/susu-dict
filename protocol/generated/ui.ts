@@ -18,6 +18,9 @@ export const UI_COMMANDS = {
   BindAccount: 'Settings.BindAccount',
   ReorderService: 'Settings.ReorderService',
   SaveServiceConfig: 'Settings.SaveServiceConfig',
+  SavePrompt: 'Settings.SavePrompt',
+  PreviewPrompt: 'Settings.PreviewPrompt',
+  TestNetwork: 'Settings.TestNetwork',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -139,6 +142,25 @@ export interface LoadOptionsRequest {
   refresh?: boolean;
 }
 
+export interface NetworkPathView {
+  origin: string;
+  services: string[];
+  route: string;
+  ok: boolean;
+  error?: ErrorKind;
+  status?: number;
+  elapsedMs?: number;
+}
+
+export interface NetworkTestRequest {
+  network: NetworkView;
+}
+
+export interface NetworkTestView {
+  paths: NetworkPathView[];
+  testedAt: string;
+}
+
 export interface NetworkView {
   proxyMode: string;
   proxyHost: string;
@@ -162,6 +184,46 @@ export interface OptionsView {
   cached?: boolean;
   stale?: boolean;
   error?: ErrorKind;
+}
+
+export interface PromptPreviewRequest {
+  template: string;
+  level: string;
+  text: string;
+  from: string;
+  to: string;
+}
+
+export interface PromptPreviewView {
+  rendered: string;
+  unknown: string[];
+  problem?: string;
+}
+
+export interface PromptProfileView {
+  id: string;
+  name: string;
+  template: string;
+}
+
+export interface PromptSaveRequest {
+  expectedRevision: number;
+  expectedFileHash: string;
+  level: string;
+  profile: string;
+  scope: string[];
+  profiles: PromptProfileView[];
+}
+
+export interface PromptView {
+  level: string;
+  profile: string;
+  scope: string[];
+  levels: string[];
+  aiServices: string[];
+  profiles: PromptProfileView[];
+  defaultTemplate: string;
+  variables: string[];
 }
 
 export interface ReorderServiceRequest {
@@ -253,6 +315,7 @@ export interface SettingsView {
   network: NetworkView;
   services: ServiceView[];
   accounts: AccountView[];
+  prompt?: PromptView;
 }
 
 export interface SubmitTextRequest {

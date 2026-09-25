@@ -40,4 +40,26 @@ public static class ProxyFactory
                 return new ProxyResult(null, false);
         }
     }
+
+    /// <summary>
+    /// The proxy a production broker uses (F07.3, CFG05): <see cref="Build"/>, with loopback targets always sent
+    /// directly. A local service (Ollama, AnkiConnect, a local OpenAI-compatible server) keeps working when the
+    /// proxy is down or cannot reach this machine's loopback. System mode wraps the OS default proxy the same way.
+    /// </summary>
+    public static IWebProxy? ForBroker(NetworkSettings settings, ISecretStore secretStore)
+    {
+        var (proxy, useSystemProxy) = Build(settings, secretStore);
+        IWebProxy? inner = proxy ?? (useSystemProxy ? HttpClient.DefaultProxy : null);
+        return inner is null ? null : new LoopbackBypassProxy(inner);
+    }
+
+    /// <summary>True when <paramref name="uri"/> never goes through a proxy (loopback host).</summary>
+    public static bool IsLoopback(Uri uri) => uri.IsLoopback || uri.IdnHost.Equals("localhost", StringComparison.OrdinalIgnoreCase);
+
+    private sealed class LoopbackBypassProxy(IWebProxy inner) : IWebProxy
+    {
+        public ICredentials? Credentials { get => inner.Credentials; set => inner.Credentials = value; }
+        public Uri? GetProxy(Uri destination) => IsLoopback(destination) ? null : inner.GetProxy(destination);
+        public bool IsBypassed(Uri host) => IsLoopback(host) || inner.IsBypassed(host);
+    }
 }

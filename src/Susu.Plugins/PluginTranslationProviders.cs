@@ -11,24 +11,33 @@ namespace Susu.Plugins;
 /// </summary>
 public static class PluginTranslationProviders
 {
-    public static IReadOnlyList<ITranslationProvider> Build(AppSettings settings, Func<string, string, bool> hasSecret, Supervisor<HostSession> supervisor)
-        => [.. TranslationPackages.Resolve(settings, hasSecret).Select(plan => Create(plan, supervisor))];
+    public static IReadOnlyList<ITranslationProvider> Build(AppSettings settings, Func<string, string, bool> hasSecret, Supervisor<HostSession> supervisor,
+        IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? schemas = null)
+        => [.. TranslationPackages.Resolve(settings, hasSecret).Select(plan => Create(plan, supervisor, settings, schemas))];
 
     /// <summary>A provider for one instance regardless of its enabled flag (the settings "validate" action runs before enabling).</summary>
-    public static ITranslationProvider? ForValidation(AppSettings settings, string serviceId, Supervisor<HostSession> supervisor)
+    public static ITranslationProvider? ForValidation(AppSettings settings, string serviceId, Supervisor<HostSession> supervisor,
+        IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? schemas = null)
     {
         var service = settings.Services.FirstOrDefault(s => s.ServiceId == serviceId);
         var package = service is null ? null : TranslationPackages.Find(service.Instance);
         var instance = service is null ? null : settings.Instances.FirstOrDefault(i => i.Id == service.Instance);
         if (service is null || package is null || instance is null || instance.Package != package.PackageId) return null;
-        return Create(new TranslationServicePlan(package, instance, service), supervisor);
+        return Create(new TranslationServicePlan(package, instance, service), supervisor, settings, schemas);
     }
 
-    public static PluginProvider Create(TranslationServicePlan plan, Supervisor<HostSession> supervisor)
+    /// <summary>
+    /// F07.3: the provider carries the SetPrompt snapshot of <paramref name="settings"/> (AI services in scope only)
+    /// and a config where model parameters such as temperature survive only if the package's schema declares them.
+    /// </summary>
+    public static PluginProvider Create(TranslationServicePlan plan, Supervisor<HostSession> supervisor, AppSettings? settings = null,
+        IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? schemas = null)
     {
         var package = plan.Package;
+        IReadOnlyList<ConfigField>? schema = schemas is not null && schemas.TryGetValue(plan.Instance.Id, out var fields) ? fields : null;
         return new PluginProvider(package.PackageId, plan.Service.ServiceId, package.DisplayName, package.Limits, supervisor, [package.Origin(plan.Instance.Config)],
-            plan.Instance.Id, package.Signer, package.SecretNames, plan.Instance.Config);
+            plan.Instance.Id, package.Signer, package.SecretNames, ConfigSchema.ForPlugin(plan.Instance.Config, schema),
+            settings is null ? null : PromptCatalog.SnapshotFor(settings, plan.Instance.Id));
     }
 
     /// <summary>

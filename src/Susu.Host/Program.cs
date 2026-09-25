@@ -127,7 +127,10 @@ internal static class MainMode
             features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 
         var usage = new UsageRepository(db, clock);
-        var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log, ReleaseAfter(mode) ?? TimeSpan.FromMinutes(10));
+        // F07.2: settings controls come from each package's manifest schema; F07.3: the same schema gates model
+        // parameters (temperature) on every plugin call.
+        var schemas = PluginTranslationProviders.LoadSchemas(exeFolder, package => log.Event("plugin.manifest-invalid", ("package", package)));
+        var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log, ReleaseAfter(mode) ?? TimeSpan.FromMinutes(10), schemas);
         Func<AppSettings, TranslationSession?> sessions = s =>
         {
             var providers = translation.Providers(s);
@@ -138,9 +141,7 @@ internal static class MainMode
                 new InvocationScheduler(SchedulerLimits.Default), clock, new SystemJitter(), usage);
         };
         Func<Capability, bool> capabilityReady = c => c == Capability.Translate && translation.Providers(config.State.Effective).Count > 0;
-        // F07.2: settings controls come from each package's manifest schema; dynamic fields load through the
-        // package's own options method with the instance's current config and grants.
-        var schemas = PluginTranslationProviders.LoadSchemas(exeFolder, package => log.Event("plugin.manifest-invalid", ("package", package)));
+        // F07.2: dynamic fields load through the package's own options method with the instance's current config and grants.
         OptionsBroker? optionsBroker = translation.Supervisor is not { } supervisor ? null : new OptionsBroker(async (query, cancel) =>
         {
             var outcome = await PluginTranslationProviders.LoadOptionsAsync(supervisor, config.State.Effective, query.InstanceId, query.Method, query.Field,
@@ -153,7 +154,7 @@ internal static class MainMode
             new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector(),
             new TranslationBackend(translation.Supervisor is not null, translation.ValidationProvider,
                 serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)),
-                schemas, optionsBroker));
+                schemas, optionsBroker, (network, targets, cancel) => NetworkProbe.RunAsync(network, secrets, targets, cancel)));
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;
@@ -227,7 +228,8 @@ internal static class MainMode
     /// after <paramref name="idleTimeout"/> with no call in flight, the same keep-warm-then-release shape
     /// F03 uses for the WebView (10 minutes in production; shortened for --smoke/--release-after-seconds).
     /// </summary>
-    private static TranslationRuntime BuildTranslationRuntime(string exeFolder, SettingsStore settings, SecretStore secrets, ConfigService config, FileLeases leases, IClock clock, RedactingLog log, TimeSpan idleTimeout)
+    private static TranslationRuntime BuildTranslationRuntime(string exeFolder, SettingsStore settings, SecretStore secrets, ConfigService config, FileLeases leases, IClock clock, RedactingLog log, TimeSpan idleTimeout,
+        IReadOnlyDictionary<string, IReadOnlyList<ConfigField>> schemas)
     {
         try
         {
@@ -241,8 +243,8 @@ internal static class MainMode
                 clock, idleTimeout);
             supervisor.RestartFailed += error => log.Event("plugin-host.restart-failed", ("code", error.GetType().Name));
             supervisor.Stalled += () => log.Event("plugin-host.stalled");
-            return new TranslationRuntime(supervisor, settings => PluginTranslationProviders.Build(settings, secrets.Has, supervisor),
-                (settings, serviceId) => PluginTranslationProviders.ForValidation(settings, serviceId, supervisor));
+            return new TranslationRuntime(supervisor, settings => PluginTranslationProviders.Build(settings, secrets.Has, supervisor, schemas),
+                (settings, serviceId) => PluginTranslationProviders.ForValidation(settings, serviceId, supervisor, schemas));
         }
         catch (Exception error)
         {

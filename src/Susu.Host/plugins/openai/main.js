@@ -8,8 +8,24 @@ const DEFAULT_BASE_URL = 'https://api.openai.com';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_PROMPT = 'You are a translation engine embedded in a desktop app. Translate the user message from {from} to {to}. Reply with the translation only: no quotes, no notes, no explanation.';
 
-function systemPrompt(from, to, template) {
-  return (template || DEFAULT_PROMPT).split('{from}').join(from || 'auto').split('{to}').join(to || 'en');
+function systemPrompt(from, to) {
+  return DEFAULT_PROMPT.split('{from}').join(from || 'auto').split('{to}').join(to || 'en');
+}
+
+// F07.3: SetPrompt is rendered by the host (single pass, text inserted once) and arrives as req.prompt; it is
+// sent as the one user message exactly as received, never templated again here. Without it, the built-in
+// instruction above is the system message and the text the user message.
+function messagesFor(req) {
+  if (typeof req.prompt === 'string' && req.prompt.length > 0) return [{ role: 'user', content: req.prompt }];
+  return [{ role: 'system', content: systemPrompt(req.from, req.to) }, { role: 'user', content: req.text }];
+}
+
+// F07.3: temperature is declared in this package's schema (0-2); config values arrive as strings. Anything that
+// does not parse to a number in range is left out, so the vendor default applies.
+function temperatureOf(cfg) {
+  if (typeof cfg.temperature !== 'string' || cfg.temperature.trim() === '') return undefined;
+  const value = Number(cfg.temperature);
+  return Number.isFinite(value) && value >= 0 && value <= 2 ? value : undefined;
 }
 
 // Incremental SSE line parser: OpenAI's stream delivers "data: {json}\n\n" events, but $http.stream
@@ -97,14 +113,16 @@ export default {
     const cfg = ctx.config || {};
     const baseUrl = cfg.baseUrl || DEFAULT_BASE_URL;
     const model = cfg.model || DEFAULT_MODEL;
-    const prompt = systemPrompt(req.from, req.to, cfg.prompt);
+    const body = { model, stream: true, messages: messagesFor(req) };
+    const temperature = temperatureOf(cfg);
+    if (temperature !== undefined) body.temperature = temperature;
 
     const opened = await ctx.$http.stream({
       method: 'POST',
       url: `${baseUrl}/v1/chat/completions`,
       headers: { Authorization: '', 'Content-Type': 'application/json' },
       credentials: [{ target: { area: 'header', name: 'Authorization' }, parts: [{ literal: 'Bearer ' }, { secret: 'apiKey' }] }],
-      body: { kind: 'json', value: { model, stream: true, messages: [{ role: 'system', content: prompt }, { role: 'user', content: text }] } },
+      body: { kind: 'json', value: body },
     });
     if (opened.error) throw statusError(opened.status, opened.headers, opened.error.body);
     if (opened.status < 200 || opened.status >= 300) throw new PluginError('bad_response', `http ${opened.status}`);

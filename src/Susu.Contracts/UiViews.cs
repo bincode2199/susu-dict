@@ -25,7 +25,8 @@ public sealed record SettingsView(
     HotkeyView[] Hotkeys,
     NetworkView Network,
     ServiceView[] Services,
-    AccountView[] Accounts);
+    AccountView[] Accounts,
+    PromptView? Prompt = null);
 
 [TsExport("ui")]
 public sealed record SettingsIssueView(string Path, string Code, string Message, int Line);
@@ -97,6 +98,44 @@ public sealed record AccountView(string Id, string Label, SecretSlotView[] Secre
 /// <summary>Saved is the only thing a page learns about a stored secret.</summary>
 [TsExport("ui")]
 public sealed record SecretSlotView(string Name, bool Saved);
+
+/// <summary>
+/// SetPrompt (F07.3). Level: a built-in level id or "" (none). Profile: the custom template in use or "" (the
+/// built-in default). Scope: AI instance ids the prompt is sent to; AiServices lists the choices in display order.
+/// Translation engines never receive a prompt.
+/// </summary>
+[TsExport("ui")]
+public sealed record PromptView(string Level, string Profile, string[] Scope, string[] Levels, string[] AiServices, PromptProfileView[] Profiles, string DefaultTemplate, string[] Variables);
+
+[TsExport("ui")]
+public sealed record PromptProfileView(string Id, string Name, string Template);
+
+/// <summary>Settings.SavePrompt: the whole SetPrompt page; ExpectedRevision/FileHash guard like Settings.Save.</summary>
+[TsExport("ui")]
+public sealed record PromptSaveRequest(long ExpectedRevision, string ExpectedFileHash, string Level, string Profile, string[] Scope, PromptProfileView[] Profiles);
+
+/// <summary>Settings.PreviewPrompt: renders Template ("" = the built-in default) exactly as a task would, with a sample text.</summary>
+[TsExport("ui")]
+public sealed record PromptPreviewRequest(string Template, string Level, string Text, string From, string To);
+
+/// <summary>Unknown: variable names that are not substituted and stay literal. Problem: why the template cannot be saved, or null.</summary>
+[TsExport("ui")]
+public sealed record PromptPreviewView(string Rendered, string[] Unknown, string? Problem = null);
+
+/// <summary>Settings.TestNetwork: tests the proxy settings being edited (the saved password is used) through the network broker.</summary>
+[TsExport("ui")]
+public sealed record NetworkTestRequest(NetworkView Network);
+
+/// <summary>
+/// Result per path (CFG05). Route: proxy | direct | local (loopback services never use the proxy). Ok: the
+/// origin answered (any HTTP status). Error: the kind only (network, timeout, ...). Services: the enabled
+/// services on that origin.
+/// </summary>
+[TsExport("ui")]
+public sealed record NetworkPathView(string Origin, string[] Services, string Route, bool Ok, ErrorKind? Error = null, int? Status = null, long ElapsedMs = 0);
+
+[TsExport("ui")]
+public sealed record NetworkTestView(NetworkPathView[] Paths, string TestedAt);
 
 [TsExport("ui")]
 public sealed record ServiceToggle(string ServiceId, bool Enabled);

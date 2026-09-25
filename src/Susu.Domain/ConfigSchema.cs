@@ -75,4 +75,24 @@ public static class ConfigSchema
         if (uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0) return false;
         return uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback;
     }
+
+    /// <summary>Model parameters (ARCHITECTURE 3.1): only a package whose schema declares one may receive it.</summary>
+    public static readonly IReadOnlyList<string> ModelParameters = ["temperature"];
+
+    /// <summary>
+    /// The instance config a plugin call carries (F07.3, CFG04). A model parameter is dropped unless the package's
+    /// schema declares it and the stored value still passes <see cref="Check"/> (a hand-edited settings file can
+    /// hold anything); every other key passes through as before (host-managed keys such as DeepL's plan).
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ForPlugin(IReadOnlyDictionary<string, string> config, IReadOnlyList<ConfigField>? schema)
+    {
+        if (!config.Keys.Any(ModelParameters.Contains)) return config;
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, value) in config)
+        {
+            if (ModelParameters.Contains(name) && (schema?.FirstOrDefault(f => f.Name == name) is not { } field || Check(field, value) is not null)) continue;
+            result[name] = value;
+        }
+        return result;
+    }
 }

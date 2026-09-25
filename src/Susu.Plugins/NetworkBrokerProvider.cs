@@ -43,11 +43,10 @@ public sealed class NetworkBrokerProvider : IDisposable
 
     private NetworkBroker Build(NetworkSettings network)
     {
-        var (proxy, useSystemProxy) = ProxyFactory.Build(network, secretStore);
+        // Loopback targets bypass the proxy (CFG05); system mode is the OS default proxy wrapped the same way.
         return new NetworkBroker(new NetworkBrokerOptions
         {
-            Proxy = proxy,
-            UseSystemProxy = useSystemProxy,
+            Proxy = ProxyFactory.ForBroker(network, secretStore),
             Timeout = TimeSpan.FromSeconds(Math.Max(1, network.AiTimeoutSeconds)),
             LocalOrigins = localOrigins,
         });

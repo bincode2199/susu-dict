@@ -16,7 +16,8 @@ public sealed record AppSettings(
     IReadOnlyList<InstanceSettings> Instances,
     IReadOnlyList<ServiceSettings> Services,
     IReadOnlyList<string> TranslationOrder,
-    IReadOnlyList<PromptProfile> Prompts)
+    IReadOnlyList<PromptProfile> Prompts,
+    PromptSettings Prompt)
 {
     public const int CurrentSchemaVersion = 1;
 
@@ -76,6 +77,7 @@ public sealed record ServiceSettings(string Instance, Capability Capability, boo
     public string ServiceId => $"{Instance}/{Capability.ToString().ToLowerInvariant()}";
 }
 
+/// <summary>A custom SetPrompt template (F07.3); variables are substituted in one pass (<see cref="PromptTemplate"/>).</summary>
 public sealed record PromptProfile(string Id, string Name, string Template);
 
 /// <summary>Deterministic text form used for equality and hashing (not the YAML file format).</summary>
@@ -96,7 +98,8 @@ public static class SettingsText
             foreach (var kv in i.AccountBindings.OrderBy(k => k.Key, StringComparer.Ordinal)) b.Append(kv.Key).Append("->").Append(kv.Value).Append(',');
             b.Append(';');
         }
-        b.Append('|').AppendJoin(';', s.Services).Append('|').AppendJoin(';', s.TranslationOrder).Append('|').AppendJoin(';', s.Prompts);
+        b.Append('|').AppendJoin(';', s.Services).Append('|').AppendJoin(';', s.TranslationOrder).Append('|').AppendJoin(';', s.Prompts)
+            .Append('|').Append(s.Prompt.Level).Append(',').Append(s.Prompt.Profile).Append(',').AppendJoin(';', s.Prompt.Scope);
         return b.ToString();
     }
 }
@@ -162,7 +165,7 @@ public static class BuiltInCatalog
             new GeneralSettings("zh-Hans", "en", "zh-Hans", $"{NativeDetect}/detect", 2, false, CloseAction.Hide, false, "light"),
             new HotkeySettings(hotkeys),
             new NetworkSettings(ProxyMode.System, "", 0, "", 30),
-            [], instances, services, order, []);
+            [], instances, services, order, [], PromptSettings.Default);
     }
 
     private static readonly IReadOnlyDictionary<string, string> Empty = new Dictionary<string, string>();

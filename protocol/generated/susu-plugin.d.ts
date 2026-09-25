@@ -120,6 +120,7 @@ export interface TranslateRequest {
   text: string;
   from?: string;
   to?: string;
+  prompt?: string;
 }
 
 export interface TranslateResult {

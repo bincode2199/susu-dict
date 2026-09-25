@@ -53,7 +53,7 @@ public static partial class SettingsYaml
 
         public AppSettings Bind(YMap root)
         {
-            Keys(root, "", "schemaVersion", "revision", "general", "hotkeys", "network", "accounts", "instances", "services", "translationOrder", "prompts");
+            Keys(root, "", "schemaVersion", "revision", "general", "hotkeys", "network", "accounts", "instances", "services", "translationOrder", "prompts", "prompt");
             long revision = Long(root, "", "revision", 0, 0, long.MaxValue);
             var general = General(root.Get("general") as YMap ?? Expect<YMap>(root, "general"));
             var hotkeys = Hotkeys(root.Get("hotkeys"));
@@ -63,11 +63,12 @@ public static partial class SettingsYaml
             var services = List(root, "services", Service);
             var order = List(root, "translationOrder", (node, path) => Scalar(node, path));
             var prompts = List(root, "prompts", Prompt);
+            var prompt = PromptSelection(root.Get("prompt"), prompts);
             var settings = new AppSettings(AppSettings.CurrentSchemaVersion, revision, general, hotkeys, network,
                 root.Get("accounts") is null ? defaults.Accounts : accounts,
                 root.Get("instances") is null ? defaults.Instances : instances,
                 root.Get("services") is null ? defaults.Services : services,
-                root.Get("translationOrder") is null ? defaults.TranslationOrder : order, prompts);
+                root.Get("translationOrder") is null ? defaults.TranslationOrder : order, prompts, prompt);
             CrossCheck(settings);
             return settings;
         }
@@ -177,6 +178,23 @@ public static partial class SettingsYaml
             if (node is not YMap map) { Issue(path, "type", "expected a mapping", node); return new("", "", ""); }
             Keys(map, path, "id", "name", "template");
             return new PromptProfile(Id(map, path, "id"), Str(map, path, "name", ""), Str(map, path, "template", ""));
+        }
+
+        private PromptSettings PromptSelection(YNode? node, IReadOnlyList<PromptProfile> profiles)
+        {
+            var d = defaults.Prompt;
+            if (node is null) return d;
+            const string p = "prompt";
+            if (node is not YMap map) { Issue(p, "type", "expected a mapping", node); return d; }
+            Keys(map, p, "level", "profile", "scope");
+            string level = Str(map, p, "level", "");
+            if (level.Length > 0 && PromptCatalog.FindLevel(level) is null) Issue($"{p}.level", "range", $"unknown level '{level}'", map.Get("level"));
+            string profile = Str(map, p, "profile", "");
+            if (profile.Length > 0 && !profiles.Any(x => x.Id == profile)) Issue($"{p}.profile", "reference", $"unknown prompt '{profile}'", map.Get("profile"));
+            var scope = map.Get("scope") is null ? d.Scope : List(map, "scope", (n, path) => Scalar(n, path), p);
+            foreach (var id in scope)
+                if (!PromptCatalog.AiInstances.Contains(id)) Issue($"{p}.scope", "range", $"'{id}' is not an AI service", map.Get("scope"));
+            return new PromptSettings(level, profile, scope);
         }
 
         private void CrossCheck(AppSettings s)
@@ -371,6 +389,8 @@ public static partial class SettingsYaml
             b.Append("  - id: ").Append(Q(p.Id)).Append('\n');
             Pair(b, 2, "name", Q(p.Name)); Pair(b, 2, "template", Q(p.Template));
         });
+        Section(w, c, "prompt");
+        Pair(w, 1, "level", Q(s.Prompt.Level)); Pair(w, 1, "profile", Q(s.Prompt.Profile)); Pair(w, 1, "scope", Flow(s.Prompt.Scope));
         return w.ToString();
     }
 
@@ -409,7 +429,8 @@ public static partial class SettingsYaml
         ["instances"] = "服务实例：插件包、配置值与账户绑定",
         ["services"] = "服务能力：每个实例的各项能力可单独启用",
         ["translationOrder"] = "翻译结果卡片的顺序（翻译引擎与 AI 合并排序）",
-        ["prompts"] = "提示语",
+        ["prompts"] = "提示语：自定义模板；{{text}} {{from}} {{to}} {{level}} 只替换一次",
+        ["prompt"] = "当前提示语：内置水平、自定义模板与应用范围",
     };
 
     private static readonly IReadOnlyDictionary<string, string> CommentsEn = new Dictionary<string, string>
@@ -422,6 +443,7 @@ public static partial class SettingsYaml
         ["instances"] = "Service instances: plugin package, configuration values and account bindings",
         ["services"] = "Service capabilities: each capability of an instance is enabled separately",
         ["translationOrder"] = "Order of translation result cards (engines and AI services in one list)",
-        ["prompts"] = "Prompts",
+        ["prompts"] = "Prompts: custom templates; {{text}} {{from}} {{to}} {{level}} are replaced once, other text stays as written",
+        ["prompt"] = "Prompt in use: built-in level (empty = none), custom template id (empty = built-in default) and the AI services it applies to",
     };
 }

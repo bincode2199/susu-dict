@@ -405,6 +405,7 @@ public sealed class NetworkBroker : IDisposable
     {
         if (uri.Scheme is not ("https" or "http")) return false;
         if (!string.IsNullOrEmpty(uri.UserInfo)) return false;
+        if (string.Equals(request.Method, "CONNECT", StringComparison.OrdinalIgnoreCase)) return false; // only the handler opens proxy tunnels
         bool local = options.LocalOrigins.Contains(Origin(uri)) && request.LocalOriginApproved;
         if (uri.Scheme == "http" && !local) return false;
         return true;
@@ -565,6 +566,15 @@ public sealed class NetworkBroker : IDisposable
         string targetHost = context.InitialRequestMessage.RequestUri!.IdnHost;
         string targetOrigin = Origin(context.InitialRequestMessage.RequestUri!);
         bool local = options.LocalOrigins.Contains(targetOrigin);
+        // This connection goes to the user's configured proxy, not the target: either the handler's own CONNECT
+        // tunnel request (the broker never sends CONNECT itself, see IsAllowedForRequest) or a plain request whose
+        // endpoint differs from its URI. A proxy on 127.0.0.1 or the LAN is the user's explicit choice (F07.3,
+        // CFG05), and the proxy resolves the cloud host itself. A direct connection is still checked below.
+        var requestUri = context.InitialRequestMessage.RequestUri!;
+        bool toProxy = (options.Proxy is not null || options.UseSystemProxy)
+            && (context.InitialRequestMessage.Method == HttpMethod.Connect
+                || !(string.Equals(context.DnsEndPoint.Host, requestUri.IdnHost, StringComparison.OrdinalIgnoreCase) && context.DnsEndPoint.Port == requestUri.Port));
+        local |= toProxy;
 
         IPAddress[] addresses = IPAddress.TryParse(context.DnsEndPoint.Host, out var direct)
             ? [direct]

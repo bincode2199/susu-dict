@@ -28,3 +28,12 @@ config:
         group: advanced
         placeholder: https://api.openai.com
         help: An OpenAI-compatible server; leave empty for api.openai.com.
+    temperature:
+      type: number
+      title: Temperature
+      minimum: 0
+      maximum: 2
+      x-susu:
+        group: advanced
+        placeholder: "1"
+        help: Sampling temperature from 0 to 2; leave empty for the model default.
