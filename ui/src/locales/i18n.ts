@@ -194,6 +194,20 @@ const zh = {
   'account.shared': '凭据来源',
   'account.own': '此服务自己的凭据',
   'account.bind': '共享 {account} 的凭据',
+  'config.title.model': '模型',
+  'config.title.baseUrl': 'API 地址',
+  'config.help.baseUrl': '兼容 OpenAI 的服务地址，留空使用 api.openai.com；更改后需重新确认地址',
+  'config.advanced': '高级',
+  'config.default': '默认（{value}）',
+  'config.save': '保存设置',
+  'config.invalid': '{field} 的值无效',
+  'config.conflict': '设置已在别处更改，已载入最新值',
+  'options.refresh': '刷新列表',
+  'options.loading': '正在加载列表…',
+  'options.more': '加载更多',
+  'options.failed': '列表加载失败：{reason}；已保留当前选择',
+  'options.needsCredential': '保存并授权凭据后可加载列表',
+  'options.count': '共 {n} 项',
 } as const;
 
 export type MessageKey = keyof typeof zh;
@@ -391,6 +405,20 @@ const en: Record<MessageKey, string> = {
   'account.shared': 'Credentials from',
   'account.own': "This service's own credentials",
   'account.bind': 'Share the credentials of {account}',
+  'config.title.model': 'Model',
+  'config.title.baseUrl': 'API address',
+  'config.help.baseUrl': 'An OpenAI-compatible server; leave empty for api.openai.com. A new address needs to be confirmed again',
+  'config.advanced': 'Advanced',
+  'config.default': 'Default ({value})',
+  'config.save': 'Save settings',
+  'config.invalid': 'The value of {field} is not valid',
+  'config.conflict': 'The settings changed elsewhere; the latest values are loaded',
+  'options.refresh': 'Refresh list',
+  'options.loading': 'Loading list…',
+  'options.more': 'Load more',
+  'options.failed': 'Could not load the list: {reason}; the current choice is kept',
+  'options.needsCredential': 'Save and authorize the credentials to load the list',
+  'options.count': '{n} items',
 };
 
 export const locale = ref<'zh-Hans' | 'en'>('zh-Hans');

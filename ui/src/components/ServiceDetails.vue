@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { UI_COMMANDS, type AccountView, type CommandResult, type ServiceValidationView, type ServiceView, type SettingsView } from '@protocol/ui';
 import SettingRow from './SettingRow.vue';
 import SecretField from './SecretField.vue';
+import ConfigForm from './ConfigForm.vue';
 import Icon from './Icon.vue';
 import { t, serviceName } from '../locales/i18n';
 
@@ -154,6 +155,8 @@ const validationFailed = computed(() => !!validation.value && !validation.value.
       <button type="button" class="btn" @click="dropPending">{{ t('grant.cancel') }}</button>
       <button type="button" class="btn primary" :disabled="busy" @click="confirm">{{ t('grant.confirm') }}</button>
     </div>
+
+    <ConfigForm v-if="service.config?.length" :service="service" :bridge="bridge" @settings="(view) => emit('settings', view)" @error="emit('error')" />
 
     <SettingRow v-if="service.plan" :title="t('plan.title')" :hint="t('plan.hint')">
       <span class="tag plan">{{ t(`plan.${service.plan}`) }}</span>

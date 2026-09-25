@@ -2,7 +2,7 @@
 // it behind import.meta.env.DEV). It answers Ready and commands with fixture data so layouts can be reviewed in a
 // browser. Nothing here talks to a real service or stores anything; typed secrets are dropped at once and only a
 // "saved" flag is kept, like the real host (S07).
-import { UI_VERSION, type CardSnapshot, type CredentialTargetView, type ServiceView, type SettingsView, type TranslationSnapshot, type UiEnvelope, type WindowKind } from '@protocol/ui';
+import { UI_VERSION, type CardSnapshot, type ConfigFieldView, type CredentialTargetView, type ServiceView, type SettingsView, type TranslationSnapshot, type UiEnvelope, type WindowKind } from '@protocol/ui';
 import type { HostPort } from './bridge';
 
 export function createDevHost(kind: WindowKind, session: string, language: string): HostPort {
@@ -72,6 +72,15 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
   let order = ['mymemory/translate', 'deepl/translate', 'tencent-translate/translate', 'openai/translate'];
   const enabled: Record<string, boolean> = { 'mymemory/translate': true, 'deepl/translate': true, 'tencent-translate/translate': false, 'openai/translate': false };
   const page = (serviceId: string) => (serviceId.startsWith('openai') ? 'ai' : 'engines');
+  // F07.2 fixture: OpenAI's schema-driven config (model with dynamic options, baseUrl). The model list's
+  // revision moves with the address and the key, like the host's dependency revision.
+  const openaiConfig: Record<string, string> = {};
+  let openaiRevision = 1;
+  let modelRevision = 1;
+  const openaiFields = (): ConfigFieldView[] => [
+    { name: 'model', type: 'string', value: openaiConfig.model, default: 'gpt-4o-mini', title: 'Model', placeholder: 'gpt-4o-mini', dynamic: true, optionsRevision: modelRevision },
+    { name: 'baseUrl', type: 'string', value: openaiConfig.baseUrl, format: 'uri', title: 'API address', group: 'advanced', placeholder: 'https://api.openai.com', optionsRevision: 0 },
+  ];
   const service = (serviceId: string, secretNames: string[]): ServiceView => {
     const instanceId = serviceId.split('/')[0];
     const credentialTargets = targets(instanceId);
@@ -79,6 +88,7 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     return {
       serviceId, instanceId, capability: 'translate', page: page(serviceId), enabled: enabled[serviceId], availability: !enabled[serviceId] ? 'Disabled' : ready ? 'Ready' : 'MissingCredential',
       implemented: true, secretNames, accountId: secretNames.length ? instanceId : undefined, credentialTargets, plan: instanceId === 'deepl' ? deeplPlan : undefined, order: order.indexOf(serviceId),
+      config: instanceId === 'openai' ? openaiFields() : undefined, instanceRevision: instanceId === 'openai' ? openaiRevision : 1,
     };
   };
   const settings: SettingsView = {
@@ -202,9 +212,32 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         ok(project());
         return;
       }
+      case 'Settings.SaveServiceConfig': {
+        if (payload?.instanceId !== 'openai') { fail('unknown-instance'); return; }
+        if (payload?.expectedInstanceRevision !== openaiRevision) { reply(envelope.name, envelope.correlationId, false, project(), 'conflict'); return; }
+        for (const { name, value } of (payload?.values as { name: string; value: string }[]) ?? []) {
+          if (name === 'baseUrl' && value && !/^https:\/\/[^/?#@]+(\/[^?#]*)?$/.test(value)) {
+            reply(envelope.name, envelope.correlationId, false, [{ path: 'instances.openai.config.baseUrl', code: 'uri', message: '', line: 0 }], 'invalid');
+            return;
+          }
+          if (name === 'baseUrl' && (openaiConfig.baseUrl ?? '') !== value) { modelRevision++; granted.delete('openai/apiKey'); }
+          if (value) openaiConfig[name] = value; else delete openaiConfig[name];
+        }
+        openaiRevision++;
+        ok(project());
+        return;
+      }
+      case 'Settings.LoadOptions': {
+        if (payload?.dependsOnRevision !== modelRevision) { ok({ instanceId: 'openai', field: 'model', dependsOnRevision: modelRevision, items: [], stale: true }); return; }
+        if ((targets('openai') ?? []).some((c) => !c.saved || !c.granted)) { fail('missing-credential'); return; }
+        const models = openaiConfig.baseUrl ? ['llama3.1:8b', 'qwen2.5:14b'] : ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini'];
+        setTimeout(() => ok({ instanceId: 'openai', field: 'model', dependsOnRevision: payload?.dependsOnRevision, items: models.map((value) => ({ value, label: value })) }), 500);
+        return;
+      }
       case 'Secret.WriteNew': {
         const id = String(payload?.instanceId);
         const key = `${id}/${String(payload?.secretName)}`;
+        if (id === 'openai') modelRevision++; // a new key invalidates the model list
         if (id === 'network.proxy') { settings.network.proxyPasswordSaved = true; ok(project()); return; }
         if (id === 'deepl') {
           const plan = String(payload?.value).trim().endsWith(':fx') ? 'free' : 'pro';
