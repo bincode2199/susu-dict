@@ -96,7 +96,11 @@ const serviceHint = (service: SettingsView['services'][number]) => {
   const targets = service.credentialTargets ?? [];
   const notGranted = service.availability === 'MissingCredential' && targets.length > 0 && targets.every((c) => c.saved) && targets.some((c) => !c.granted);
   const state = service.availability === 'Ready' && service.secretNames.length === 0 ? t('services.state.NoCredential') : notGranted ? t('services.state.NotGranted') : t(`services.state.${service.availability}`);
-  return service.implemented ? state : `${state} · ${t('services.notImplemented')}`;
+  const parts = [service.implemented ? state : `${state} · ${t('services.notImplemented')}`];
+  // Local usage is a count on this PC, never a vendor balance; MyMemory's limits are written apart from it.
+  if (service.usageThisMonth !== undefined && service.usageThisMonth !== null) parts.push(t('services.usage', { n: String(service.usageThisMonth) }));
+  if (service.instanceId === 'mymemory') parts.push(t('services.mymemoryLimits'));
+  return parts.join(' · ');
 };
 // Result order (CFG03): translation services are listed and moved within their own page; the host keeps the
 // other page's positions in the shared order. Services outside the order follow in settings order.
@@ -106,8 +110,13 @@ const rank = (service: Service) => (orderable(service) && (service.order ?? -1) 
 const orderedOnPage = computed(() => servicesOnPage.value.filter(orderable).slice().sort((a, b) => rank(a) - rank(b)));
 const pageIndex = (service: Service) => orderedOnPage.value.findIndex((s) => s.serviceId === service.serviceId);
 const listedOnPage = computed(() => [...orderedOnPage.value, ...servicesOnPage.value.filter((s) => !orderable(s))]);
-async function move(service: Service, delta: number): Promise<void> {
-  const result = await props.bridge.command(UI_COMMANDS.ReorderService, { serviceId: service.serviceId, index: pageIndex(service) + delta });
+// General page (DESIGN "合并服务排序"): translation and AI services in the one order the cards follow.
+const mergedOrder = computed(() => (view.value?.services ?? []).filter(orderable).slice().sort((a, b) => rank(a) - rank(b)));
+const mergedIndex = (service: Service) => mergedOrder.value.findIndex((s) => s.serviceId === service.serviceId);
+const showOrder = ref(false);
+async function move(service: Service, delta: number, merged = false): Promise<void> {
+  const index = (merged ? mergedIndex(service) : pageIndex(service)) + delta;
+  const result = await props.bridge.command(UI_COMMANDS.ReorderService, { serviceId: service.serviceId, index, ...(merged ? { merged } : {}) });
   if (result.ok && result.value) props.state.settings = result.value as SettingsView;
   else if (!result.ok) message.value = { kind: 'error', text: t('save.failed') };
 }
@@ -167,6 +176,21 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
             <SettingRow :title="t('general.defaultExpanded')" :hint="t('general.defaultExpandedHint')">
               <Stepper v-model="draft.general.defaultExpandedCards" :min="0" :max="32" :label="t('general.defaultExpanded')" />
             </SettingRow>
+            <SettingRow :title="t('general.resultOrder')" :hint="t('general.resultOrderHint')">
+              <button type="button" class="icon-btn" :aria-expanded="showOrder" :aria-label="t('general.resultOrderEdit')" @click="showOrder = !showOrder">
+                <Icon :name="showOrder ? 'chevronDown' : 'chevronRight'" />
+              </button>
+            </SettingRow>
+            <ol v-if="showOrder" class="expanded result-order" :aria-label="t('general.resultOrder')">
+              <li v-for="(service, i) in mergedOrder" :key="service.serviceId" :data-service="service.serviceId">
+                <span class="rank">{{ i + 1 }}</span>
+                <span class="name">{{ serviceName(service.instanceId) }}</span>
+                <span class="tag">{{ t(`services.${service.page}`) }}</span>
+                <span class="hint-text state">{{ t(`services.state.${service.availability}`) }}</span>
+                <button type="button" class="icon-btn" :disabled="i === 0" :aria-label="t('services.moveUp', { name: serviceName(service.instanceId) })" @click="move(service, -1, true)"><Icon name="chevronUp" /></button>
+                <button type="button" class="icon-btn" :disabled="i === mergedOrder.length - 1" :aria-label="t('services.moveDown', { name: serviceName(service.instanceId) })" @click="move(service, 1, true)"><Icon name="chevronDown" /></button>
+              </li>
+            </ol>
           </section>
           <section class="group">
             <h2>{{ t('general.capture') }}</h2>
@@ -271,6 +295,11 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
 .radio { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
 .radio input { accent-color: var(--accent); margin: 0; }
 .expanded { padding-left: 27px; }
+.result-order { list-style: none; margin: 0 0 6px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.result-order li { min-height: 32px; display: flex; align-items: center; gap: 8px; }
+.result-order .rank { width: 16px; color: var(--hint); font-variant-numeric: tabular-nums; }
+.result-order .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-order .state { flex: 1; font-size: 11px; }
 .port { width: 90px; }
 .issues { font-size: 11px; padding-left: 18px; }
 .savebar { height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 20px; border-top: 1px solid var(--line); font-size: 11px; }

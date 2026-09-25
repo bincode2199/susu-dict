@@ -184,6 +184,16 @@ const zh = {
   'validate.unavailable': '服务暂不可用：{reason}',
   'validate.missing-credential': '请先保存并授权凭据',
   'validate.failed': '暂时无法验证',
+  'services.state.UnsupportedCapability': '不支持此能力',
+  'services.state.TemporarilyUnavailable': '暂不可用',
+  'services.usage': '本月本机用量 {n} 字符',
+  'services.mymemoryLimits': '单次 500 UTF-8 字节；日额度按 IP 共享，与本机用量分开计',
+  'general.resultOrder': '结果顺序',
+  'general.resultOrderHint': '翻译引擎与 AI 模型合并排序；卡片顺序和默认展开数都按此列表',
+  'general.resultOrderEdit': '调整结果顺序',
+  'account.shared': '凭据来源',
+  'account.own': '此服务自己的凭据',
+  'account.bind': '共享 {account} 的凭据',
 } as const;
 
 export type MessageKey = keyof typeof zh;
@@ -371,6 +381,16 @@ const en: Record<MessageKey, string> = {
   'validate.unavailable': 'service unavailable: {reason}',
   'validate.missing-credential': 'Save and authorize the credentials first',
   'validate.failed': 'Cannot validate right now',
+  'services.state.UnsupportedCapability': 'Capability not supported',
+  'services.state.TemporarilyUnavailable': 'Temporarily unavailable',
+  'services.usage': 'This month on this PC: {n} characters',
+  'services.mymemoryLimits': 'Up to 500 UTF-8 bytes per request; the daily quota is shared per IP and counted apart from local usage',
+  'general.resultOrder': 'Result order',
+  'general.resultOrderHint': 'Translation engines and AI models in one order; cards and the default expanded count follow this list',
+  'general.resultOrderEdit': 'Edit result order',
+  'account.shared': 'Credentials from',
+  'account.own': "This service's own credentials",
+  'account.bind': 'Share the credentials of {account}',
 };
 
 export const locale = ref<'zh-Hans' | 'en'>('zh-Hans');

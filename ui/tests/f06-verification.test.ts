@@ -64,8 +64,7 @@ describe('UI03: focus order and Esc', () => {
     expect((area.element as HTMLTextAreaElement).value).toBe('hello');
   });
 
-  // Observation, not a failing case: the key confirmation bar is inline, not a popup layer, and Esc does not
-  // dismiss it (only its Cancel button, a page change or a window hide). Recorded in the F06 verification report.
+  // The key confirmation bar is inline, not a popup layer; since F07.1 Esc also dismisses it (f07-services.test.ts).
   it('the key confirmation bar is dismissed by its Cancel button and sends nothing', async () => {
     const deepl: ServiceView = {
       serviceId: 'deepl/translate', instanceId: 'deepl', capability: 'translate', page: 'engines', enabled: true, availability: 'MissingCredential',

@@ -25,7 +25,8 @@ const originFor = (secret: string, value: string) =>
 
 // One pending confirmation at a time: either a typed value waiting for its address to be confirmed, or an
 // "authorize" of an already saved value whose address is not granted yet.
-type Pending = { kind: 'write'; secret: string; value: string; origins: string[]; done: (ok: boolean) => void } | { kind: 'authorize'; origins: string[] };
+type Pending = { kind: 'write'; secret: string; value: string; origins: string[]; done: (ok: boolean) => void } | { kind: 'authorize'; origins: string[] }
+  | { kind: 'bind'; accountId: string; origins: string[] };
 const pending = ref<Pending | null>(null);
 const busy = ref(false);
 function dropPending(): void {
@@ -33,6 +34,13 @@ function dropPending(): void {
   pending.value = null;
 }
 watch(() => props.clearToken, dropPending);
+// Esc closes the confirmation bar (F06 carry-in) wherever focus is inside this service's details.
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !pending.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  dropPending();
+}
 
 function adopt(result: CommandResult): void {
   if (result.ok && result.value) emit('settings', result.value as SettingsView);
@@ -62,7 +70,8 @@ async function confirm(): Promise<void> {
   pending.value = null;
   if (current.kind === 'write') { await write(current.secret, current.value, current.done, true); return; }
   busy.value = true;
-  const result = await props.bridge.command(UI_COMMANDS.BindAccount, { instanceId: props.service.instanceId, confirmGrants: true });
+  const accountId = current.kind === 'bind' ? current.accountId : undefined;
+  const result = await props.bridge.command(UI_COMMANDS.BindAccount, { instanceId: props.service.instanceId, accountId, confirmGrants: true });
   busy.value = false;
   adopt(result);
 }
@@ -70,6 +79,24 @@ async function remove(secret: string): Promise<void> {
   validation.value = null;
   adopt(await props.bridge.command(UI_COMMANDS.SecretDelete, { instanceId: props.service.instanceId, secretName: secret }));
 }
+// Shared account (CFG01): another account holding every secret this service needs (e.g. one Tencent Cloud
+// account for translation and OCR). Switching to it is a binding the user confirms with the exact addresses.
+const sharable = computed(() => (wired.value ? props.accounts : []).filter((a) => a.id !== props.service.accountId
+  && props.service.secretNames.length > 0 && props.service.secretNames.every((name) => a.secrets.some((s) => s.name === name && s.saved))));
+const accountName = (account: AccountView) => serviceName(account.label || account.id);
+function chooseAccount(event: Event): void {
+  const select = event.target as HTMLSelectElement;
+  const accountId = select.value;
+  select.value = '';
+  if (!accountId) return;
+  dropPending();
+  pending.value = { kind: 'bind', accountId, origins: [...new Set((props.service.credentialTargets ?? []).map((c) => c.origin))] };
+}
+const pendingAccountName = computed(() => {
+  const current = pending.value;
+  const account = current?.kind === 'bind' ? props.accounts.find((a) => a.id === current.accountId) : undefined;
+  return account ? accountName(account) : '';
+});
 const needsGrant = computed(() => (props.service.credentialTargets ?? []).some((c) => c.saved && !c.granted));
 
 // ---------- validation ----------
@@ -93,7 +120,7 @@ const validationFailed = computed(() => !!validation.value && !validation.value.
 </script>
 
 <template>
-  <div class="details">
+  <div class="details" @keydown="onKeydown">
     <template v-for="name in service.secretNames" :key="name">
       <SettingRow :title="t(`secret.${name}`)" :hint="target(name) ? t('grant.target', { origin: target(name)!.origin }) : undefined">
         <span v-if="target(name)?.saved && !target(name)?.granted" class="warn" role="status"><Icon name="warning" :size="13" />{{ t('grant.notGranted') }}</span>
@@ -112,6 +139,18 @@ const validationFailed = computed(() => !!validation.value && !validation.value.
     </div>
     <div v-if="pending?.kind === 'authorize'" class="confirm" role="alertdialog" :aria-label="t('grant.authorize')">
       <span class="address">{{ pending.origins.map((origin) => t('grant.target', { origin })).join('；') }}</span>
+      <button type="button" class="btn" @click="dropPending">{{ t('grant.cancel') }}</button>
+      <button type="button" class="btn primary" :disabled="busy" @click="confirm">{{ t('grant.confirm') }}</button>
+    </div>
+
+    <SettingRow v-if="sharable.length" :title="t('account.shared')" :for-id="`${service.instanceId}-account`">
+      <select :id="`${service.instanceId}-account`" class="field" value="" @change="chooseAccount">
+        <option value="">{{ t('account.own') }}</option>
+        <option v-for="a in sharable" :key="a.id" :value="a.id">{{ t('account.bind', { account: accountName(a) }) }}</option>
+      </select>
+    </SettingRow>
+    <div v-if="pending?.kind === 'bind'" class="confirm" role="alertdialog" :aria-label="t('account.bind', { account: pendingAccountName })">
+      <span class="address">{{ t('account.bind', { account: pendingAccountName }) }}：{{ pending.origins.map((origin) => t('grant.target', { origin })).join('；') }}</span>
       <button type="button" class="btn" @click="dropPending">{{ t('grant.cancel') }}</button>
       <button type="button" class="btn primary" :disabled="busy" @click="confirm">{{ t('grant.confirm') }}</button>
     </div>
