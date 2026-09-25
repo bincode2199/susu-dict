@@ -61,6 +61,7 @@ namespace Susu.Contracts;
 [JsonSerializable(typeof(PromptPreviewView))]
 [JsonSerializable(typeof(NetworkTestRequest))]
 [JsonSerializable(typeof(NetworkTestView))]
+[JsonSerializable(typeof(SpeechSelectRequest))]
 [JsonSerializable(typeof(SubmitTextRequest))]
 [JsonSerializable(typeof(ToggleCardRequest))]
 [JsonSerializable(typeof(SelectLanguageRequest))]

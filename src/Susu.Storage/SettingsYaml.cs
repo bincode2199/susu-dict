@@ -53,7 +53,7 @@ public static partial class SettingsYaml
 
         public AppSettings Bind(YMap root)
         {
-            Keys(root, "", "schemaVersion", "revision", "general", "hotkeys", "network", "accounts", "instances", "services", "translationOrder", "prompts", "prompt");
+            Keys(root, "", "schemaVersion", "revision", "general", "hotkeys", "network", "accounts", "instances", "services", "translationOrder", "prompts", "prompt", "speech");
             long revision = Long(root, "", "revision", 0, 0, long.MaxValue);
             var general = General(root.Get("general") as YMap ?? Expect<YMap>(root, "general"));
             var hotkeys = Hotkeys(root.Get("hotkeys"));
@@ -64,11 +64,12 @@ public static partial class SettingsYaml
             var order = List(root, "translationOrder", (node, path) => Scalar(node, path));
             var prompts = List(root, "prompts", Prompt);
             var prompt = PromptSelection(root.Get("prompt"), prompts);
+            var speech = Speech(root.Get("speech"));
             var settings = new AppSettings(AppSettings.CurrentSchemaVersion, revision, general, hotkeys, network,
                 root.Get("accounts") is null ? defaults.Accounts : accounts,
                 root.Get("instances") is null ? defaults.Instances : instances,
                 root.Get("services") is null ? defaults.Services : services,
-                root.Get("translationOrder") is null ? defaults.TranslationOrder : order, prompts, prompt);
+                root.Get("translationOrder") is null ? defaults.TranslationOrder : order, prompts, prompt, speech);
             CrossCheck(settings);
             return settings;
         }
@@ -195,6 +196,33 @@ public static partial class SettingsYaml
             foreach (var id in scope)
                 if (!PromptCatalog.AiInstances.Contains(id)) Issue($"{p}.scope", "range", $"'{id}' is not an AI service", map.Get("scope"));
             return new PromptSettings(level, profile, scope);
+        }
+
+        /// <summary>SetSpeech/SetSpeechB selections (F07.4); a video selection without timecodes is an issue, never kept (A03).</summary>
+        private SpeechSettings Speech(YNode? node)
+        {
+            var d = defaults.Speech;
+            if (node is null) return d;
+            const string p = "speech";
+            if (node is not YMap map) { Issue(p, "type", "expected a mapping", node); return d; }
+            Keys(map, p, "tts", "asr", "videoAsr");
+            SpeechSelection One(string key, SpeechSlot slot)
+            {
+                var fallback = d[slot];
+                if (map.Get(key) is not { } child) return fallback;
+                string path = $"{p}.{key}";
+                if (child is not YMap m) { Issue(path, "type", "expected a mapping", child); return fallback; }
+                Keys(m, path, "instance", "model");
+                var selection = new SpeechSelection(Str(m, path, "instance", ""), Str(m, path, "model", ""));
+                if (SpeechCatalog.Check(slot, selection) is { } problem)
+                {
+                    Issue(path, problem == SpeechCatalog.NeedsTimecodes ? "timecodes" : "range",
+                        problem == SpeechCatalog.NeedsTimecodes ? $"'{selection.Model}' returns no timecodes; video transcription needs them" : $"'{selection.Instance}' '{selection.Model}' cannot be used here", child);
+                    return fallback;
+                }
+                return selection;
+            }
+            return new SpeechSettings(One("tts", SpeechSlot.Tts), One("asr", SpeechSlot.Asr), One("videoAsr", SpeechSlot.VideoAsr));
         }
 
         private void CrossCheck(AppSettings s)
@@ -391,6 +419,12 @@ public static partial class SettingsYaml
         });
         Section(w, c, "prompt");
         Pair(w, 1, "level", Q(s.Prompt.Level)); Pair(w, 1, "profile", Q(s.Prompt.Profile)); Pair(w, 1, "scope", Flow(s.Prompt.Scope));
+        Section(w, c, "speech");
+        foreach (var (key, selection) in new[] { ("tts", s.Speech.Tts), ("asr", s.Speech.Asr), ("videoAsr", s.Speech.VideoAsr) })
+        {
+            w.Append("  ").Append(key).Append(":\n");
+            Pair(w, 2, "instance", Q(selection.Instance)); Pair(w, 2, "model", Q(selection.Model));
+        }
         return w.ToString();
     }
 
@@ -431,6 +465,7 @@ public static partial class SettingsYaml
         ["translationOrder"] = "翻译结果卡片的顺序（翻译引擎与 AI 合并排序）",
         ["prompts"] = "提示语：自定义模板；{{text}} {{from}} {{to}} {{level}} 只替换一次",
         ["prompt"] = "当前提示语：内置水平、自定义模板与应用范围",
+        ["speech"] = "发音与语音：发音服务、语音／音频转写与视频转写各选各的；视频转写只接受带时间码的模型",
     };
 
     private static readonly IReadOnlyDictionary<string, string> CommentsEn = new Dictionary<string, string>
@@ -445,5 +480,6 @@ public static partial class SettingsYaml
         ["translationOrder"] = "Order of translation result cards (engines and AI services in one list)",
         ["prompts"] = "Prompts: custom templates; {{text}} {{from}} {{to}} {{level}} are replaced once, other text stays as written",
         ["prompt"] = "Prompt in use: built-in level (empty = none), custom template id (empty = built-in default) and the AI services it applies to",
+        ["speech"] = "Speech: pronunciation service, recording/audio transcription and video transcription, each chosen separately; video needs a model with timecodes",
     };
 }

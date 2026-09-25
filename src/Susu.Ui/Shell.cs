@@ -305,6 +305,7 @@ public sealed partial class ShellCoordinator
             case UiCommands.SavePrompt: return SavePrompt(Read(payload, ContractsJson.Default.PromptSaveRequest));
             case UiCommands.PreviewPrompt: return PreviewPrompt(Read(payload, ContractsJson.Default.PromptPreviewRequest));
             case UiCommands.TestNetwork: return await TestNetworkAsync(Read(payload, ContractsJson.Default.NetworkTestRequest));
+            case UiCommands.SelectSpeech: return SelectSpeech(Read(payload, ContractsJson.Default.SpeechSelectRequest));
             case UiCommands.TrayOpen: return TrayOpen(Read(payload, ContractsJson.Default.TrayOpenRequest).Id);
             case UiCommands.TrayExit: platform.Exit(); return Ok();
             default: return new CommandResult(false, "unavailable"); // whitelisted but its module is not built yet
@@ -469,6 +470,8 @@ public sealed partial class ShellCoordinator
             }
             if (request.ConfirmGrants) proposed = ConfirmGrants(proposed, package, instance, request.SecretName);
         }
+        else if (request.ConfirmGrants && CredentialPackages.Find(request.InstanceId) is { } other)
+            proposed = ConfirmGrants(proposed, other, proposed.Instances.First(i => i.Id == request.InstanceId), request.SecretName);
         var state = config.State;
         var saved = config.SaveWithSecrets(proposed, state.Revision, state.FileHash, [(accountId, request.SecretName, request.Value)]);
         InvalidateOptions(accountId, request.InstanceId); // after the write: a load that starts now already uses the new key
@@ -483,7 +486,7 @@ public sealed partial class ShellCoordinator
     private CommandResult BindAccount(BindAccountRequest request)
     {
         var s = config.State.Effective;
-        var package = TranslationPackages.Find(request.InstanceId) ?? throw new ArgumentException("unknown-instance");
+        var package = CredentialPackages.Find(request.InstanceId) ?? throw new ArgumentException("unknown-instance");
         var instance = s.Instances.FirstOrDefault(i => i.Id == request.InstanceId) ?? throw new ArgumentException("unknown-instance");
         var proposed = s;
         if (request.AccountId is { } accountId)
@@ -506,7 +509,7 @@ public sealed partial class ShellCoordinator
     }
 
     /// <summary>Grants the package's current targets (optionally for one secret) on the bound accounts.</summary>
-    private static AppSettings ConfirmGrants(AppSettings s, TranslationPackage package, InstanceSettings instance, string? onlySecret)
+    private static AppSettings ConfirmGrants(AppSettings s, ICredentialPackage package, InstanceSettings instance, string? onlySecret)
     {
         var accounts = s.Accounts.ToList();
         foreach (var grant in package.RequiredGrants(instance.Config).Where(g => onlySecret is null || g.Secret == onlySecret))
@@ -820,6 +823,15 @@ public sealed partial class ShellCoordinator
                 if (wired.InstanceId == TranslationPackages.DeepL) plan = instance.Config.TryGetValue("plan", out var p) && p == "pro" ? "pro" : "free";
                 if (backend is not null) implemented = backend.RuntimeAvailable;
             }
+            else if (SpeechCatalog.Find(x.Instance) is { Credentials.Count: > 0 } speech && instance.Package == speech.PackageId && x.Capability == speech.Capability)
+            {
+                // A planned speech package (F07.4): its grants are confirmed like a translation package's, so a shared
+                // account (OpenAI, Tencent Cloud) is usable only for the package, origin and use the user confirmed.
+                var states = CredentialPackages.States(s, speech, instance, config.Secrets.Has);
+                targets = [.. states.Select(t => new CredentialTargetView(t.Secret, t.Origin, t.Use, t.Saved, t.Granted))];
+                if (x.Enabled) availability = (states.All(t => t.Saved && t.Granted) ? Availability.Ready : Availability.MissingCredential).ToString();
+                implemented = false;
+            }
             else if (backend is not null) implemented = false;
             int order = x.Capability == Capability.Translate ? translationOrder.IndexOf(x.ServiceId) : -1;
             long? usage = targets is not null && backend?.MonthlyUsage is { } monthly ? monthly(x.ServiceId) : null;
@@ -838,7 +850,53 @@ public sealed partial class ShellCoordinator
             new NetworkView(s.Network.ProxyMode.ToString().ToLowerInvariant(), s.Network.ProxyHost, s.Network.ProxyPort, s.Network.ProxyUsername, config.Secrets.Has(NetworkSettings.ProxyAccountId, "password"), s.Network.AiTimeoutSeconds),
             services, accounts,
             new PromptView(s.Prompt.Level, s.Prompt.Profile, [.. s.Prompt.Scope], [.. PromptCatalog.Levels.Select(l => l.Id)], [.. PromptCatalog.AiInstances],
-                [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]));
+                [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]),
+            new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr)));
+    }
+
+    private static readonly Dictionary<SpeechSlot, string> speechSlotNames = new() { [SpeechSlot.Tts] = "tts", [SpeechSlot.Asr] = "asr", [SpeechSlot.VideoAsr] = "videoAsr" };
+
+    /// <summary>Credential state of a speech choice, independent of the service-list toggle: the selection is what uses it.</summary>
+    private bool SpeechCredentialsReady(AppSettings s, SpeechPackage package)
+        => s.Instances.FirstOrDefault(i => i.Id == package.InstanceId) is { } instance && instance.Package == package.PackageId
+            && CredentialPackages.States(s, package, instance, config.Secrets.Has).All(t => t.Saved && t.Granted);
+
+    /// <summary>
+    /// One SetSpeech/SetSpeechB selection with its choices (F07.4). Nothing is ready before F10/F12: native SAPI is
+    /// not built and no speech package is installed, so recording, audio, video and pronunciation stay unavailable.
+    /// </summary>
+    private SpeechSlotView SpeechSlotOf(AppSettings s, SpeechSlot slot)
+    {
+        var selection = s.Speech[slot];
+        var choices = SpeechCatalog.Choices(slot).Select(p =>
+        {
+            string? reason = SpeechCatalog.CheckPackage(slot, p);
+            string availability = p.Credentials.Count == 0 || SpeechCredentialsReady(s, p) ? nameof(Availability.Ready) : nameof(Availability.MissingCredential);
+            return new SpeechChoiceView(p.InstanceId, p.Native, p.Installed, p.Plan, p.Timecodes, reason is null, availability,
+                [.. p.Models.Select(m => new SpeechModelView(m.Id, m.Timecodes, slot != SpeechSlot.VideoAsr || m.Timecodes))], reason);
+        }).ToArray();
+        string? why = null;
+        if (SpeechCatalog.Find(selection.Instance) is not { } package) why = slot == SpeechSlot.VideoAsr ? SpeechCatalog.NeedsTimecodes : "none-selected";
+        else if (SpeechCatalog.Check(slot, selection) is { } problem) why = problem;
+        else if (!package.Installed) why = "not-installed";
+        else if (package.Credentials.Count > 0 && !SpeechCredentialsReady(s, package)) why = "missing-credential";
+        else why = "not-built"; // installed (native SAPI) but the capture/playback feature itself comes in F10/F12
+        return new SpeechSlotView(speechSlotNames[slot], selection.Instance, selection.Model, choices, why is null, why);
+    }
+
+    /// <summary>
+    /// Settings.SelectSpeech (F07.4, A02/A03): sets one slot and nothing else. The package must declare the slot's
+    /// capability; video transcription accepts only a model that returns timecodes (a text-only ASR is refused, never
+    /// given invented start/end). Credentials are not touched: a shared account is bound and granted in the service's
+    /// details (Settings.BindAccount), per package, origin and use.
+    /// </summary>
+    private CommandResult SelectSpeech(SpeechSelectRequest request)
+    {
+        var slot = speechSlotNames.Where(kv => kv.Value == request.Slot).Select(kv => (SpeechSlot?)kv.Key).FirstOrDefault() ?? throw new ArgumentException("slot");
+        var selection = new SpeechSelection(request.Instance, request.Model);
+        if (SpeechCatalog.Check(slot, selection) is { } problem) return new CommandResult(false, problem);
+        var s = config.State.Effective;
+        return Outcome(config.Save(s with { Speech = s.Speech.With(slot, selection) }, request.ExpectedRevision, request.ExpectedFileHash));
     }
 
     // ---------- tray and hotkeys ----------

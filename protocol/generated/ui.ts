@@ -21,6 +21,7 @@ export const UI_COMMANDS = {
   SavePrompt: 'Settings.SavePrompt',
   PreviewPrompt: 'Settings.PreviewPrompt',
   TestNetwork: 'Settings.TestNetwork',
+  SelectSpeech: 'Settings.SelectSpeech',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -316,6 +317,48 @@ export interface SettingsView {
   services: ServiceView[];
   accounts: AccountView[];
   prompt?: PromptView;
+  speech?: SpeechView;
+}
+
+export interface SpeechChoiceView {
+  instanceId: string;
+  native: boolean;
+  installed: boolean;
+  plan: string;
+  timecodes: boolean;
+  selectable: boolean;
+  availability: string;
+  models: SpeechModelView[];
+  reasonKey?: string;
+}
+
+export interface SpeechModelView {
+  id: string;
+  timecodes: boolean;
+  selectable: boolean;
+}
+
+export interface SpeechSelectRequest {
+  expectedRevision: number;
+  expectedFileHash: string;
+  slot: string;
+  instance: string;
+  model: string;
+}
+
+export interface SpeechSlotView {
+  slot: string;
+  instance: string;
+  model: string;
+  choices: SpeechChoiceView[];
+  ready: boolean;
+  reasonKey?: string;
+}
+
+export interface SpeechView {
+  tts: SpeechSlotView;
+  asr: SpeechSlotView;
+  videoAsr: SpeechSlotView;
 }
 
 export interface SubmitTextRequest {

@@ -26,7 +26,8 @@ public sealed record SettingsView(
     NetworkView Network,
     ServiceView[] Services,
     AccountView[] Accounts,
-    PromptView? Prompt = null);
+    PromptView? Prompt = null,
+    SpeechView? Speech = null);
 
 [TsExport("ui")]
 public sealed record SettingsIssueView(string Path, string Code, string Message, int Line);
@@ -190,3 +191,37 @@ public sealed record SelectLanguageRequest(string From, string To);
 
 [TsExport("ui")]
 public sealed record TrayOpenRequest(string Id);
+
+/// <summary>
+/// SetSpeech/SetSpeechB (F07.4): three selections chosen separately - pronunciation (tts), recording/audio
+/// transcription (asr) and video transcription (videoAsr). Changing one never changes another or the AI
+/// translation model (A02).
+/// </summary>
+[TsExport("ui")]
+public sealed record SpeechView(SpeechSlotView Tts, SpeechSlotView Asr, SpeechSlotView VideoAsr);
+
+/// <summary>
+/// One selection. Slot: tts | asr | videoAsr. Instance "" = nothing selected. Choices: the services whose package
+/// declares the slot's capability, including ones that cannot be chosen here (Selectable=false with ReasonKey,
+/// e.g. needs-timecodes for a text-only ASR under video). Ready: the selected service could run now; it stays
+/// false until its package is installed (F10/F12). ReasonKey (when not ready): none-selected, needs-timecodes,
+/// not-installed, not-built, missing-credential.
+/// </summary>
+[TsExport("ui")]
+public sealed record SpeechSlotView(string Slot, string Instance, string Model, SpeechChoiceView[] Choices, bool Ready, string? ReasonKey = null);
+
+/// <summary>
+/// A listed service. Native: built into Su-Su (SAPI). Installed=false: the plugin package is planned (Plan, e.g.
+/// "F12.2 P-R01") but not installed, so it cannot run yet. Availability: as ServiceView (credentials and grants).
+/// </summary>
+[TsExport("ui")]
+public sealed record SpeechChoiceView(string InstanceId, bool Native, bool Installed, string Plan, bool Timecodes, bool Selectable, string Availability,
+    SpeechModelView[] Models, string? ReasonKey = null);
+
+/// <summary>Timecodes: the model returns start/end per segment. Selectable=false under video when it does not.</summary>
+[TsExport("ui")]
+public sealed record SpeechModelView(string Id, bool Timecodes, bool Selectable);
+
+/// <summary>Settings.SelectSpeech: sets one slot only. Refused with needs-timecodes when a text-only model is chosen for video.</summary>
+[TsExport("ui")]
+public sealed record SpeechSelectRequest(long ExpectedRevision, string ExpectedFileHash, string Slot, string Instance, string Model);

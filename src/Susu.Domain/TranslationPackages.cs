@@ -12,7 +12,7 @@ public sealed record CredentialTarget(string Secret, string Use);
 /// plan, an explicit <c>baseUrl</c>), so grants are always computed from the current config.
 /// </summary>
 public sealed record TranslationPackage(string InstanceId, string PackageId, string Directory, string DisplayName, TranslationLimits Limits,
-    string DefaultOrigin, IReadOnlyList<CredentialTarget> Credentials)
+    string DefaultOrigin, IReadOnlyList<CredentialTarget> Credentials) : ICredentialPackage
 {
     /// <summary>Built-in packages are unsigned installs until F16 tracks signatures; the same default Broker.Issue uses.</summary>
     public string Signer => $"unsigned:{PackageId}";
@@ -88,12 +88,7 @@ public static class TranslationPackages
 
     /// <summary>Saved/granted state of each credential target of <paramref name="instance"/> under its current config.</summary>
     public static IReadOnlyList<CredentialTargetState> CredentialStates(AppSettings settings, TranslationPackage package, InstanceSettings instance, Func<string, string, bool> hasSecret)
-        => [.. package.RequiredGrants(instance.Config).Select(g =>
-        {
-            bool saved = instance.AccountBindings.TryGetValue(g.Secret, out var account) && hasSecret(account, g.Secret);
-            var (decision, _) = CredentialAuthorizer.Authorize(settings.Accounts, instance, new PluginIdentity(package.PackageId, package.Signer), g.Secret, g.Origin, g.Use);
-            return new CredentialTargetState(g.Secret, g.Origin, g.Use, saved, decision == CredentialDecision.Allowed);
-        })];
+        => CredentialPackages.States(settings, package, instance, hasSecret);
 
     /// <summary>Ready only when every secret is saved and granted for the package, origin and use it will be written to.</summary>
     public static Availability AvailabilityOf(AppSettings settings, ServiceSettings service, Func<string, string, bool> hasSecret)
