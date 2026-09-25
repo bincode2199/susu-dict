@@ -14,10 +14,10 @@ public sealed record CredentialPart(string? Literal = null, string? Secret = nul
 public enum CredentialArea { Header, Query, Json }
 
 /// <summary>The only way a plugin asks for a secret (PLAN 4.5.2): a separate control field, never text interpolation.</summary>
-public sealed record CredentialSpec(CredentialArea Area, string Target, IReadOnlyList<CredentialPart> Parts)
+public sealed record CredentialSpec(CredentialArea Area, string Target, IReadOnlyList<CredentialPart> Parts, string? UseOverride = null)
 {
-    /// <summary>The grant "use" string this spec needs (matches <c>CredentialGrant.Use</c>).</summary>
-    public string Use => $"{Area.ToString().ToLowerInvariant()}:{Target}";
+    /// <summary>The grant "use" string this spec needs (matches <c>CredentialGrant.Use</c>); named signers use <c>signer:&lt;scheme&gt;</c>.</summary>
+    public string Use => UseOverride ?? $"{Area.ToString().ToLowerInvariant()}:{Target}";
 }
 
 /// <summary>A request description before transport; the plugin never sees the filled form.</summary>

@@ -70,9 +70,8 @@ public class TencentPluginTests
     /// <summary>
     /// One shared Tencent Cloud account (PLAN 1.3: TMT and OCR use the same SecretId/SecretKey) holding
     /// both secrets, granted to the translate package and - separately confirmed - to Tencent OCR, and
-    /// bound to the "tencent-translate" instance. Grants carry both the documented use
-    /// ("signer:tencent-tc3") and the one today's Broker actually checks for named signers
-    /// ("header:Authorization", NetworkBroker's named-sign ResolveSecret) so the test holds either way.
+    /// bound to the "tencent-translate" instance. Grants carry only the documented use
+    /// ("signer:tencent-tc3", PLAN 4.5.2), which NetworkBroker's named-sign path checks.
     /// </summary>
     private static HostSession.Options Options(string staged, string origin)
     {
@@ -82,11 +81,10 @@ public class TencentPluginTests
         string normalized = Origin.Normalize(origin);
         var grants = new List<CredentialGrant>();
         foreach (string secret in new[] { "secretId", "secretKey" })
-            foreach (string use in new[] { "signer:tencent-tc3", "header:Authorization" })
-            {
-                grants.Add(new CredentialGrant(PackageId, Signer, secret, normalized, use));
-                grants.Add(new CredentialGrant("app.susu.tencent-ocr", "builtin", secret, "https://ocr.tencentcloudapi.com:443", use));
-            }
+        {
+            grants.Add(new CredentialGrant(PackageId, Signer, secret, normalized, "signer:tencent-tc3"));
+            grants.Add(new CredentialGrant("app.susu.tencent-ocr", "builtin", secret, "https://ocr.tencentcloudapi.com:443", "signer:tencent-tc3"));
+        }
         var account = new AccountSettings("account-tencent", "Tencent Cloud", ["secretId", "secretKey"], grants);
         var instance = new InstanceSettings(InstanceId, PackageId, 1, new Dictionary<string, string>(),
             new Dictionary<string, string> { ["secretId"] = "account-tencent", ["secretKey"] = "account-tencent" });

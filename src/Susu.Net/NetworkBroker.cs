@@ -211,8 +211,10 @@ public sealed class NetworkBroker : IDisposable
 
         if (request.Sign?.Named is { } named)
         {
-            string secretId = request.ResolveSecret(new CredentialSpec(CredentialArea.Header, "Authorization", []), named.SecretIdSecret);
-            string secretKey = request.ResolveSecret(new CredentialSpec(CredentialArea.Header, "Authorization", []), named.SecretKeySecret);
+            // PLAN 4.5.2: a named signer's secrets are granted as "signer:<scheme>", not as the header it fills.
+            var signerSpec = new CredentialSpec(CredentialArea.Header, "Authorization", [], $"signer:{named.Scheme}");
+            string secretId = request.ResolveSecret(signerSpec, named.SecretIdSecret);
+            string secretKey = request.ResolveSecret(signerSpec, named.SecretKeySecret);
             var signable = new SignableRequest(request.Method, uri, headers, finalBody);
             var signature = named.Scheme switch
             {
