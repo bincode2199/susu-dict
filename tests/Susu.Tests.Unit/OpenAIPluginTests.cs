@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Susu.Contracts;
 using Susu.Domain;
 using Susu.Plugins;
@@ -274,6 +274,60 @@ public class OpenAIPluginTests
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.False(completed.Ok);
             Assert.Equal("cancelled", completed.Error?.Kind);
+        }
+        finally { session.Shutdown(2000); }
+    }
+
+    // ---- F07.2: the optional `options` method (model list from GET /v1/models) ----
+
+    private static async Task<CapabilityOutcome<OptionsResult>> Options(HostSession session, string origin, string? cursor)
+        => await CapabilityClient.InvokeAsync(session, PackageId, "options", JsonSerializer.Serialize(new OptionsRequest("model", 3, cursor), ContractsJson.Default.OptionsRequest),
+            "job-oa-options", [origin], ContractsJson.Default.OptionsResult, ["apiKey"], configJson: ConfigJson(origin), timeout: TimeSpan.FromSeconds(10),
+            cancellationToken: TestContext.Current.CancellationToken, instanceId: InstanceId, signer: Signer);
+
+    [Fact]
+    public async Task Options_lists_chat_models_from_v1_models_in_pages_of_200()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        var ids = Enumerable.Range(0, 230).Select(i => $"model-{i:D3}").Concat(["text-embedding-3-small", "whisper-1", "tts-1", "dall-e-3", "omni-moderation-latest"]);
+        string body = JsonSerializer.Serialize(new { @object = "list", data = ids.Select(id => new { id, @object = "model", owned_by = "system" }) });
+        var seen = new List<LoopbackHttpRequest>();
+        using var server = new LoopbackHttpServer(req => { lock (seen) seen.Add(req); return LoopbackHttpResponse.Json(200, body); });
+        using var session = HostSession.Start(Options(staged, server.Origin));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load(PackageId, "plugins/openai").Ok);
+            var first = await Options(session, server.Origin, null);
+            Assert.True(first.Ok, first.ErrorDetail);
+            Assert.Equal(200, first.Result!.Items.Length);
+            Assert.Equal("model-000", first.Result.Items[0].Value);
+            Assert.Equal("200", first.Result.NextCursor);
+            var second = await Options(session, server.Origin, first.Result.NextCursor);
+            Assert.True(second.Ok, second.ErrorDetail);
+            Assert.Equal(Enumerable.Range(200, 30).Select(i => $"model-{i:D3}"), second.Result!.Items.Select(i => i.Value));
+            Assert.Null(second.Result.NextCursor);
+            Assert.All(seen, r => { Assert.Equal("GET", r.Method); Assert.Equal("/v1/models", r.Path); Assert.Equal("Bearer sk-test-secret-value", r.Headers["Authorization"]); });
+        }
+        finally { session.Shutdown(2000); }
+    }
+
+    [Fact]
+    public async Task Options_failure_is_classified_and_carries_no_key()
+    {
+        string? staged = StageHost();
+        if (staged is null) return;
+        using var server = new LoopbackHttpServer(_ => LoopbackHttpResponse.Json(401, """{"error":{"message":"Incorrect API key provided: sk-test-****alue","code":"invalid_api_key"}}"""));
+        using var session = HostSession.Start(Options(staged, server.Origin));
+        try
+        {
+            session.Broker.ApproveLocalOrigin(server.Origin);
+            Assert.True(session.Load(PackageId, "plugins/openai").Ok);
+            var outcome = await Options(session, server.Origin, null);
+            Assert.False(outcome.Ok);
+            Assert.Equal(ErrorKind.Auth, outcome.ErrorKind);
+            Assert.DoesNotContain("sk-test-secret-value", outcome.ErrorDetail ?? "");
         }
         finally { session.Shutdown(2000); }
     }

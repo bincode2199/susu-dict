@@ -28,6 +28,8 @@ public static class CapabilityClient
         IpcEnvelope envelope;
         try { envelope = await task.WaitAsync(timeout ?? TimeSpan.FromSeconds(30), cancellationToken); }
         catch (TimeoutException) { try { host.Cancel(pluginId, requestId, jobId, callId); } catch (IOException) { } return new(false, default, Susu.Contracts.ErrorKind.Timeout, null); }
+        // The caller gave up (a settings field whose dependencies changed, F07.2): the plugin call stops too.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { try { host.Cancel(pluginId, requestId, jobId, callId); } catch (IOException) { } throw; }
         catch (IOException) { return new(false, default, Susu.Contracts.ErrorKind.Unavailable, "plugin host disconnected"); }
         var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
         if (!completed.Ok || completed.Result is null)

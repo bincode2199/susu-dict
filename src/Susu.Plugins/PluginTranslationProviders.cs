@@ -32,6 +32,43 @@ public static class PluginTranslationProviders
     }
 
     /// <summary>
+    /// F07.2: one page of a dynamic settings field through the package's optional <c>options</c> method (or
+    /// <c>voices</c>, mapped to value/label pairs), with the instance's current config, secrets and origin, the
+    /// same authority its translate call has (ARCHITECTURE 3.1: only that provider's network grant). The error
+    /// detail is dropped by the caller; only the kind reaches a page.
+    /// </summary>
+    public static async Task<CapabilityOutcome<Susu.Contracts.OptionsResult>> LoadOptionsAsync(Supervisor<HostSession> supervisor, AppSettings settings,
+        string instanceId, string method, string field, long revision, string? cursor, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        var package = TranslationPackages.Find(instanceId);
+        var instance = settings.Instances.FirstOrDefault(i => i.Id == instanceId);
+        if (package is null || instance is null || instance.Package != package.PackageId) return new(false, null, Susu.Contracts.ErrorKind.Unavailable, "no such package");
+        if (supervisor.Stopped) return new(false, null, Susu.Contracts.ErrorKind.Unavailable, "plugin host stopped");
+        HostSession? host;
+        try { host = supervisor.Acquire(); }
+        catch (Exception error) { return new(false, null, Susu.Contracts.ErrorKind.Unavailable, error.Message); }
+        if (host is null) return new(false, null, Susu.Contracts.ErrorKind.Unavailable, "plugin host is restarting");
+        try
+        {
+            string configJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>(instance.Config), Susu.Contracts.ContractsJson.Default.DictionaryStringString);
+            string jobId = $"options-{Guid.NewGuid():N}";
+            string[] origins = [package.Origin(instance.Config)];
+            if (method == OptionsSource.VoicesMethod)
+            {
+                var voices = await CapabilityClient.InvokeAsync(host, package.PackageId, "voices", "{}", jobId, origins, Susu.Contracts.ContractsJson.Default.VoiceArray,
+                    package.SecretNames, configJson: configJson, timeout: timeout, cancellationToken: cancellationToken, instanceId: instance.Id, signer: package.Signer);
+                if (!voices.Ok) return new(false, null, voices.ErrorKind, voices.ErrorDetail);
+                var list = voices.Result ?? [];
+                return new(true, new Susu.Contracts.OptionsResult([.. list.Select(v => new Susu.Contracts.OptionItem(v.Id, string.IsNullOrEmpty(v.Lang) ? v.Name : $"{v.Name} ({v.Lang})"))]), null, null);
+            }
+            string requestJson = System.Text.Json.JsonSerializer.Serialize(new Susu.Contracts.OptionsRequest(field, revision, cursor), Susu.Contracts.ContractsJson.Default.OptionsRequest);
+            return await CapabilityClient.InvokeAsync(host, package.PackageId, OptionsSource.OptionsMethod, requestJson, jobId, origins, Susu.Contracts.ContractsJson.Default.OptionsResult,
+                package.SecretNames, configJson: configJson, timeout: timeout, cancellationToken: cancellationToken, instanceId: instance.Id, signer: package.Signer);
+        }
+        finally { supervisor.Release(); }
+    }
+
+    /// <summary>
     /// Launch function body: loads every wired package into a fresh session. One package failing to load
     /// is reported and skipped (its calls then fail on their own card) instead of taking the others down;
     /// only a session where nothing loaded is a launch failure.

@@ -58,7 +58,39 @@ function statusError(status, headers, bodyText) {
   return new PluginError('bad_response', `http ${status}`);
 }
 
+// F07.2 options (ARCHITECTURE 3.1): the model list comes from GET /v1/models, a free listing call (never a
+// generation request). Models that cannot answer a chat completion (embeddings, audio, images, moderation)
+// are left out; an OpenAI-compatible server's own ids pass through. The whole list arrives in one response,
+// so paging is an offset cursor over it, PAGE_SIZE at a time (the host caps a page at 200 items).
+const PAGE_SIZE = 200;
+const NON_CHAT = /(embedding|whisper|tts|dall-e|moderation|transcribe|realtime|audio|image|search|^babbage|^davinci)/i;
+
+async function listModels(req, ctx) {
+  if (!req || req.field !== 'model') throw new PluginError('bad_response', `no options for field ${req && req.field}`);
+  const cfg = ctx.config || {};
+  const baseUrl = cfg.baseUrl || DEFAULT_BASE_URL;
+  const r = await ctx.$http({
+    method: 'GET',
+    url: `${baseUrl}/v1/models`,
+    headers: { Authorization: '' },
+    credentials: [{ target: { area: 'header', name: 'Authorization' }, parts: [{ literal: 'Bearer ' }, { secret: 'apiKey' }] }],
+  });
+  if (r.status < 200 || r.status >= 300) throw statusError(r.status, r.headers, typeof r.body === 'string' ? r.body : JSON.stringify(r.body || {}));
+  const data = r.body && Array.isArray(r.body.data) ? r.body.data : null;
+  if (!data) throw new PluginError('bad_response', 'missing data[]');
+  const ids = [...new Set(data.map((m) => m && m.id).filter((id) => typeof id === 'string' && id.length > 0 && !NON_CHAT.test(id)))].sort();
+  const start = req.cursor ? Number(req.cursor) : 0;
+  if (!Number.isInteger(start) || start < 0 || start > ids.length) throw new PluginError('bad_response', 'bad cursor');
+  const page = ids.slice(start, start + PAGE_SIZE);
+  const next = start + PAGE_SIZE < ids.length ? String(start + PAGE_SIZE) : undefined;
+  return { items: page.map((id) => ({ value: id, label: id })), nextCursor: next };
+}
+
 export default {
+  async options(req, ctx) {
+    return listModels(req, ctx);
+  },
+
   async translate(req, ctx) {
     const text = req && req.text;
     if (typeof text !== 'string' || text.length === 0) throw new PluginError('bad_response', 'empty text');
