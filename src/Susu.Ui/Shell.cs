@@ -47,9 +47,12 @@ public sealed record ShellOptions(bool DevelopmentBuild, bool DevPreview, TimeSp
 /// Host services behind the F06.3a settings commands. RuntimeAvailable: the plugin runtime was composed
 /// (the wired built-in translation packages can run). ValidationProvider: a provider for one service built
 /// from the given settings whether or not it is enabled, for Settings.ValidateProvider. MonthlyUsage: local
-/// characters sent this month by a service id (DATA04), shown next to the service.
+/// characters sent this month by a service id (DATA04), shown next to the service. Schemas (F07.2): each wired
+/// instance's manifest config schema, from which the settings controls are generated. Options: the dynamic
+/// option loader for fields with an optionsSource (Settings.LoadOptions).
 /// </summary>
-public sealed record TranslationBackend(bool RuntimeAvailable, Func<AppSettings, string, ITranslationProvider?> ValidationProvider, Func<string, long>? MonthlyUsage = null);
+public sealed record TranslationBackend(bool RuntimeAvailable, Func<AppSettings, string, ITranslationProvider?> ValidationProvider, Func<string, long>? MonthlyUsage = null,
+    IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? Schemas = null, OptionsBroker? Options = null);
 
 /// <summary>
 /// The UI brain on the message thread: window sessions, snapshot + patch sequencing, command dispatch,
@@ -295,6 +298,8 @@ public sealed class ShellCoordinator
             case UiCommands.BindAccount: return BindAccount(Read(payload, ContractsJson.Default.BindAccountRequest));
             case UiCommands.ReorderService: return Reorder(Read(payload, ContractsJson.Default.ReorderServiceRequest));
             case UiCommands.ValidateProvider: return await ValidateAsync(Read(payload, ContractsJson.Default.ValidateProviderRequest));
+            case UiCommands.SaveServiceConfig: return SaveServiceConfig(Read(payload, ContractsJson.Default.ServiceConfigRequest));
+            case UiCommands.LoadOptions: return await LoadOptionsAsync(Read(payload, ContractsJson.Default.LoadOptionsRequest));
             case UiCommands.TrayOpen: return TrayOpen(Read(payload, ContractsJson.Default.TrayOpenRequest).Id);
             case UiCommands.TrayExit: platform.Exit(); return Ok();
             default: return new CommandResult(false, "unavailable"); // whitelisted but its module is not built yet
@@ -460,7 +465,9 @@ public sealed class ShellCoordinator
             if (request.ConfirmGrants) proposed = ConfirmGrants(proposed, package, instance, request.SecretName);
         }
         var state = config.State;
-        return Outcome(config.SaveWithSecrets(proposed, state.Revision, state.FileHash, [(accountId, request.SecretName, request.Value)]));
+        var saved = config.SaveWithSecrets(proposed, state.Revision, state.FileHash, [(accountId, request.SecretName, request.Value)]);
+        InvalidateOptions(accountId, request.InstanceId); // after the write: a load that starts now already uses the new key
+        return Outcome(saved);
     }
 
     /// <summary>
@@ -551,6 +558,98 @@ public sealed class ShellCoordinator
         return Ok(JsonSerializer.SerializeToElement(view, ContractsJson.Default.ServiceValidationView));
     }
 
+    private IReadOnlyList<ConfigField>? SchemaOf(string instanceId)
+        => backend?.Schemas is { } schemas && schemas.TryGetValue(instanceId, out var fields) ? fields : null;
+
+    /// <summary>
+    /// Settings.SaveServiceConfig (F07.2): values for the generated controls, checked against the package's
+    /// manifest schema here (a page cannot skip it); secret fields and undeclared names are refused, and keys
+    /// the host manages itself (DeepL's plan) are kept. A changed address drops the grants of the old origin:
+    /// the new one is confirmed afresh (PLAN 4.6). ExpectedInstanceRevision guards against a page that
+    /// edited an older copy of the instance.
+    /// </summary>
+    private CommandResult SaveServiceConfig(ServiceConfigRequest request)
+    {
+        var state = config.State;
+        var s = state.Effective;
+        var instance = s.Instances.FirstOrDefault(i => i.Id == request.InstanceId) ?? throw new ArgumentException("unknown-instance");
+        var schema = SchemaOf(instance.Id) ?? throw new ArgumentException("unknown-instance");
+        if (request.ExpectedInstanceRevision != instance.Revision) return new CommandResult(false, "conflict", SettingsElement());
+        var next = new Dictionary<string, string>(instance.Config, StringComparer.Ordinal);
+        var issues = new List<SettingsIssueView>();
+        foreach (var value in request.Values)
+        {
+            var field = schema.FirstOrDefault(f => f.Name == value.Name && !f.Secret) ?? throw new ArgumentException("unknown-field");
+            string text = field.Type == ConfigFieldType.String ? value.Value.Trim() : value.Value;
+            if (text.Length == 0) { next.Remove(field.Name); continue; }
+            if (ConfigSchema.Check(field, text) is { } problem) { issues.Add(new SettingsIssueView($"instances.{instance.Id}.config.{field.Name}", problem, "", 0)); continue; }
+            next[field.Name] = text;
+        }
+        if (issues.Count > 0) return new CommandResult(false, "invalid", JsonSerializer.SerializeToElement(issues.ToArray(), ContractsJson.Default.SettingsIssueViewArray));
+        if (next.Count == instance.Config.Count && next.All(kv => instance.Config.TryGetValue(kv.Key, out var old) && old == kv.Value)) return Ok(SettingsElement());
+        var proposed = s;
+        if (TranslationPackages.Find(instance.Id) is { } package)
+        {
+            string oldOrigin = package.Origin(instance.Config);
+            if (package.Origin(next) != oldOrigin) proposed = RevokeGrants(proposed, instance, g => g.Package == package.PackageId && g.Origin == oldOrigin);
+        }
+        proposed = WithInstance(proposed, instance with { Config = next, Revision = instance.Revision + 1 });
+        return Outcome(config.Save(proposed, state.Revision, state.FileHash));
+    }
+
+    /// <summary>
+    /// The dependency fingerprint of a dynamic field: the values of the fields it depends on, the accounts its
+    /// secrets are bound to and the address the package calls. Any change bumps the field's revision.
+    /// </summary>
+    private static string OptionsFingerprint(InstanceSettings instance, ConfigField field)
+    {
+        var b = new System.Text.StringBuilder();
+        foreach (var name in field.Options?.DependsOn ?? [])
+            b.Append(name).Append('=').Append(instance.Config.TryGetValue(name, out var v) ? v : "").Append('\u0001');
+        foreach (var kv in instance.AccountBindings.OrderBy(k => k.Key, StringComparer.Ordinal)) b.Append(kv.Key).Append("->").Append(kv.Value).Append('\u0001');
+        if (TranslationPackages.Find(instance.Id) is { } package) b.Append("@").Append(package.Origin(instance.Config));
+        return b.ToString();
+    }
+
+    /// <summary>A secret was written or removed: every dynamic field of every instance using that account is stale.</summary>
+    private void InvalidateOptions(string accountId, string? instanceId = null)
+    {
+        if (backend?.Options is not { } broker) return;
+        if (instanceId is not null) broker.Invalidate(instanceId);
+        foreach (var i in config.State.Effective.Instances.Where(i => i.AccountBindings.Values.Contains(accountId))) broker.Invalidate(i.Id);
+    }
+
+    /// <summary>
+    /// Settings.LoadOptions (F07.2, CFG02): one page of a dynamic field through <see cref="OptionsBroker"/>. A
+    /// request for a revision that is no longer current, or a result that arrives after the dependencies
+    /// changed, comes back Stale and is never shown. Failures carry the kind only.
+    /// </summary>
+    private async Task<CommandResult> LoadOptionsAsync(LoadOptionsRequest request)
+    {
+        var s = config.State.Effective;
+        var instance = s.Instances.FirstOrDefault(i => i.Id == request.InstanceId) ?? throw new ArgumentException("unknown-instance");
+        var field = SchemaOf(instance.Id)?.FirstOrDefault(f => f.Name == request.Field && f.Options is not null) ?? throw new ArgumentException("unknown-field");
+        if (request.Cursor is { Length: > OptionsBroker.MaxCursorLength }) throw new ArgumentException("cursor");
+        if (backend is not { RuntimeAvailable: true, Options: { } broker }) return new CommandResult(false, "unavailable");
+        long current = broker.Track(instance.Id, field.Name, OptionsFingerprint(instance, field));
+        OptionsView View(IReadOnlyList<OptionItem> items, string? next = null, bool cached = false, ErrorKind? error = null)
+            => new(instance.Id, field.Name, request.DependsOnRevision, [.. items], next, cached, false, error);
+        // Stale carries the current revision so the page knows which revision to ask for next.
+        OptionsView Stale(long revision) => new(instance.Id, field.Name, revision, [], Stale: true);
+        if (request.DependsOnRevision != current) return Ok(JsonSerializer.SerializeToElement(Stale(current), ContractsJson.Default.OptionsView));
+        if (TranslationPackages.Find(instance.Id) is { } package && TranslationPackages.CredentialStates(s, package, instance, config.Secrets.Has).Any(c => !c.Saved || !c.Granted))
+            return new CommandResult(false, "missing-credential");
+        var outcome = await broker.LoadAsync(new OptionsQuery(instance.Id, field.Name, field.Options!.Method, current, request.Cursor), request.Refresh);
+        var view = outcome switch
+        {
+            OptionsOutcome.Loaded loaded => View(loaded.Items, loaded.NextCursor, loaded.Cached),
+            OptionsOutcome.Failed failed => View([], error: failed.Kind),
+            OptionsOutcome.Stale stale => Stale(stale.CurrentRevision),
+            _ => View([], error: ErrorKind.Unavailable),
+        };
+        return Ok(JsonSerializer.SerializeToElement(view, ContractsJson.Default.OptionsView));
+    }
+
     private CommandResult DeleteSecret(SecretDeleteRequest request)
     {
         if (request.InstanceId == ProxySecretInstance)
@@ -563,7 +662,9 @@ public sealed class ShellCoordinator
         var state = config.State;
         // The value is gone, so are its grants: a later key for this slot is confirmed afresh (PLAN 4.5.4).
         var accounts = state.Effective.Accounts.Select(a => a.Id == accountId ? CredentialAuthorizer.Revoke(a, g => g.Secret == request.SecretName) : a).ToList();
-        return Outcome(config.SaveWithSecrets(state.Effective with { Accounts = accounts }, state.Revision, state.FileHash, [(accountId, request.SecretName, null)]));
+        var saved = config.SaveWithSecrets(state.Effective with { Accounts = accounts }, state.Revision, state.FileHash, [(accountId, request.SecretName, null)]);
+        InvalidateOptions(accountId, instance.Id);
+        return Outcome(saved);
     }
 
     /// <summary>Withdraws matching grants on every account <paramref name="instance"/> is bound to.</summary>
@@ -600,6 +701,20 @@ public sealed class ShellCoordinator
         if (result.Status == SaveStatus.Invalid)
             return new CommandResult(false, "invalid", JsonSerializer.SerializeToElement(result.Issues.Select(i => new SettingsIssueView(i.Path, i.Code, i.Message, i.Line)).ToArray(), ContractsJson.Default.SettingsIssueViewArray));
         return new CommandResult(false, result.Status == SaveStatus.Conflict ? "conflict" : "failed", SettingsElement());
+    }
+
+    /// <summary>The generated controls of one instance (F07.2): its schema minus secret fields, with the saved values.</summary>
+    private ConfigFieldView[]? ConfigFields(InstanceSettings instance)
+    {
+        if (SchemaOf(instance.Id) is not { Count: > 0 } schema) return null;
+        var broker = backend?.Options;
+        return [.. schema.Where(f => !f.Secret).Select(f =>
+        {
+            bool dynamic = f.Options is not null && broker is not null;
+            long revision = dynamic ? broker!.Track(instance.Id, f.Name, OptionsFingerprint(instance, f)) : 0;
+            return new ConfigFieldView(f.Name, f.Type.ToString().ToLowerInvariant(), instance.Config.TryGetValue(f.Name, out var v) ? v : null, f.Default,
+                f.Enum is { } e ? [.. e] : null, f.Title, f.Format, f.Minimum, f.Maximum, f.Group, f.Placeholder, f.Help, f.ShowWhenField, f.ShowWhenEquals, dynamic, revision);
+        })];
     }
 
     public SettingsView ProjectSettings(SettingsState state)
@@ -640,7 +755,8 @@ public sealed class ShellCoordinator
             int order = x.Capability == Capability.Translate ? translationOrder.IndexOf(x.ServiceId) : -1;
             long? usage = targets is not null && backend?.MonthlyUsage is { } monthly ? monthly(x.ServiceId) : null;
             return new ServiceView(x.ServiceId, x.Instance, x.Capability.ToString().ToLowerInvariant(), package?.Page ?? "general", x.Enabled, availability,
-                implemented, secrets, secrets.Length > 0 && instance.AccountBindings.TryGetValue(secrets[0], out var a) ? a : null, targets, plan, order, usage);
+                implemented, secrets, secrets.Length > 0 && instance.AccountBindings.TryGetValue(secrets[0], out var a) ? a : null, targets, plan, order, usage,
+                ConfigFields(instance), instance.Revision);
         }).ToArray();
         var accounts = s.Accounts.Select(a => new AccountView(a.Id, a.Label,
             [.. a.Secrets.Select(name => new SecretSlotView(name, config.Secrets.Has(a.Id, name)))],

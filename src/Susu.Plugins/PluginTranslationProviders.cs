@@ -32,6 +32,26 @@ public static class PluginTranslationProviders
     }
 
     /// <summary>
+    /// F07.2: the config schema of each wired package, read from its shipped manifest.yaml under
+    /// <paramref name="root"/> (the install folder). A missing or invalid manifest leaves that package without
+    /// generated controls (reported through <paramref name="invalid"/>) rather than failing the settings page.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<ConfigField>> LoadSchemas(string root, Action<string>? invalid = null)
+    {
+        var result = new Dictionary<string, IReadOnlyList<ConfigField>>(StringComparer.Ordinal);
+        foreach (var package in TranslationPackages.All)
+        {
+            string path = Path.Combine(root, package.Directory, "manifest.yaml");
+            PackageManifest? manifest;
+            try { manifest = File.Exists(path) ? PackageManifest.Parse(File.ReadAllText(path)).Manifest : null; }
+            catch (IOException) { manifest = null; }
+            if (manifest is null || manifest.Id != package.PackageId) { invalid?.Invoke(package.PackageId); continue; }
+            if (manifest.ConfigFields.Count > 0) result[package.InstanceId] = manifest.ConfigFields;
+        }
+        return result;
+    }
+
+    /// <summary>
     /// F07.2: one page of a dynamic settings field through the package's optional <c>options</c> method (or
     /// <c>voices</c>, mapped to value/label pairs), with the instance's current config, secrets and origin, the
     /// same authority its translate call has (ARCHITECTURE 3.1: only that provider's network grant). The error

@@ -138,10 +138,22 @@ internal static class MainMode
                 new InvocationScheduler(SchedulerLimits.Default), clock, new SystemJitter(), usage);
         };
         Func<Capability, bool> capabilityReady = c => c == Capability.Translate && translation.Providers(config.State.Effective).Count > 0;
+        // F07.2: settings controls come from each package's manifest schema; dynamic fields load through the
+        // package's own options method with the instance's current config and grants.
+        var schemas = PluginTranslationProviders.LoadSchemas(exeFolder, package => log.Event("plugin.manifest-invalid", ("package", package)));
+        OptionsBroker? optionsBroker = translation.Supervisor is not { } supervisor ? null : new OptionsBroker(async (query, cancel) =>
+        {
+            var outcome = await PluginTranslationProviders.LoadOptionsAsync(supervisor, config.State.Effective, query.InstanceId, query.Method, query.Field,
+                query.Revision, query.Cursor, OptionsBroker.Timeout, cancel);
+            if (outcome.Ok) return new OptionsLoad(outcome.Result?.Items, outcome.Result?.NextCursor);
+            log.Event("options.failed", ("instance", query.InstanceId), ("kind", (outcome.ErrorKind ?? ErrorKind.Unavailable).ToString()));
+            return new OptionsLoad(null, null, outcome.ErrorKind ?? ErrorKind.Unavailable);
+        }, clock);
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
             new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector(),
             new TranslationBackend(translation.Supervisor is not null, translation.ValidationProvider,
-                serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture))));
+                serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)),
+                schemas, optionsBroker));
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;

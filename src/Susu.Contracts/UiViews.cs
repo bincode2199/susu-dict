@@ -49,9 +49,43 @@ public sealed record NetworkView(string ProxyMode, string ProxyHost, int ProxyPo
 /// services, the order result cards follow), -1 otherwise. UsageThisMonth: local count of characters sent this
 /// month (DATA04; not a vendor balance), null when the host does not track the service.
 /// </remarks>
+/// <remarks>
+/// Config (F07.2): the package's manifest config schema with the instance's current values, the controls the
+/// page generates; InstanceRevision is what Settings.SaveServiceConfig expects back.
+/// </remarks>
 [TsExport("ui")]
 public sealed record ServiceView(string ServiceId, string InstanceId, string Capability, string Page, bool Enabled, string Availability, bool Implemented, string[] SecretNames, string? AccountId,
-    CredentialTargetView[]? CredentialTargets = null, string? Plan = null, int Order = -1, long? UsageThisMonth = null);
+    CredentialTargetView[]? CredentialTargets = null, string? Plan = null, int Order = -1, long? UsageThisMonth = null, ConfigFieldView[]? Config = null, long InstanceRevision = 0);
+
+/// <summary>
+/// One generated settings control (PLAN 4.6 config schema + x-susu). Type: string | integer | number | boolean.
+/// Value: the saved value (absent = the default applies). Dynamic: choices come from Settings.LoadOptions;
+/// OptionsRevision is the field's dependency revision, which changes whenever a field, account or address it
+/// depends on changes, and a loaded list is only shown while it still matches (CFG02).
+/// </summary>
+[TsExport("ui")]
+public sealed record ConfigFieldView(string Name, string Type, string? Value = null, string? Default = null, string[]? Enum = null, string? Title = null,
+    string? Format = null, double? Minimum = null, double? Maximum = null, string? Group = null, string? Placeholder = null, string? Help = null,
+    string? ShowWhenField = null, string? ShowWhenEquals = null, bool Dynamic = false, long OptionsRevision = 0);
+
+[TsExport("ui")]
+public sealed record ConfigValueView(string Name, string Value);
+
+/// <summary>Settings.SaveServiceConfig: an empty Value clears the field back to its default. Checked against the schema by the host.</summary>
+[TsExport("ui")]
+public sealed record ServiceConfigRequest(string InstanceId, long ExpectedInstanceRevision, ConfigValueView[] Values);
+
+/// <summary>Settings.LoadOptions: one page of a dynamic field for the dependency revision the page shows.</summary>
+[TsExport("ui")]
+public sealed record LoadOptionsRequest(string InstanceId, string Field, long DependsOnRevision, string? Cursor = null, bool Refresh = false);
+
+/// <summary>
+/// Stale: the field's dependencies changed since DependsOnRevision; the page drops the result. Error: the kind
+/// only; the page keeps the current selection. Cached: served from the 5-minute cache.
+/// </summary>
+[TsExport("ui")]
+public sealed record OptionsView(string InstanceId, string Field, long DependsOnRevision, OptionItem[] Items, string? NextCursor = null, bool Cached = false,
+    bool Stale = false, ErrorKind? Error = null);
 
 /// <summary>Use: header:Authorization, signer:tencent-tc3, ... Granted: the user confirmed this package, origin and use for the secret.</summary>
 [TsExport("ui")]

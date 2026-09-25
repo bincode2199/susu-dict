@@ -17,6 +17,7 @@ export const UI_COMMANDS = {
   LoadOptions: 'Settings.LoadOptions',
   BindAccount: 'Settings.BindAccount',
   ReorderService: 'Settings.ReorderService',
+  SaveServiceConfig: 'Settings.SaveServiceConfig',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -79,6 +80,30 @@ export interface CommandResult {
   value?: unknown;
 }
 
+export interface ConfigFieldView {
+  name: string;
+  type: string;
+  value?: string;
+  default?: string;
+  enum?: string[];
+  title?: string;
+  format?: string;
+  minimum?: number;
+  maximum?: number;
+  group?: string;
+  placeholder?: string;
+  help?: string;
+  showWhenField?: string;
+  showWhenEquals?: string;
+  dynamic?: boolean;
+  optionsRevision?: number;
+}
+
+export interface ConfigValueView {
+  name: string;
+  value: string;
+}
+
 export interface CredentialTargetView {
   secret: string;
   origin: string;
@@ -106,6 +131,14 @@ export interface HotkeyView {
   reasonKey?: string;
 }
 
+export interface LoadOptionsRequest {
+  instanceId: string;
+  field: string;
+  dependsOnRevision: number;
+  cursor?: string;
+  refresh?: boolean;
+}
+
 export interface NetworkView {
   proxyMode: string;
   proxyHost: string;
@@ -113,6 +146,22 @@ export interface NetworkView {
   proxyUsername: string;
   proxyPasswordSaved: boolean;
   aiTimeoutSeconds: number;
+}
+
+export interface OptionItem {
+  value: string;
+  label: string;
+}
+
+export interface OptionsView {
+  instanceId: string;
+  field: string;
+  dependsOnRevision: number;
+  items: OptionItem[];
+  nextCursor?: string;
+  cached?: boolean;
+  stale?: boolean;
+  error?: ErrorKind;
 }
 
 export interface ReorderServiceRequest {
@@ -143,6 +192,12 @@ export interface SelectLanguageRequest {
   to: string;
 }
 
+export interface ServiceConfigRequest {
+  instanceId: string;
+  expectedInstanceRevision: number;
+  values: ConfigValueView[];
+}
+
 export interface ServiceToggle {
   serviceId: string;
   enabled: boolean;
@@ -169,6 +224,8 @@ export interface ServiceView {
   plan?: string;
   order?: number;
   usageThisMonth?: number;
+  config?: ConfigFieldView[];
+  instanceRevision?: number;
 }
 
 export interface SettingsIssueView {
