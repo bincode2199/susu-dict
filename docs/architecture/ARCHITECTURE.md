@@ -51,6 +51,7 @@ flowchart LR
 | Susu.Plugins | 包注册/校验/激活、IPC 主端、PluginProvider、授权令牌 | Abstractions、Contracts、Domain |
 | Susu.Runtime | JS 引擎、调度、宿主 API 的 IPC 代理、生命周期 | Contracts、引擎薄绑定；不引用 Net/Storage |
 | Susu.Windows | 全部 Win32/COM、窗口/WebView/tray、UIA/IA2、录音/解码/截图、进程/管道 ACL、DPAPI | Abstractions、Contracts；原生库 |
+| Susu.Windows.Selection | 取词助手（`susu.exe --selection-host`）的 UIA/IA2 读取与父端 SelectionReader；从 Susu.Windows 拆出，以引用关系证明助手不接触账户与网络（F08.1） | 仅 Abstractions；原生 `susu_selection.dll` |
 | Susu.Ui | UI 命令白名单、会话投影、事件序列、窗口保温协调 | Jobs、Abstractions；不直接操作 COM |
 | Susu.Host | 三种启动模式的组合根、退出协调、更新启动；业务外观很薄 | 上述项目；唯一负责装配具体实现 |
 | ui/ | 窗口根组件、卡片/设置控件、zh-Hans/en 文案、token、typed bridge | 构建时协议类型；无 Node/HTTP/文件能力 |
