@@ -9,6 +9,7 @@ import SettingRow from '../components/SettingRow.vue';
 import Toggle from '../components/Toggle.vue';
 import Stepper from '../components/Stepper.vue';
 import SecretField from '../components/SecretField.vue';
+import ServiceDetails from '../components/ServiceDetails.vue';
 import HotkeyField from '../components/HotkeyField.vue';
 import { t, serviceName } from '../locales/i18n';
 
@@ -92,15 +93,28 @@ async function deleteSecret(instanceId: string, secretName: string): Promise<voi
 }
 
 const serviceHint = (service: SettingsView['services'][number]) => {
-  const state = service.availability === 'Ready' && service.secretNames.length === 0 ? t('services.state.NoCredential') : t(`services.state.${service.availability}`);
+  const targets = service.credentialTargets ?? [];
+  const notGranted = service.availability === 'MissingCredential' && targets.length > 0 && targets.every((c) => c.saved) && targets.some((c) => !c.granted);
+  const state = service.availability === 'Ready' && service.secretNames.length === 0 ? t('services.state.NoCredential') : notGranted ? t('services.state.NotGranted') : t(`services.state.${service.availability}`);
   return service.implemented ? state : `${state} · ${t('services.notImplemented')}`;
 };
+// Result order (CFG03): translation services are listed and moved within their own page; the host keeps the
+// other page's positions in the shared order. Services outside the order follow in settings order.
+type Service = SettingsView['services'][number];
+const orderable = (service: Service) => service.capability === 'translate';
+const rank = (service: Service) => (orderable(service) && (service.order ?? -1) >= 0 ? service.order! : Number.MAX_SAFE_INTEGER);
+const orderedOnPage = computed(() => servicesOnPage.value.filter(orderable).slice().sort((a, b) => rank(a) - rank(b)));
+const pageIndex = (service: Service) => orderedOnPage.value.findIndex((s) => s.serviceId === service.serviceId);
+const listedOnPage = computed(() => [...orderedOnPage.value, ...servicesOnPage.value.filter((s) => !orderable(s))]);
+async function move(service: Service, delta: number): Promise<void> {
+  const result = await props.bridge.command(UI_COMMANDS.ReorderService, { serviceId: service.serviceId, index: pageIndex(service) + delta });
+  if (result.ok && result.value) props.state.settings = result.value as SettingsView;
+  else if (!result.ok) message.value = { kind: 'error', text: t('save.failed') };
+}
 /** Name plus capability when one instance offers several services on the page (e.g. Youdao translate + dictionary). */
 const serviceTitle = (service: SettingsView['services'][number]) =>
   servicesOnPage.value.filter((s) => s.instanceId === service.instanceId).length > 1 ? `${serviceName(service.instanceId)} · ${t(`capability.${service.capability}`)}` : serviceName(service.instanceId);
 const servicesOnPage = computed(() => (view.value?.services ?? []).filter((s) => s.page === page.value));
-const accountSaved = (accountId: string | undefined, name: string) =>
-  !!view.value?.accounts.find((a) => a.id === accountId)?.secrets.find((s) => s.name === name)?.saved;
 const hotkeyView = (action: string) => view.value?.hotkeys.find((h) => h.action === action);
 const hotkeyConflict = (action: string) => {
   const chord = draft.hotkeys[action];
@@ -213,20 +227,20 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
         <section v-else class="group">
           <h2>{{ t(`services.${page}`) }}</h2>
           <p class="hint-text">{{ t('services.credentialNote') }}</p>
-          <div v-for="service in servicesOnPage" :key="service.serviceId" class="service">
+          <div v-for="service in listedOnPage" :key="service.serviceId" class="service">
             <SettingRow :title="serviceTitle(service)" :hint="serviceHint(service)">
+              <template v-if="orderable(service)">
+                <button type="button" class="icon-btn" :disabled="pageIndex(service) === 0" :aria-label="t('services.moveUp', { name: serviceName(service.instanceId) })" @click="move(service, -1)"><Icon name="chevronUp" /></button>
+                <button type="button" class="icon-btn" :disabled="pageIndex(service) === orderedOnPage.length - 1" :aria-label="t('services.moveDown', { name: serviceName(service.instanceId) })" @click="move(service, 1)"><Icon name="chevronDown" /></button>
+              </template>
               <Toggle v-model="draft.services[service.serviceId]" :label="t('services.enabled', { name: serviceName(service.instanceId) })" />
-              <button v-if="service.secretNames.length" type="button" class="icon-btn" :aria-expanded="expanded === service.serviceId"
+              <button v-if="service.secretNames.length || service.credentialTargets" type="button" class="icon-btn" :aria-expanded="expanded === service.serviceId"
                 :aria-label="t('services.details', { name: serviceName(service.instanceId) })" @click="expanded = expanded === service.serviceId ? null : service.serviceId">
                 <Icon :name="expanded === service.serviceId ? 'chevronDown' : 'chevronRight'" />
               </button>
             </SettingRow>
-            <div v-if="expanded === service.serviceId" class="expanded">
-              <SettingRow v-for="name in service.secretNames" :key="name" :title="t(`secret.${name}`)">
-                <SecretField :id="`${service.instanceId}-${name}`" :label="`${serviceName(service.instanceId)} ${t(`secret.${name}`)}`" :saved="accountSaved(service.accountId, name)" :clear-token="clearToken"
-                  @save="(value, done) => writeSecret(service.instanceId, name, value, done)" @remove="deleteSecret(service.instanceId, name)" />
-              </SettingRow>
-            </div>
+            <ServiceDetails v-if="expanded === service.serviceId" class="expanded" :service="service" :accounts="view.accounts" :bridge="bridge" :clear-token="clearToken"
+              @settings="(next) => (state.settings = next)" @error="message = { kind: 'error', text: t('save.failed') }" />
           </div>
         </section>
 

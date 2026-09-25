@@ -6,6 +6,7 @@ import type { UiState } from '../bridge/store';
 import TitleBar from '../components/TitleBar.vue';
 import SourceCard from '../components/SourceCard.vue';
 import ResultCard from '../components/ResultCard.vue';
+import Icon from '../components/Icon.vue';
 import { t } from '../locales/i18n';
 
 // Main window 520×700 (DESIGN 9): title bar, source card and one result card per service, 32 px status bar.
@@ -29,11 +30,16 @@ function submit(): void {
   if (!available.value || !text.value.trim()) return;
   void props.bridge.command(UI_COMMANDS.SubmitText, { text: text.value });
 }
-function setLanguages(source: string, target: string): void {
+/** Changing the language pair re-requests the current text (a new generation) once the host accepts it. */
+async function setLanguages(source: string, target: string): Promise<void> {
   from.value = source;
   to.value = target;
-  void props.bridge.command(UI_COMMANDS.SelectLanguage, { from: source, to: target });
+  const result = await props.bridge.command(UI_COMMANDS.SelectLanguage, { from: source, to: target });
+  if (result.ok && (props.state.translation?.generation ?? 0) > 0 && text.value.trim()) submit();
 }
+// DESIGN 13 "部分离线": per-card errors stay on their cards; the shared notice appears only when the host
+// says every remote path that was asked has failed on the network.
+const offline = computed(() => props.state.translation?.offline === true);
 </script>
 
 <template>
@@ -51,7 +57,10 @@ function setLanguages(source: string, target: string): void {
         @copy="bridge.command(UI_COMMANDS.CopyText, { text: card.text })"
         @settings="bridge.command(UI_COMMANDS.OpenSettings)" />
     </main>
-    <footer class="statusbar"><span>{{ t('main.statusHint') }}</span></footer>
+    <footer class="statusbar" :class="{ offline }">
+      <span v-if="offline" class="offline-note" role="status"><Icon name="warning" :size="13" />{{ t('main.offline') }}</span>
+      <span v-else>{{ t('main.statusHint') }}</span>
+    </footer>
   </div>
 </template>
 
@@ -59,5 +68,6 @@ function setLanguages(source: string, target: string): void {
 .window { height: 100%; display: flex; flex-direction: column; }
 .content { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .preview-note { margin: 0; font-size: 11px; color: var(--hint); border: 1px dashed var(--line-accent); border-radius: var(--radius-tag); padding: 4px 8px; }
+.offline-note { display: inline-flex; align-items: center; gap: 6px; color: var(--error); }
 .statusbar { height: 32px; flex: none; display: flex; align-items: center; padding: 0 14px; border-top: 1px solid var(--line); font-size: 11px; color: var(--hint); }
 </style>

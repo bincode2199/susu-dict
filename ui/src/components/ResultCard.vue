@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { CardSnapshot } from '@protocol/ui';
 import Icon from './Icon.vue';
 import { t } from '../locales/i18n';
@@ -9,17 +9,34 @@ import { t } from '../locales/i18n';
 const props = defineProps<{ card: CardSnapshot; from: string; to: string }>();
 const emit = defineEmits<{ toggle: []; retry: []; copy: []; settings: [] }>();
 
-const retryable = new Set(['timeout', 'network', 'rate_limited', 'busy', 'unavailable']);
+// DESIGN 8 "译文 · 失败": one action per error kind. Retryable kinds (the host already retried once
+// automatically) offer a manual retry; quota/auth lead to settings; bad_response has no action yet (the log
+// viewer comes later). A cancelled attempt can be retried too.
+const retryable = new Set(['timeout', 'network', 'rate_limited', 'busy', 'unavailable', 'cancelled']);
 const busy = computed(() => props.card.state === 'Loading' || props.card.state === 'Queued' || props.card.state === 'Streaming');
 const collapsed = computed(() => props.card.collapsed || props.card.state === 'Unsupported' || props.card.state === 'CollapsedIdle');
+const copied = ref(false);
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 const status = computed(() => {
   if (props.card.state === 'Unsupported') return t('card.unsupported', { from: t(`lang.${props.from}`), to: t(`lang.${props.to}`) });
   if (props.card.collapsed || props.card.state === 'CollapsedIdle') return t('card.expandToTranslate');
   if (busy.value) return t('card.translating');
+  if (copied.value) return t('card.copied');
   if (props.card.state === 'Ready' && props.card.chunked) return t('card.chunked');
   return '';
 });
 const errorKey = computed(() => (props.card.state === 'Failed' ? `error.${props.card.error ?? 'bad_response'}` : props.card.state === 'Cancelled' ? 'card.cancelled' : null));
+const errorKind = computed(() => (props.card.state === 'Cancelled' ? 'cancelled' : props.card.error));
+// Streaming text keeps appending in place; the copy button appears once the result is complete.
+watch(() => props.card.text, () => { copied.value = false; });
+
+function copy(): void {
+  emit('copy');
+  copied.value = true;
+  clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => (copied.value = false), 1500);
+}
+onBeforeUnmount(() => clearTimeout(copiedTimer));
 </script>
 
 <template>
@@ -29,19 +46,19 @@ const errorKey = computed(() => (props.card.state === 'Failed' ? `error.${props.
         <Icon :name="collapsed ? 'chevronRight' : 'chevronDown'" />
       </button>
       <h2 class="name">{{ card.displayName }}</h2>
-      <span class="status">{{ status }}</span>
+      <span class="status" aria-live="polite">{{ status }}</span>
       <div v-if="!collapsed && card.state === 'Ready'" class="actions">
-        <button type="button" class="icon-btn" :aria-label="t('card.copy')" :title="t('card.copy')" @click="emit('copy')"><Icon name="copy" /></button>
+        <button type="button" class="icon-btn" :aria-label="t('card.copy')" :title="t('card.copy')" @click="copy"><Icon name="copy" /></button>
       </div>
     </header>
     <div v-if="!collapsed" class="body">
       <div v-if="card.state === 'Loading' || card.state === 'Queued'" class="skeleton" aria-hidden="true"><span /><span /></div>
       <p v-else-if="errorKey" class="error" role="alert">
         {{ t(errorKey) }}
-        <a v-if="card.error && retryable.has(card.error)" href="#" @click.prevent="emit('retry')">{{ t('card.retry') }}</a>
-        <a v-else-if="card.error === 'quota' || card.error === 'auth'" href="#" @click.prevent="emit('settings')">{{ t('card.goSettings') }}</a>
+        <a v-if="errorKind && retryable.has(errorKind)" href="#" class="retry" @click.prevent="emit('retry')">{{ t('card.retry') }}</a>
+        <a v-else-if="errorKind === 'quota' || errorKind === 'auth'" href="#" @click.prevent="emit('settings')">{{ t('card.goSettings') }}</a>
       </p>
-      <p v-else class="text selectable">{{ card.text }}</p>
+      <p v-else class="text selectable" :class="{ streaming: card.state === 'Streaming' }">{{ card.text }}</p>
     </div>
   </section>
 </template>

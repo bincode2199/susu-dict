@@ -17,11 +17,13 @@ export interface UiState {
 export function createStore(onWindow?: (view: WindowView) => void): { state: UiState; inbound: Inbound } {
   const state = reactive<UiState>({ window: null, translation: null, settings: null, tray: null, hiddenCount: 0 });
   const cardRevision = new Map<string, number>();
+  let latestRevision = 0;
   let early: CardPatch[] = []; // patches of a newer generation that arrived before its snapshot event
 
   const adoptTranslation = (snapshot: TranslationSnapshot | null) => {
     state.translation = snapshot;
     cardRevision.clear();
+    latestRevision = snapshot?.revision ?? 0;
     if (!snapshot) return;
     for (const card of snapshot.cards) cardRevision.set(card.serviceId, snapshot.revision);
     const replay = early.filter((p) => p.generation === snapshot.generation).sort((a, b) => a.revision - b.revision);
@@ -35,8 +37,14 @@ export function createStore(onWindow?: (view: WindowView) => void): { state: UiS
     if (patch.generation < state.translation.generation) return; // late result of an older job
     if ((cardRevision.get(patch.card.serviceId) ?? -1) >= patch.revision) return;
     cardRevision.set(patch.card.serviceId, patch.revision);
+    // Only this card changes: other cards keep their text and expanded state (UI04). The shared offline
+    // notice follows the host's session-wide flag carried by the newest patch.
     const index = state.translation.cards.findIndex((card) => card.serviceId === patch.card.serviceId);
     if (index >= 0) state.translation.cards[index] = patch.card;
+    if (patch.revision >= latestRevision) {
+      latestRevision = patch.revision;
+      state.translation.offline = patch.offline ?? false;
+    }
   };
 
   const inbound: Inbound = {
