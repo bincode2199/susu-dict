@@ -71,4 +71,44 @@ public class PluginCliIntegrationTests
         Assert.True(exitCode == 0, $"exit={exitCode} out={output} err={error}");
         Assert.Contains("echo:cli-test", output);
     }
+
+    /// <summary>F06 plugin contracts: the four shipped translation packages, as published next to susu.exe.</summary>
+    [Theory]
+    [InlineData("mymemory", "app.susu.mymemory")]
+    [InlineData("openai", "app.susu.openai")]
+    [InlineData("tencent-translate", "app.susu.tencent-translate")]
+    [InlineData("deepl", "app.susu.deepl")]
+    public void Check_passes_for_every_shipped_translation_package(string directory, string id)
+    {
+        string? cli = FindPublished(Path.Combine("tools", "Susu.PluginCli", "bin", "Release", "net10.0", "win-x64", "publish", "susu-plugin.exe"));
+        string? host = FindPublished(Path.Combine("src", "Susu.Host", "bin", "Release", "net10.0", "win-x64", "publish", "susu.exe"));
+        if (cli is null || host is null) return;
+        string dir = Path.Combine(Path.GetDirectoryName(host)!, "plugins", directory);
+
+        var (exitCode, output, error) = Run(cli, "check", dir);
+        Assert.True(exitCode == 0, $"exit={exitCode} out={output} err={error}");
+        Assert.Contains($"check: ok - {id} v1, capabilities: translate", output);
+    }
+
+    /// <summary>
+    /// F06 plugin contracts: `susu-plugin test` on a shipped package loads it and gets a classified answer
+    /// (ok for keyless MyMemory; a plugin error for the keyed ones, which the CLI gives no key), never a crash.
+    /// </summary>
+    [Theory(Skip = "Tool bug (F06 verification): susu-plugin test passes the manifest's bare host names (e.g. api.mymemory.translated.net) as origins to HostSession.Invoke; Broker.Issue does new Uri(origin) and the CLI dies with an unhandled UriFormatException for every package that declares hosts. Coordinator to fix in tools/Susu.PluginCli (pass https://<host> origins).")]
+    [InlineData("mymemory")]
+    [InlineData("openai")]
+    [InlineData("tencent-translate")]
+    [InlineData("deepl")]
+    public void Test_runs_every_shipped_translation_package_without_crashing(string directory)
+    {
+        string? cli = FindPublished(Path.Combine("tools", "Susu.PluginCli", "bin", "Release", "net10.0", "win-x64", "publish", "susu-plugin.exe"));
+        string? host = FindPublished(Path.Combine("src", "Susu.Host", "bin", "Release", "net10.0", "win-x64", "publish", "susu.exe"));
+        if (cli is null || host is null) return;
+        string dir = Path.Combine(Path.GetDirectoryName(host)!, "plugins", directory);
+
+        var (exitCode, output, error) = Run(cli, "test", dir, "--host", host, "--capability", "translate", "--request", "{\"text\":\"hello\",\"from\":\"en\",\"to\":\"zh-Hans\"}");
+        Assert.DoesNotContain("Unhandled exception", error);
+        Assert.True(exitCode is 0 or 1, $"exit={exitCode} out={output} err={error}");
+        Assert.Contains("test: translate -> ", output + error);
+    }
 }
