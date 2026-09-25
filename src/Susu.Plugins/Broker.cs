@@ -359,12 +359,19 @@ public sealed class Broker : IDisposable
         {
             bytes = await state.Channel.Reader.ReadAsync(CancellationToken.None);
         }
-        catch (ChannelClosedException) // writer.TryComplete() with no error: normal end of stream
+        catch (ChannelClosedException closed)
         {
             lock (streams) streams.Remove(streamId);
             streamWindow.Reset(streamId);
             state.Cts.Cancel();
-            return Allow(call.ApiId, """{"done":true}""");
+            // ReadAsync wraps writer.TryComplete(error) in ChannelClosedException; only an empty one is a normal end
+            // (J02: a dropped vendor stream must fail, not read as done; S09: a rejected piece must stay a denial).
+            return closed.InnerException switch
+            {
+                null => Allow(call.ApiId, """{"done":true}"""),
+                BrokerDenyException deny => Deny(call.ApiId, deny.Message, deny.Kind),
+                var error => Deny(call.ApiId, error.Message, "network"),
+            };
         }
         catch (BrokerDenyException deny) // writer.TryComplete(error): PumpStreamAsync rejected a piece
         {

@@ -93,12 +93,9 @@ public class J02StreamRetryTests
     /// The final card holds the answer exactly once, and at no point did the card show text from two
     /// attempts concatenated (each attempt starts from a reset). Usage is recorded per attempt.
     /// </summary>
-    // Production bug (F06 testing): Broker.StreamReadAsync's `catch (ChannelClosedException)` also catches
-    // a pump that completed the channel with an error - ChannelReader.ReadAsync wraps it as
-    // ChannelClosedException(inner) - so a dropped vendor stream is answered {"done":true} and the card
-    // ends Ready with the truncated "Hello, wor". Adding `when (closed.InnerException is null)` makes this
-    // test pass (checked locally, 5/5). Remove Skip once the broker is fixed.
-    [Fact(Skip = "Broker.StreamReadAsync reports a dropped stream as a normal end; see comment")]
+    // Regression: Broker.StreamReadAsync once read a ChannelClosedException wrapping a pump error as a normal
+    // end, so a dropped vendor stream answered {"done":true} and the card ended Ready with "Hello, wor".
+    [Fact]
     public async Task A_dropped_stream_then_manual_retry_shows_the_answer_once_without_duplicated_text()
     {
         string? staged = OpenAIPluginTests.StageHost();
