@@ -1,0 +1,11 @@
+id: app.susu.openai
+name: OpenAI
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - translate
+hosts:
+  - api.openai.com
+credentialUse:
+  - apiKey
