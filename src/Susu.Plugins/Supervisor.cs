@@ -18,16 +18,25 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
 
     private readonly Func<TSession> launch;
     private readonly IClock clock;
+    private readonly TimeSpan? idleTimeout;
     private readonly object gate = new();
     private readonly List<long> recentFailures = [];
     private TSession? session;
     private bool stopped;
     private bool disposed;
+    // True from the moment a crash nulls the session until RestartAsync's scheduled relaunch installs
+    // a fresh one (or gives up). While true, Acquire() must not launch: that would bypass the 1/2/4 s
+    // backoff RestartAsync already scheduled for itself and turn one crash into a launch storm.
+    private bool crashBackoffPending;
+    private int activeCalls;
+    private long lastActivityMs;
+    private CancellationTokenSource? idleCts;
 
-    public Supervisor(Func<TSession> launch, IClock clock)
+    public Supervisor(Func<TSession> launch, IClock clock, TimeSpan? idleTimeout = null)
     {
         this.launch = launch;
         this.clock = clock;
+        this.idleTimeout = idleTimeout;
     }
 
     /// <summary>True once three restarts failed inside the 60 s window; automatic restart has stopped.</summary>
@@ -60,6 +69,63 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
         }
     }
 
+    /// <summary>
+    /// Lazy-start entry point for ordinary callers (PluginProvider): launches on first use, or after a
+    /// clean idle release, but - like <see cref="TryGetCurrent"/> - never launches while a crashed
+    /// session is mid-backoff, so it cannot race the relaunch <see cref="RestartAsync"/> already
+    /// scheduled for itself. Returns null when unavailable (stopped, or crashed mid-backoff) instead of
+    /// launching. Every successful Acquire must be paired with <see cref="Release"/> - idle release only
+    /// fires once the call count drops back to zero and stays there for the idle window, so a session
+    /// is never torn down under an in-flight call.
+    /// </summary>
+    public TSession? Acquire()
+    {
+        lock (gate)
+        {
+            if (disposed || stopped) return null;
+            idleCts?.Cancel();
+            idleCts = null;
+            if (session is null)
+            {
+                if (crashBackoffPending) return null;
+                session = LaunchAndWatch();
+            }
+            activeCalls++;
+            lastActivityMs = clock.NowMilliseconds;
+            return session;
+        }
+    }
+
+    /// <summary>Matches a successful <see cref="Acquire"/>. Schedules idle release once no call remains in flight.</summary>
+    public void Release()
+    {
+        TSession target;
+        CancellationTokenSource cts;
+        lock (gate)
+        {
+            if (activeCalls > 0) activeCalls--;
+            lastActivityMs = clock.NowMilliseconds;
+            if (activeCalls != 0 || disposed || idleTimeout is null || session is null) return;
+            target = session;
+            cts = new CancellationTokenSource();
+            idleCts = cts;
+        }
+        _ = ScheduleIdleRelease(idleTimeout!.Value, cts, target);
+    }
+
+    private async Task ScheduleIdleRelease(TimeSpan delay, CancellationTokenSource cts, TSession target)
+    {
+        try { await clock.Delay(delay, cts.Token); }
+        catch (OperationCanceledException) { return; }
+        lock (gate)
+        {
+            if (disposed || activeCalls != 0 || !ReferenceEquals(session, target) || !ReferenceEquals(idleCts, cts)) return;
+            session = null;
+            idleCts = null;
+        }
+        target.Dispose(); // outside the lock, same reader-thread-join reasoning as ManualRestart
+    }
+
     private TSession LaunchAndWatch()
     {
         var started = launch();
@@ -78,6 +144,9 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
         {
             if (disposed || stopped || !ReferenceEquals(session, source)) return;
             session = null;
+            crashBackoffPending = true;
+            idleCts?.Cancel(); // the session it was timing is already gone; nothing left to release
+            idleCts = null;
         }
         _ = RestartAsync();
     }
@@ -93,6 +162,7 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
             if (attempt >= Backoff.Length)
             {
                 stopped = true;
+                crashBackoffPending = false; // Acquire() is refused via `stopped` now, not this flag
                 Stalled?.Invoke();
                 return;
             }
@@ -102,7 +172,7 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
         lock (gate)
         {
             if (disposed || stopped || session is not null) return;
-            try { session = LaunchAndWatch(); }
+            try { session = LaunchAndWatch(); crashBackoffPending = false; }
             catch (Exception error) { RestartFailed?.Invoke(error); }
         }
     }
@@ -115,6 +185,9 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
         lock (gate)
         {
             stopped = false;
+            crashBackoffPending = false;
+            idleCts?.Cancel();
+            idleCts = null;
             recentFailures.Clear();
             old = session;
             session = fresh = LaunchAndWatch();
@@ -132,6 +205,8 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
         lock (gate)
         {
             disposed = true;
+            idleCts?.Cancel();
+            idleCts = null;
             old = session;
             session = null;
         }

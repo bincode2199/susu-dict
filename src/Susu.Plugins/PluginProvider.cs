@@ -32,29 +32,40 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
     public async Task<ProviderOutcome> TranslateAsync(TranslateCall call, Func<string, ValueTask> onChunk, CancellationToken cancellationToken)
     {
         if (supervisor.Stopped) return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host stopped after repeated crashes; restart it in Settings"));
-        // Read-only: never launches a session here, so a call arriving mid-backoff does not race
-        // the relaunch Supervisor already scheduled for itself.
-        if (!supervisor.TryGetCurrent(out var host) || host is null)
+        // Acquire launches on first use (or after a clean idle release) but - like the old read-only
+        // TryGetCurrent - never launches while a crashed session is mid-backoff, so a call arriving
+        // then does not race the relaunch Supervisor already scheduled for itself. Release (in finally)
+        // keeps the session alive for the whole call so idle release can never fire underneath it.
+        HostSession? host;
+        try { host = supervisor.Acquire(); }
+        // Lazy start (F06.2a): the launch func loads the plugin package too, so a load failure surfaces
+        // here on first use instead of at app start. Leaves the session null - the next call retries a
+        // fresh launch - instead of tearing down the whole feature the way an unhandled throw would.
+        catch (Exception error) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, error.Message)); }
+        if (host is null)
             return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host is restarting"));
-
-        string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text, call.From, call.To), ContractsJson.Default.TranslateRequest);
-        (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
-        try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins, instanceId: instanceId, signer: signer); }
-        catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }
-        var (requestId, callId, task) = invocation;
-        await using var registration = cancellationToken.Register(() => { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } });
-        IpcEnvelope envelope;
-        try { envelope = await task.WaitAsync(call.Timeout, cancellationToken); }
-        catch (TimeoutException) { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Timeout)); }
-        catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); } // crash mid-call: no replay, Supervisor is already relaunching
-        var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
-        if (!completed.Ok || completed.Result is null)
+        try
         {
-            var kind = ErrorKinds.FromPlugin(completed.Error?.Kind);
-            return new ProviderOutcome.Failure(new ProviderError(kind, completed.Error?.Detail));
+            string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text, call.From, call.To), ContractsJson.Default.TranslateRequest);
+            (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
+            try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins, instanceId: instanceId, signer: signer); }
+            catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }
+            var (requestId, callId, task) = invocation;
+            await using var registration = cancellationToken.Register(() => { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } });
+            IpcEnvelope envelope;
+            try { envelope = await task.WaitAsync(call.Timeout, cancellationToken); }
+            catch (TimeoutException) { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Timeout)); }
+            catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); } // crash mid-call: no replay, Supervisor is already relaunching
+            var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
+            if (!completed.Ok || completed.Result is null)
+            {
+                var kind = ErrorKinds.FromPlugin(completed.Error?.Kind);
+                return new ProviderOutcome.Failure(new ProviderError(kind, completed.Error?.Detail));
+            }
+            var result = completed.Result.Value.Deserialize(ContractsJson.Default.TranslateResult)!;
+            return new ProviderOutcome.Success(result.Text, result.DetectedFrom);
         }
-        var result = completed.Result.Value.Deserialize(ContractsJson.Default.TranslateResult)!;
-        return new ProviderOutcome.Success(result.Text, result.DetectedFrom);
+        finally { supervisor.Release(); }
     }
 }
 

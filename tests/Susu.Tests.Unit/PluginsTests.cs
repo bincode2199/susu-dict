@@ -385,4 +385,91 @@ public class SupervisorTests
         Assert.Same(second, supervisor.Current); // still the fresh session, not nulled
         Assert.False(supervisor.Stopped);
     }
+
+    [Fact]
+    public void Acquire_does_not_launch_until_the_first_call()
+    {
+        var clock = new ManualClock();
+        int launches = 0;
+        var supervisor = new Supervisor<FakeSession>(() => { launches++; return new FakeSession(); }, clock, TimeSpan.FromMinutes(10));
+        Assert.Equal(0, launches); // F06.2a/PER02: no AppContainer launch just from constructing the Supervisor
+
+        var host = supervisor.Acquire();
+        Assert.NotNull(host);
+        Assert.Equal(1, launches);
+        supervisor.Release();
+    }
+
+    [Fact]
+    public async Task Idle_release_disposes_the_session_once_no_call_is_in_flight_for_the_idle_window()
+    {
+        var clock = new ManualClock();
+        int launches = 0;
+        var supervisor = new Supervisor<FakeSession>(() => { launches++; return new FakeSession(); }, clock, TimeSpan.FromMinutes(10));
+        var host = supervisor.Acquire()!;
+        supervisor.Release();
+
+        clock.Advance(TimeSpan.FromMinutes(10) - TimeSpan.FromMilliseconds(1));
+        await Settle();
+        Assert.False(host.Disposed); // not yet at the idle window
+
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        await Settle();
+        Assert.True(host.Disposed);
+
+        // A later call starts a fresh session rather than reusing the released one.
+        var second = supervisor.Acquire()!;
+        supervisor.Release();
+        Assert.NotSame(host, second);
+        Assert.Equal(2, launches);
+    }
+
+    [Fact]
+    public async Task A_call_in_flight_postpones_idle_release_and_a_new_call_cancels_a_pending_one()
+    {
+        var clock = new ManualClock();
+        var supervisor = new Supervisor<FakeSession>(() => new FakeSession(), clock, TimeSpan.FromMinutes(10));
+        var host = supervisor.Acquire()!;
+        // Simulate a second concurrent call still in flight: Release only drops the count to 1, so no
+        // idle timer is scheduled yet even once the window elapses.
+        supervisor.Acquire();
+        supervisor.Release();
+        clock.Advance(TimeSpan.FromMinutes(20));
+        await Settle();
+        Assert.False(host.Disposed);
+
+        // The last call finishes: idle release is now scheduled, but a fresh Acquire before it fires
+        // cancels it instead of racing a torn-down session out from under the new call.
+        supervisor.Release();
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await Settle();
+        supervisor.Acquire();
+        clock.Advance(TimeSpan.FromMinutes(10));
+        await Settle();
+        Assert.False(host.Disposed); // the pending timer from before was cancelled, not merely postponed
+        supervisor.Release();
+    }
+
+    [Fact]
+    public async Task Acquire_returns_null_instead_of_launching_while_a_crash_is_mid_backoff()
+    {
+        var clock = new ManualClock();
+        int launches = 0;
+        var supervisor = new Supervisor<FakeSession>(() => { launches++; return new FakeSession(); }, clock, TimeSpan.FromMinutes(10));
+        var host = supervisor.Acquire()!;
+        supervisor.Release();
+        Assert.Equal(1, launches);
+
+        host.Crash();
+        Assert.Null(supervisor.Acquire()); // mid-backoff: must not race RestartAsync's own scheduled relaunch
+        Assert.Equal(1, launches);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await Settle();
+        Assert.Equal(2, launches); // RestartAsync's own relaunch, not Acquire's
+
+        var resumed = supervisor.Acquire()!;
+        Assert.NotNull(resumed);
+        supervisor.Release();
+    }
 }

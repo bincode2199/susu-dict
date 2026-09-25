@@ -127,7 +127,7 @@ internal static class MainMode
             features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 
         var usage = new UsageRepository(db, clock);
-        var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log);
+        var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log, ReleaseAfter(mode) ?? TimeSpan.FromMinutes(10));
         Func<AppSettings, TranslationSession?> sessions = s =>
         {
             var providers = translation.Providers;
@@ -202,8 +202,14 @@ internal static class MainMode
     /// A failure anywhere here (sandbox unavailable, plugin failed to load) never blocks app startup: it
     /// is logged and input translation stays unavailable (capabilityReady stays false) instead of
     /// crashing the host - the same "detection/adapter failure never blocks the app" rule as ARCHITECTURE 7.
+    ///
+    /// The plugin host (an AppContainer child process) is not launched here: <paramref name="idleTimeout"/>
+    /// puts <see cref="Supervisor{HostSession}"/> in lazy-start mode (F06.2a/PER02) - the first real
+    /// translate call launches it via <c>PluginProvider</c>'s <c>Acquire()</c>, and it is released again
+    /// after <paramref name="idleTimeout"/> with no call in flight, the same keep-warm-then-release shape
+    /// F03 uses for the WebView (10 minutes in production; shortened for --smoke/--release-after-seconds).
     /// </summary>
-    private static TranslationRuntime BuildTranslationRuntime(string exeFolder, SettingsStore settings, SecretStore secrets, ConfigService config, FileLeases leases, IClock clock, RedactingLog log)
+    private static TranslationRuntime BuildTranslationRuntime(string exeFolder, SettingsStore settings, SecretStore secrets, ConfigService config, FileLeases leases, IClock clock, RedactingLog log, TimeSpan idleTimeout)
     {
         try
         {
@@ -219,10 +225,9 @@ internal static class MainMode
                 var loaded = session.Load(packageId, "plugins/mymemory");
                 if (!loaded.Ok) { session.Shutdown(2000); throw new InvalidOperationException($"mymemory plugin failed to load: {loaded.Error}"); }
                 return session;
-            }, clock);
+            }, clock, idleTimeout);
             supervisor.RestartFailed += error => log.Event("plugin-host.restart-failed", ("code", error.GetType().Name));
             supervisor.Stalled += () => log.Event("plugin-host.stalled");
-            supervisor.Start();
             var limits = new TranslationLimits(InputUnit.Utf8Bytes, 500, BatchMode.Single, 1, 500);
             IReadOnlyList<ITranslationProvider> providers =
                 [new PluginProvider(packageId, "mymemory/translate", "MyMemory", limits, supervisor, ["https://api.mymemory.translated.net"], instanceId)];
