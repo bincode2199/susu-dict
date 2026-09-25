@@ -179,8 +179,9 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         return;
       case 'Settings.ReorderService': {
         const id = String(payload?.serviceId);
-        const onPage = order.filter((s) => page(s) === page(id));
-        const slots = order.map((s, i) => (page(s) === page(id) ? i : -1)).filter((i) => i >= 0);
+        const same = (s: string) => !!payload?.merged || page(s) === page(id); // merged: the General page's list
+        const onPage = order.filter(same);
+        const slots = order.map((s, i) => (same(s) ? i : -1)).filter((i) => i >= 0);
         onPage.splice(onPage.indexOf(id), 1);
         onPage.splice(Math.max(0, Math.min(Number(payload?.index), onPage.length)), 0, id);
         order = order.slice();
