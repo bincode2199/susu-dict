@@ -28,12 +28,40 @@ Environment notes for building and running (PowerShell setup, non-interactive RD
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
 3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24)** at the product owner's request, to be resumed manually. A master agent coordinates, writes the docs and watches the usage limits; a fresh coding agent handles each sub-item and an independent testing agent verifies each module. Modules run one at a time.
 4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window because one sub-agent ran 370 turns in a single uncompacted context. The rules that prevent a repeat are in [CLAUDE.md](../../CLAUDE.md).
-5. **Resume here:** follow [F06 § Handoff](F06/F06.md#handoff): F06.2b (Tencent, DeepL), then F06.3 (UI and dynamic providers), then the F06 testing agent. After F06 (G1), per DEV-PLAN: F07, then F08–F18 (after F07, OCR, recording and vocab do not depend on each other), then F19 on a physical machine. Before starting a sub-agent, check the 5-hour and weekly usage windows. At about 90 %, have agents commit and stop, and pause until the reset.
-6. **Open items carried forward:**
+5. **Active (2026-09-25):** F06 resumed. Running: F06.2b coding agent (Tencent, DeepL; main tree) and the F06 testing agent's preparation pass (worktree, tests only: `NetworkBrokerTests` flake, J02 end to end, T/J/UI/S gap list). Queued: F06.3 coding, then the F06 verification pass. If interrupted, resume from the plan below and the agent assignments in [F06](F06/F06.md#handoff).
+6. **Original resume plan:** follow [F06 § Handoff](F06/F06.md#handoff): F06.2b (Tencent, DeepL), then F06.3 (UI and dynamic providers), then the F06 testing agent. After F06 (G1), per DEV-PLAN: F07, then F08–F18 (after F07, OCR, recording and vocab do not depend on each other), then F19 on a physical machine. Before starting a sub-agent, check the 5-hour and weekly usage windows. At about 90 %, have agents commit and stop, and pause until the reset.
+7. **Open items carried forward:**
    - F05 real vendor calls and A01–A04 need accounts.
    - F04/F05 WebSocket is not built (no v1 adapter needs it).
    - An intermittent `NetworkBrokerTests` failure has not been diagnosed.
    - PER02 idle memory must be re-measured with the lazy plugin host.
+
+## Execution plan (goal set 2026-09-25)
+
+Goal: finish every remaining DEV-PLAN module (F06–F19), each meeting its DEV-PLAN § 4 exit criteria with tests passing, recorded here. Coordinator: master agent. Per sub-item one fresh coding agent; per sub-item or module one testing agent (it may prepare tests in a separate worktree while coding runs, then verifies the integrated result). Coding agents run one at a time in the main tree (shared `bin/obj`, local commits); only worktree-isolated testing work runs alongside.
+
+| Order | Module | Hard deps | Sub-items (DEV-PLAN § 4) | Exit criteria | Expected ceiling in this VM |
+|---|---|---|---|---|---|
+| 1 | F06 | F03, F05 | 2b Tencent/DeepL → 3 UI + dynamic providers → testing | T01/T02, J01–J06, UI03/UI04, S07/S08, 4 plugin contracts + real calls; G1 | Pending integration acceptance (no Tencent/DeepL/OpenAI accounts) |
+| 2 | F07 | F06 | 07.1 service list → 07.2 schema controls/options → 07.3 prompts/network → 07.4 speech selection | CFG01–CFG05, A02/A03, UI04 | Complete except vendor-dependent A02/A03 |
+| 3 | F08 | F06 | 08.1 helper → 08.2 3-level capture/clipboard → 08.3 UI | C01–C07, SEL01–SEL03, UI01/UI03/J01 | Program matrix in this VM; hardware parts → F19 |
+| 4 | F09 | F06 | 09.1 Youdao → 09.2 lazy lookup → 09.3 rendering | DICT01–03, S06/S08, contracts | Pending acceptance (no Youdao account) |
+| 5 | F10 | F07, F08 | 10.1 SAPI + 3 cloud TTS → 10.2 hotkey/bar → 10.3 cache/errors | TTS01–03, B03/B04/B07, SEL03 | SAPI real; cloud pending accounts; audio device may be absent in VM |
+| 6 | F11 | F07 | 11.1 overlay/capture → 11.2 P-O01/O02 → 11.3 UI | OCR01–03, B01/B05–B08, UI01, DATA08 | Pending accounts |
+| 7 | F12 | F07 | 12.1 WASAPI → 12.2 ASR pipeline P-R01/R02 → 12.3 UI | A01–A06/A08, REC01–03, B02/B07 | VM has no microphone: real recording → physical machine |
+| 8 | F13 | F12 | 13.1 loopback → 13.2 reuse F12 | REC01–04, A08 | Same as F12 |
+| 9 | F14 | F12 | 14.1 decode → 14.2 job → 14.3 export → 14.4 UI | T03–T07, A05–A08, VID01–04, PER05; G4 | 42-min real ASR needs account |
+| 10 | F15 | F07 | 15.1 entries/outbox → 15.2 exporters → 15.3 P-V01/V02 → 15.4 UI | DATA05–08, CFG02, real sync | Anki/Eudic real sync needs install/account |
+| 11 | F16 | F07 | 16.1 install → 16.2 update → 16.3 CLI | UPD01–04, X02/X05/S02 | Complete in VM |
+| 12 | F17 | F07 | 17.1 backup → 17.2 about/diagnostics → 17.3 drills | DATA01–04/09, S07/S10, UI05 | Second Windows user may be needed |
+| 13 | F18 | F16, F17 | 18.1 NSIS → 18.2 update/rollback → 18.3 failure drills | UPD05–08, X01/X06/DATA03, clean Win11 install | Clean Win11 user evidence may need another machine |
+| 14 | F19 | F08–F18, all P items | 19.1–19.4 | All applicable TEST-PLAN items, M5 | **Blocked in this VM**: D-67 requires a physical Windows 11 machine |
+
+Remaining P items not owned by a module (P-T04–T06, P-A02–A05) are picked up after F07 as separate adapter items (DEV-PLAN § 5), before F19.
+
+Verification commands: affected tests `dotnet test --project tests/Susu.Tests.Unit -c Release --no-restore --filter-class "<filter>"`; full suite `./tools/dev.ps1 test` before each commit; real-sandbox classes need `dotnet publish src/Susu.Host -c Release -r win-x64` with `tools/env.ps1` dot-sourced.
+
+Unresolved questions (assumptions recorded, not blocking): vendor accounts are not provided, so real calls stay "not executed" and affected modules end at "pending integration acceptance" per DEV-PLAN § 1.3; no physical machine is available to this session, so F19 cannot be completed here.
 
 ## History (condensed)
 
