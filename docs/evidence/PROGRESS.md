@@ -19,7 +19,7 @@ Ground rules: work started 2026-09-22 in the Windows development VM on branch `w
 | F04 | Complete. Plugin runtime (`Susu.Runtime`), host side (`Susu.Plugins`), production sandbox module `susu_plugin_sandbox.dll`, supervised sessions and `susu-plugin check/test`. X01–X07 re-ran 54/54 against the production module; S09, J04, J06 and J07 pass; 279 tests. Live stream-chunk limits wait for the first streaming capability. | [F04](F04/F04.md) |
 | F05 | Pending integration acceptance. Network broker (origin, DNS and redirect policy; proxy; cancel; SSE), signers checked against official vectors, file handles and transforms, S10 credential-leak interception, 9 contract probes through the real sandbox, one real MyMemory call; 380 tests. Vendor accounts are missing, so A01–A04 and the other real calls are not executed. | [F05](F05/F05.md) |
 | F06 | Pending integration acceptance (2026-09-25). Four built-in packages (MyMemory, Tencent, DeepL, OpenAI with streaming), services built from settings, key entry with origin-confirmed grants, the production input-translation UI. Independently verified: T01/T02, J01–J06, UI03/UI04, S07/S08, plugin contracts, PER02 with the lazy host (idle 4.72 MiB). 493 C# + 37 UI tests. Missing: real Tencent/DeepL/OpenAI calls (no accounts) and the interactive G1 walk-through. | [F06](F06/F06.md) |
-| F07 | Not started. Next. | |
+| F07 | In progress (2026-09-25). Plan: 07.1 service list → 07.2 schema controls and options → 07.3 prompts and network → 07.4 speech selection → testing. | [F07](F07/F07.md) |
 
 Environment notes for building and running (PowerShell setup, non-interactive RDP sessions, data roots) are in [BUILD § Environment notes](../development/BUILD.md#environment-notes).
 
