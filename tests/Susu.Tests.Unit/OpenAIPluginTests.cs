@@ -19,9 +19,9 @@ namespace Susu.Tests.Unit;
 /// </summary>
 public class OpenAIPluginTests
 {
-    private const string PackageId = "app.susu.openai";
-    private const string InstanceId = "openai";
-    private const string Signer = "unsigned:app.susu.openai";
+    internal const string PackageId = "app.susu.openai";
+    internal const string InstanceId = "openai";
+    internal const string Signer = "unsigned:app.susu.openai";
 
     private static string? FindHostBuildOutput()
     {
@@ -36,7 +36,7 @@ public class OpenAIPluginTests
 
     /// <summary>Stages susu.exe/DLLs plus the *real* shipped openai package into the AppContainer's
     /// scoped resource directory (not a fixtures/plugins copy).</summary>
-    private static string? StageHost()
+    internal static string? StageHost()
     {
         string? output = FindHostBuildOutput();
         if (output is null) return null;
@@ -68,7 +68,7 @@ public class OpenAIPluginTests
     /// <summary>The S02-bound account/instance a real deployment's settings UI would produce (F06.3):
     /// one account holding "apiKey", granted to this exact package/signer/origin/use, bound to the
     /// "openai" instance.</summary>
-    private static HostSession.Options Options(string staged, string origin)
+    internal static HostSession.Options Options(string staged, string origin)
     {
         var secrets = new FakeSecretStore();
         secrets.Set("account-openai", "apiKey", "sk-test-secret-value");
@@ -82,7 +82,7 @@ public class OpenAIPluginTests
 
     private static string ConfigJson(string baseUrl) => JsonSerializer.Serialize(new { baseUrl });
 
-    private static string Sse(params string[] deltas)
+    internal static string Sse(params string[] deltas)
     {
         var text = new System.Text.StringBuilder();
         foreach (var d in deltas)
