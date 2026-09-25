@@ -90,4 +90,11 @@ public static class CredentialAuthorizer
         }
         return account with { Grants = grants };
     }
+
+    /// <summary>
+    /// Withdraws the grants matching <paramref name="revoked"/> (a deleted secret, or the old origin after a
+    /// plan or address change); returns the same instance when nothing matches.
+    /// </summary>
+    public static AccountSettings Revoke(AccountSettings account, Func<CredentialGrant, bool> revoked)
+        => account.Grants.Any(revoked) ? account with { Grants = [.. account.Grants.Where(g => !revoked(g))] } : account;
 }

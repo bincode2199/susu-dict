@@ -449,6 +449,10 @@ public sealed class ShellCoordinator
             var nextConfig = package.ConfigAfterSecret(instance.Config, request.SecretName, request.Value);
             if (!ReferenceEquals(nextConfig, instance.Config))
             {
+                // A plan change moves the origin (DeepL): the old origin's grants go with the old key.
+                string oldOrigin = package.Origin(instance.Config);
+                if (package.Origin(nextConfig) != oldOrigin)
+                    proposed = RevokeGrants(proposed, instance, g => g.Package == package.PackageId && g.Origin == oldOrigin);
                 instance = instance with { Config = nextConfig, Revision = instance.Revision + 1 };
                 proposed = WithInstance(proposed, instance);
             }
@@ -553,7 +557,16 @@ public sealed class ShellCoordinator
         var instance = config.State.Effective.Instances.FirstOrDefault(i => i.Id == request.InstanceId) ?? throw new ArgumentException("unknown-instance");
         if (!instance.AccountBindings.TryGetValue(request.SecretName, out var accountId)) return Ok(SettingsElement());
         var state = config.State;
-        return Outcome(config.SaveWithSecrets(state.Effective, state.Revision, state.FileHash, [(accountId, request.SecretName, null)]));
+        // The value is gone, so are its grants: a later key for this slot is confirmed afresh (PLAN 4.5.4).
+        var accounts = state.Effective.Accounts.Select(a => a.Id == accountId ? CredentialAuthorizer.Revoke(a, g => g.Secret == request.SecretName) : a).ToList();
+        return Outcome(config.SaveWithSecrets(state.Effective with { Accounts = accounts }, state.Revision, state.FileHash, [(accountId, request.SecretName, null)]));
+    }
+
+    /// <summary>Withdraws matching grants on every account <paramref name="instance"/> is bound to.</summary>
+    private static AppSettings RevokeGrants(AppSettings s, InstanceSettings instance, Func<CredentialGrant, bool> revoked)
+    {
+        var bound = instance.AccountBindings.Values.ToHashSet(StringComparer.Ordinal);
+        return s with { Accounts = [.. s.Accounts.Select(a => bound.Contains(a.Id) ? CredentialAuthorizer.Revoke(a, revoked) : a)] };
     }
 
     public const string ProxySecretInstance = "network.proxy";

@@ -347,6 +347,42 @@ public class TranslationSettingsCommandTests
         Assert.Equal("Ready", rig.Service("deepl/translate").Availability);
     }
 
+    [Fact] // F06.3b: the free origin's grant goes with the free key; switching back needs a new confirmation
+    public void Changing_the_DeepL_plan_revokes_the_old_origin_grant()
+    {
+        using var rig = new Rig();
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("deepl", "apiKey", "dl-key:fx", true)).Ok);
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("deepl", "apiKey", "dl-pro-key", true)).Ok);
+        var grants = rig.Settings.State.Effective.Accounts.Single(a => a.Id == "deepl").Grants;
+        Assert.Equal("https://api.deepl.com:443", Assert.Single(grants).Origin);
+
+        // Same plan again: nothing is revoked.
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("deepl", "apiKey", "dl-pro-key-2")).Ok);
+        Assert.Single(rig.Settings.State.Effective.Accounts.Single(a => a.Id == "deepl").Grants);
+
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("deepl", "apiKey", "dl-key-2:fx")).Ok);
+        Assert.Empty(rig.Settings.State.Effective.Accounts.Single(a => a.Id == "deepl").Grants);
+        rig.Enable("deepl/translate");
+        Assert.Equal("MissingCredential", rig.Service("deepl/translate").Availability);
+    }
+
+    [Fact] // F06.3b: deleting a secret withdraws its grants; a new key is confirmed afresh
+    public void Deleting_a_secret_revokes_its_grants()
+    {
+        using var rig = new Rig();
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("tencent-translate", "secretId", "AKID-x", true)).Ok);
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("tencent-translate", "secretKey", "SK-x", true)).Ok);
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretDelete, new SecretDeleteRequest("tencent-translate", "secretKey")).Ok);
+        var grant = Assert.Single(rig.Settings.State.Effective.Accounts.Single(a => a.Id == "tencent-translate").Grants);
+        Assert.Equal("secretId", grant.Secret);
+
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("tencent-translate", "secretKey", "SK-y")).Ok);
+        rig.Enable("tencent-translate/translate");
+        var targets = rig.Service("tencent-translate/translate").CredentialTargets!;
+        Assert.Equal((true, false), (targets.Single(t => t.Secret == "secretKey").Saved, targets.Single(t => t.Secret == "secretKey").Granted));
+        Assert.Equal("MissingCredential", rig.Service("tencent-translate/translate").Availability);
+    }
+
     [Fact] // Tencent: both secrets granted to signer:tencent-tc3, one account, ready once both are in
     public void Tencent_needs_both_secrets_granted_to_the_signer()
     {
