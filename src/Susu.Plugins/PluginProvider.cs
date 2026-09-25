@@ -17,10 +17,18 @@ namespace Susu.Plugins;
 /// a new process), the crashed child is replaced with 1/2/4 s backoff, and after the threshold
 /// <see cref="Supervisor{TSession}.Stopped"/> is surfaced to the caller as
 /// <see cref="ErrorKind.Unavailable"/> instead of hanging or silently retrying forever.
+///
+/// <paramref name="secrets"/>/<paramref name="config"/> (F06.2a): a keyed service (P-T02/P-T03/P-A01)
+/// passes the secret names its account binding grants (Broker.Issue/ResolveSecret enforce S02) and its
+/// instance config (model/baseUrl/prompt/...) through to every Invoke; a keyless service like MyMemory
+/// leaves both empty/default. Streamed pieces the plugin pushes via ctx.$emit reach <c>onChunk</c>.
 /// </summary>
 public sealed class PluginProvider(string pluginId, string serviceId, string displayName, TranslationLimits limits, Supervisor<HostSession> supervisor, IReadOnlyList<string> hostOrigins,
-    string? instanceId = null, string? signer = null) : ITranslationProvider
+    string? instanceId = null, string? signer = null, IReadOnlyList<string>? secrets = null, IReadOnlyDictionary<string, string>? config = null) : ITranslationProvider
 {
+    private readonly IReadOnlyList<string> secrets = secrets ?? [];
+    private readonly string configJson = config is { Count: > 0 } ? JsonSerializer.Serialize(new Dictionary<string, string>(config), ContractsJson.Default.DictionaryStringString) : "{}";
+
     public string ServiceId { get; } = serviceId;
     public string DisplayName { get; } = displayName;
     // Same account/origin limiter identity as any other provider on this package (ARCHITECTURE 5.1).
@@ -48,7 +56,7 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
         {
             string requestJson = JsonSerializer.Serialize(new TranslateRequest(call.Text, call.From, call.To), ContractsJson.Default.TranslateRequest);
             (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
-            try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins, instanceId: instanceId, signer: signer); }
+            try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins, secrets: secrets, configJson: configJson, instanceId: instanceId, signer: signer, onChunk: onChunk); }
             catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }
             var (requestId, callId, task) = invocation;
             await using var registration = cancellationToken.Register(() => { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } });
@@ -60,7 +68,11 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
             if (!completed.Ok || completed.Result is null)
             {
                 var kind = ErrorKinds.FromPlugin(completed.Error?.Kind);
-                return new ProviderOutcome.Failure(new ProviderError(kind, completed.Error?.Detail));
+                // Retry-After is the vendor's own header value, parsed here (not by the plugin/HTTP
+                // layer - ARCHITECTURE 5.1) so RetryPolicy.Decide sees the same TimeSpan/60 s-cap rule
+                // every other provider's 429 goes through (J05).
+                var retryAfter = RetryPolicy.ParseRetryAfter(completed.Error?.RetryAfterRaw, DateTimeOffset.UtcNow);
+                return new ProviderOutcome.Failure(new ProviderError(kind, completed.Error?.Detail, retryAfter));
             }
             var result = completed.Result.Value.Deserialize(ContractsJson.Default.TranslateResult)!;
             return new ProviderOutcome.Success(result.Text, result.DetectedFrom);

@@ -44,6 +44,9 @@ public sealed class HostSession : IHostSessionHandle
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> calls = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> loads = new();
     private readonly ConcurrentDictionary<string, string> callGrants = new();
+    /// <summary>Streaming capabilities only (F06.2a): the caller's onChunk for one in-flight Invoke,
+    /// keyed by request id. Populated in <see cref="Invoke"/>, drained on Completed/Failed.</summary>
+    private readonly ConcurrentDictionary<string, Func<string, ValueTask>> chunkHandlers = new();
     private long sequence;
     private int nextCall;
     private readonly bool keepProfile;
@@ -67,6 +70,9 @@ public sealed class HostSession : IHostSessionHandle
     {
         this.container = container; this.process = process; this.pipe = pipe; Timings = timings; this.keepProfile = keepProfile; this.hostBuild = hostBuild;
         Broker = makeBroker?.Invoke() ?? new Broker();
+        // Fire-and-forget: a slow or throwing onChunk must never block the plugin's own next
+        // $http.stream.read (its await on $emit already returned once Broker replied ok).
+        Broker.Progress += (requestId, text) => { if (chunkHandlers.TryGetValue(requestId, out var handler)) _ = handler(text).AsTask(); };
         reader = new Thread(ReadLoop) { IsBackground = true, Name = "susu-ipc-reader" };
         reader.Start();
     }
@@ -149,13 +155,17 @@ public sealed class HostSession : IHostSessionHandle
     /// <summary><paramref name="instanceId"/>/<paramref name="signer"/> identify the configured provider
     /// instance and its confirmed package signer for S02 account/origin authorization (Broker.Issue);
     /// omitted they default to the plugin id and "unsigned:&lt;pluginId&gt;" (pre-S02 callers).</summary>
-    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null, string? instanceId = null, string? signer = null)
+    /// <param name="onChunk">Streaming capabilities only (F06.2a P-A01 OpenAI): called with each piece the
+    /// plugin pushes via ctx.$emit while this call is still in flight (fire-and-forget - never awaited
+    /// before the plugin's own $http.stream.read continues). Omitted for non-streaming capabilities.</param>
+    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null, string? instanceId = null, string? signer = null, Func<string, ValueTask>? onChunk = null)
     {
         int callId = Interlocked.Increment(ref nextCall);
         string requestId = $"r{callId}-{Guid.NewGuid():N}";
         var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles, instanceId: instanceId, signer: signer);
         var waiter = calls[requestId] = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         callGrants[requestId] = grant.Grant;
+        if (onChunk is not null) chunkHandlers[requestId] = onChunk;
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Invoke, requestId, jobId, PluginId: pluginId, Grant: grant.Grant,
             Payload: Json(new InvokePayload(callId, capability, Element(requestJson), Element(configJson)))));
         return (requestId, callId, waiter.Task);
@@ -193,6 +203,7 @@ public sealed class HostSession : IHostSessionHandle
                         if (envelope.RequestId is not null && calls.TryRemove(envelope.RequestId, out var waiter))
                         {
                             if (callGrants.TryRemove(envelope.RequestId, out var grant)) Broker.Revoke(grant); // revoke immediately at termination
+                            chunkHandlers.TryRemove(envelope.RequestId, out _);
                             waiter.TrySetResult(envelope);
                         }
                         else Interlocked.Increment(ref DroppedFrames); // late or forged: dropped, diagnostic count only

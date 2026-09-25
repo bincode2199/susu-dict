@@ -27,6 +27,7 @@ namespace Susu.Contracts;
 [JsonSerializable(typeof(TranslateBatchRequest))]
 [JsonSerializable(typeof(TranslateBatchResult))]
 [JsonSerializable(typeof(DictionaryResult))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(DetectCandidate[]))]
 [JsonSerializable(typeof(OcrResult))]
 [JsonSerializable(typeof(AsrResult))]

@@ -254,7 +254,8 @@ public sealed class ChildHost : IRuntimeCallbacks
         if (!ok)
         {
             var e = root.GetProperty("error");
-            error = new PluginErrorInfo(e.GetProperty("kind").GetString() ?? "bad_response", e.TryGetProperty("detail", out var d) ? d.GetString() : null);
+            error = new PluginErrorInfo(e.GetProperty("kind").GetString() ?? "bad_response", e.TryGetProperty("detail", out var d) ? d.GetString() : null,
+                e.TryGetProperty("retryAfterRaw", out var ra) ? ra.GetString() : null);
         }
         Send(new IpcEnvelope(ProtocolVersions.Ipc, ok ? IpcMessageType.Completed : IpcMessageType.Failed, call.RequestId, call.JobId, PluginId: pluginId,
             Payload: Json(new CompletedPayload(callId, ok, ok ? root.GetProperty("result").Clone() : null, error))));

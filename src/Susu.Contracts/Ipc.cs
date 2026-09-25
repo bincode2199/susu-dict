@@ -130,7 +130,10 @@ public sealed record ApiCallPayload(int ApiId, int CallId, string Op, JsonElemen
 public sealed record ApiResultPayload(int ApiId, bool Ok, JsonElement Value);
 /// <summary>Child → main: terminal result of one Invoke (Completed/Failed message types).</summary>
 public sealed record CompletedPayload(int CallId, bool Ok, JsonElement? Result, PluginErrorInfo? Error);
-public sealed record PluginErrorInfo(string Kind, string? Detail);
+/// <summary><paramref name="RetryAfterRaw"/> is the vendor's own Retry-After header value (delta-seconds
+/// or an HTTP-date), passed through unparsed: only the host (RetryPolicy.ParseRetryAfter) decides what
+/// it means and whether to honor it (ARCHITECTURE 5.1: the plugin/HTTP layer never retries on its own).</summary>
+public sealed record PluginErrorInfo(string Kind, string? Detail, string? RetryAfterRaw = null);
 /// <summary>Main → child: cancel one in-flight call; host-side cancellation is authoritative.</summary>
 public sealed record CancelPayload(int CallId);
 /// <summary>Child → main: a runtime was rebuilt after its execution budget was exceeded.</summary>

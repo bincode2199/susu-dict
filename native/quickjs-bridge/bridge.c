@@ -229,7 +229,9 @@ static JSModuleDef *load(JSContext *ctx, const char *name, void *opaque) {
 static const char *bootstrap =
 "(function(host){'use strict';"
 "const KINDS=new Set(['auth','quota','rate_limited','network','timeout','unsupported_language','bad_response']);"
-"class PluginError extends Error{constructor(kind,detail){super(String(kind));this.kind=kind;this.detail=detail;}}"
+// retryAfter is the vendor's own Retry-After header value, forwarded as-is - the host, never the
+// plugin, decides what it means (delta-seconds vs HTTP-date) and whether the 60 s cap applies.
+"class PluginError extends Error{constructor(kind,detail,retryAfter){super(String(kind));this.kind=kind;this.detail=detail;this.retryAfter=retryAfter;}}"
 "Object.defineProperty(globalThis,'PluginError',{value:PluginError,writable:false,configurable:false});"
 "const calls=new Map();"
 "function makeSignal(){const listeners=[];const s={aborted:false,reason:undefined,onabort:null,"
@@ -237,7 +239,8 @@ static const char *bootstrap =
 "removeEventListener(t,f){const i=listeners.indexOf(f);if(i>=0)listeners.splice(i,1);},"
 "throwIfAborted(){if(s.aborted)throw s.reason;}};"
 "return {signal:s,abort(reason){if(s.aborted)return;s.aborted=true;s.reason=reason;for(const f of listeners.slice()){try{f({type:'abort'});}catch(_){}}if(typeof s.onabort==='function'){try{s.onabort({type:'abort'});}catch(_){}}}};}"
-"function toError(e){if(e&&typeof e==='object'&&typeof e.kind==='string'&&KINDS.has(e.kind))return {kind:e.kind,detail:e.detail===undefined?undefined:String(e.detail).slice(0,1024)};"
+"function toError(e){if(e&&typeof e==='object'&&typeof e.kind==='string'&&KINDS.has(e.kind))return {kind:e.kind,detail:e.detail===undefined?undefined:String(e.detail).slice(0,1024),"
+"retryAfterRaw:e.retryAfter===undefined||e.retryAfter===null?undefined:String(e.retryAfter).slice(0,64)};"
 "if(e&&e.kind==='cancelled')return {kind:'cancelled'};return {kind:'bad_response',detail:String(e&&e.message||e).slice(0,1024)};}"
 "function finish(id,message){calls.delete(id);let text;try{text=JSON.stringify(message);}catch(e){text=JSON.stringify({callId:id,ok:false,error:{kind:'bad_response',detail:'result is not JSON'}});}host(2,text);}"
 // $http.stream(req): the host runs the real HTTP/SSE request (http.stream.open), the plugin pulls
@@ -257,6 +260,11 @@ static const char *bootstrap =
 "const api=(op,args)=>c.signal.aborted?Promise.reject(c.signal.reason):host(1,JSON.stringify({callId:id,op,args}));"
 "const ctx=Object.freeze({config:Object.freeze(config||{}),signal:c.signal,lang:Object.freeze({from:'en',to:'zh-Hans'}),"
 "$http:Object.assign((r)=>api('http',r),{stream:(r)=>streamHttp(c,api,r)}),"
+// $emit(text): a streaming capability (F06.2a P-A01 OpenAI) pushes an incremental piece of its result
+// up to the host while the call is still in flight - fire-and-forget over the same generic ApiCall
+// channel as $http/$store (no new native message kind). The plugin awaits each call so pieces are
+// always sent to the host in the order the plugin produced them.
+"$emit:(text)=>api('progress.emit',{text:String(text)}),"
 "$store:Object.freeze({get:(k)=>api('store.get',{key:k}),set:(k,v)=>api('store.set',{key:k,value:v})}),"
 "$log:(level,msg)=>{host(3,JSON.stringify({callId:id,level:String(level),msg:String(msg).slice(0,4096)}));}});"
 "Promise.resolve().then(()=>{const f=plugin&&plugin[cap];if(typeof f!=='function')throw new PluginError('bad_response','capability not exported');return f.call(plugin,req,ctx);})"

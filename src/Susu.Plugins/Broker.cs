@@ -105,6 +105,13 @@ public sealed class Broker : IDisposable
     private readonly Dictionary<string, StreamState> streams = new(StringComparer.Ordinal);
     private int processInFlight;
 
+    /// <summary>Fired synchronously for a "progress.emit" ApiCall (ctx.$emit in the plugin bootstrap):
+    /// a streaming capability's incremental piece of its own in-flight result, keyed by the owning
+    /// call's request id. HostSession forwards it to whatever <c>onChunk</c> the caller registered at
+    /// <see cref="HostSession.Invoke"/> - fire-and-forget, so a slow/failed UI update never blocks the
+    /// plugin's own next $http.stream.read.</summary>
+    public event Action<string, string>? Progress;
+
     public Broker(NetworkBroker? network = null, FileLeases? leases = null, ISecretStore? secretStore = null, AccountAuthorization? accounts = null)
     {
         ownedNetwork = network ?? new NetworkBroker(new NetworkBrokerOptions());
@@ -209,10 +216,19 @@ public sealed class Broker : IDisposable
                 "http.stream.read" => await StreamReadAsync(grant, call),
                 "http.stream.close" => await StreamCloseAsync(grant, call),
                 "store.get" or "store.set" => Store(grant, call),
+                "progress.emit" => ProgressEmit(grant, call),
                 _ => Deny(call.ApiId, $"operation '{call.Op}' not provided"),
             };
         }
         finally { Interlocked.Decrement(ref processInFlight); Interlocked.Decrement(ref grant.InFlight); }
+    }
+
+    private ApiResultPayload ProgressEmit(GrantInfo grant, ApiCallPayload call)
+    {
+        string text = call.Args.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString()! : "";
+        if (text.Length > 8192) text = text[..8192];
+        if (text.Length > 0) Progress?.Invoke(grant.RequestId, text);
+        return Allow(call.ApiId, "true");
     }
 
     private ApiResultPayload Store(GrantInfo grant, ApiCallPayload call)
