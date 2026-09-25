@@ -79,13 +79,15 @@ export default {
 
     const parse = makeSseParser();
     let assembled = '';
+    let finished = false; // [DONE] or a choice's finish_reason seen: the vendor says the answer is whole
     for await (const piece of opened.chunks) {
       for (const data of parse(piece)) {
-        if (data === '[DONE]') continue;
+        if (data === '[DONE]') { finished = true; continue; }
         let event;
         try { event = JSON.parse(data); } catch (e) { continue; } // ignore malformed/keepalive lines
         const choice = event && event.choices && event.choices[0];
         if (choice && choice.error) throw new PluginError('bad_response', String(choice.error.message || choice.error));
+        if (choice && choice.finish_reason) finished = true;
         const delta = choice && choice.delta && choice.delta.content;
         if (typeof delta === 'string' && delta.length > 0) {
           assembled += delta;
@@ -94,6 +96,10 @@ export default {
       }
     }
     if (assembled.length === 0) throw new PluginError('bad_response', 'empty stream');
+    // A body that ends cleanly after some deltas but before [DONE]/finish_reason is a truncated
+    // answer, not a complete one: report it as network so the host's J02 retry path applies
+    // instead of showing the partial text as Ready (F06 verification bug 2).
+    if (!finished) throw new PluginError('network', 'stream ended before [DONE]');
     return { text: assembled };
   },
 };

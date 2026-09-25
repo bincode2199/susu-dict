@@ -415,7 +415,7 @@ public class F06VerificationTests
     /// [DONE] at the end of a complete stream, so this is a truncated answer; the card must not end Ready
     /// with the truncated text as if it were the whole translation.
     /// </summary>
-    [Fact(Skip = "Production bug (F06 verification): plugins/openai/main.js does not require data: [DONE]; a stream whose HTTP body ends cleanly partway is returned as a complete result, so the card ends Ready with the truncated text 'Hello, wor'. Coordinator to fix (e.g. treat end of stream without [DONE] as network/bad_response).")]
+    [Fact]
     public async Task A_stream_that_ends_cleanly_without_DONE_is_not_shown_as_a_complete_answer()
     {
         string? staged = OpenAIPluginTests.StageHost();
