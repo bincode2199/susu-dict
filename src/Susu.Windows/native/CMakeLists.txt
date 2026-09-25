@@ -7,7 +7,7 @@ if(NOT DEFINED WEBVIEW_SDK)
 endif()
 # Probe/harness code only (screen capture, clipboard, selection, latency, the sandbox test
 # harness in sandbox.cpp). Never shipped with production susu.exe.
-add_library(susu_windows_probe SHARED probes.cpp sandbox.cpp webview_plugins.cpp windows_measure.cpp selection.cpp selection_test.cpp ia2.cpp clipboard.cpp latency.cpp capture.cpp)
+add_library(susu_windows_probe SHARED probes.cpp sandbox.cpp webview_plugins.cpp windows_measure.cpp selection_test.cpp clipboard.cpp latency.cpp capture.cpp)
 target_compile_features(susu_windows_probe PRIVATE cxx_std_20)
 target_compile_definitions(susu_windows_probe PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(susu_windows_probe PRIVATE /W4 /WX /EHsc /utf-8)
@@ -35,3 +35,12 @@ target_compile_definitions(susu_plugin_sandbox PRIVATE UNICODE _UNICODE WIN32_LE
 target_compile_options(susu_plugin_sandbox PRIVATE /W4 /WX /EHsc /utf-8 /guard:cf)
 target_link_options(susu_plugin_sandbox PRIVATE /GUARD:CF /DYNAMICBASE /NXCOMPAT /CETCOMPAT)
 target_link_libraries(susu_plugin_sandbox PRIVATE ole32 advapi32 userenv)
+
+# Product DLL (shipped with susu.exe, F08.1): the selection helper's read-only UIA (selection.cpp)
+# and IA2 (ia2.cpp) levels, loaded only by `susu.exe --selection-host` (Susu.Windows.Selection).
+add_library(susu_selection SHARED selection.cpp ia2.cpp)
+target_compile_features(susu_selection PRIVATE cxx_std_20)
+target_compile_definitions(susu_selection PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(susu_selection PRIVATE /W4 /WX /EHsc /utf-8 /guard:cf)
+target_link_options(susu_selection PRIVATE /GUARD:CF /DYNAMICBASE /NXCOMPAT /CETCOMPAT)
+target_link_libraries(susu_selection PRIVATE ole32 oleaut32 oleacc user32 uiautomationcore)

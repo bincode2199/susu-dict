@@ -246,7 +246,14 @@
         "type": "Project",
         "dependencies": {
           "Susu.Abstractions": "[1.0.0, )",
-          "Susu.Contracts": "[1.0.0, )"
+          "Susu.Contracts": "[1.0.0, )",
+          "Susu.Windows.Selection": "[1.0.0, )"
+        }
+      },
+      "susu.windows.selection": {
+        "type": "Project",
+        "dependencies": {
+          "Susu.Abstractions": "[1.0.0, )"
         }
       },
       "Microsoft.Data.Sqlite": {

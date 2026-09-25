@@ -61,10 +61,9 @@ internal static class Program
             case "main": return MainMode.Run(mode);
             case "plugin-host": return PluginHostMode.Run(args);
             case "selection-host":
-                // The selection helper is F08; this build refuses it. Child-process modes are dispatched
-                // here first so no main-mode service initializes.
-                Console.Error.WriteLine($"susu: --{mode.Kind} is not available in this build");
-                return 64;
+                // F08.1: the temporary selection helper (ARCHITECTURE 4.1). Dispatched before anything else so no
+                // main-mode service (settings, secrets, plugins, network, WebView) is initialized in the helper.
+                return Susu.Windows.Selection.SelectionHost.Run(args.AsSpan(1), Console.Out, Console.Error);
             default:
                 Console.Error.WriteLine("usage: susu [--data-root <dir>] [--autostart]");
                 return 2;

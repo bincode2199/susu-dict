@@ -51,13 +51,9 @@ if(args.Length==2 && args[0] is "--read-selection" or "--read-ia2")
 }
 if (args.Length == 2 && args[0] is "--selection-child" or "--ia2-child")
 {
-    try
-    {
-        var result = SelectionProbe.ReadWindow((nint)long.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture),args[0]=="--ia2-child");
-        Console.WriteLine(JsonSerializer.Serialize(new SelectionResult(result.Text,result.Reason,result.Source,result.Rect,result.UiaMs,result.Ia2Ms),ProbeJson.Default.SelectionResult));
-        return 0;
-    }
-    catch(Exception error){Console.Error.WriteLine($"Selection native error {error.GetType().Name} 0x{error.HResult:X8}");return 1;}
+    // F08.1: the production helper (same code as `susu.exe --selection-host`), UIA budget 300 ms.
+    string[] helperArgs = Susu.Windows.Selection.SelectionHost.Arguments((nint)long.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture), 300, args[0]=="--ia2-child");
+    return Susu.Windows.Selection.SelectionHost.Run(helperArgs, Console.Out, Console.Error);
 }
 if (args.Length is 2 or 3 && args[0] is "--measure-windows" or "--smoke-windows")
 {

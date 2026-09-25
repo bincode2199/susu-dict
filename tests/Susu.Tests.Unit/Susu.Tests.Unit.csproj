@@ -22,6 +22,7 @@
     <ProjectReference Include="../../src/Susu.Storage/Susu.Storage.csproj" />
     <ProjectReference Include="../../src/Susu.Net/Susu.Net.csproj" />
     <ProjectReference Include="../../src/Susu.Windows/Susu.Windows.csproj" />
+    <ProjectReference Include="../../src/Susu.Windows.Selection/Susu.Windows.Selection.csproj" />
     <ProjectReference Include="../../src/Susu.Ui/Susu.Ui.csproj" />
     <ProjectReference Include="../../src/Susu.Plugins/Susu.Plugins.csproj" />
     <ProjectReference Include="../../src/Susu.Runtime/Susu.Runtime.csproj" />
@@ -34,5 +35,7 @@
     <!-- AppContainer plugin-host sandbox native module (F04): PluginHostIntegrationTests launches
          the real susu.exe (plugin-host mode) under it via Susu.Windows.ContainerHost. -->
     <None Include="../../artifacts/windows-native/Release/susu_plugin_sandbox.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_plugin_sandbox.dll')" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Selection helper native reader (F08.1): SelectionHostTests read a real test window through it. -->
+    <None Include="../../artifacts/windows-native/Release/susu_selection.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_selection.dll')" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

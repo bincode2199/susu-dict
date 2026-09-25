@@ -3,5 +3,6 @@
   <ItemGroup>
     <ProjectReference Include="../Susu.Abstractions/Susu.Abstractions.csproj" />
     <ProjectReference Include="../Susu.Contracts/Susu.Contracts.csproj" />
+    <ProjectReference Include="../Susu.Windows.Selection/Susu.Windows.Selection.csproj" />
   </ItemGroup>
 </Project>

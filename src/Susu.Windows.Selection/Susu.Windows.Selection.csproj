@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- F08.1 selection helper (susu.exe selection-host mode, ARCHITECTURE 4.1). Its own assembly so the
+       "no settings, accounts, secrets or network" rule is structural: it references only Susu.Abstractions
+       (asserted by SelectionHostTests), never Susu.Storage, Susu.Net, Susu.Plugins or the probe code in Susu.Windows. -->
+  <PropertyGroup><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Susu.Abstractions/Susu.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

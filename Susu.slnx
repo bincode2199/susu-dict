@@ -11,6 +11,7 @@
     <Project Path="src/Susu.Storage/Susu.Storage.csproj" />
     <Project Path="src/Susu.Ui/Susu.Ui.csproj" />
     <Project Path="src/Susu.Windows/Susu.Windows.csproj" />
+    <Project Path="src/Susu.Windows.Selection/Susu.Windows.Selection.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Susu.Testing/Susu.Testing.csproj" />

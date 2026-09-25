@@ -174,3 +174,25 @@ extern "C" __declspec(dllexport) HRESULT susu_test_read_window(HWND top, int for
     }
     return S_OK;
 }
+
+// Synthetic selection target window (probe harness only; moved from selection.cpp in F08.1).
+#include <cstdio>
+#include <thread>
+static void Target(bool password,bool empty){
+    HWND parent=CreateWindowExW(WS_EX_NOACTIVATE,L"STATIC",L"Su-Su synthetic selection target",WS_OVERLAPPEDWINDOW,
+        50,50,500,200,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    if(!parent){printf("0\n");fflush(stdout);return;}
+    HWND edit=CreateWindowExW(0,L"EDIT",L"prefix selected text suffix",WS_CHILD|WS_VISIBLE|(password?(ES_PASSWORD|ES_AUTOHSCROLL):ES_MULTILINE),
+        10,10,450,100,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    if(!edit){DestroyWindow(parent);printf("0\n");fflush(stdout);return;}
+    SendMessageW(edit,EM_SETSEL,7,empty?7:20);
+    ShowWindow(parent,SW_SHOWNOACTIVATE);
+    printf("%llu\n",reinterpret_cast<unsigned long long>(edit));fflush(stdout);
+    const ULONGLONG deadline=GetTickCount64()+15000;
+    while(IsWindow(parent)&&GetTickCount64()<deadline){
+        MSG msg{};while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}
+        MsgWaitForMultipleObjectsEx(0,nullptr,20,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
+    }
+    if(IsWindow(parent))DestroyWindow(parent);
+}
+extern "C" __declspec(dllexport) void susu_selection_target(int password,int empty){std::thread worker([&]{Target(password!=0,empty!=0);});worker.join();}

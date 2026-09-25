@@ -28,6 +28,8 @@
     <Content Include="../../artifacts/windows-native/Release/susu_native.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_native.dll')" Link="susu_native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- AppContainer plugin-host sandbox (F00 route, migrated to production in F04.1; container.cpp only). -->
     <Content Include="../../artifacts/windows-native/Release/susu_plugin_sandbox.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_plugin_sandbox.dll')" Link="susu_plugin_sandbox.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Selection helper UIA/IA2 reader (F08.1; loaded only in selection-host mode). -->
+    <Content Include="../../artifacts/windows-native/Release/susu_selection.dll" Condition="Exists('../../artifacts/windows-native/Release/susu_selection.dll')" Link="susu_selection.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- QuickJS-NG plugin engine (native/quickjs-bridge), G0 route (F00 PER01). -->
     <Content Include="../../artifacts/native/Release/susu_quickjs.dll" Condition="Exists('../../artifacts/native/Release/susu_quickjs.dll')" Link="susu_quickjs.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

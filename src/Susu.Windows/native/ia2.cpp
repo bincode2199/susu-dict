@@ -1,3 +1,6 @@
+// Product (susu_selection.dll, F08.1): level 2 of the selection helper, IA2 read through the
+// MSAA focus chain (required for cold Electron, F00 SEL01). susu_selection_self_test is the
+// synthetic vtable/bounds fixture, run by the unit tests against the shipped module.
 #include <windows.h>
 #include <objbase.h>
 #include <oleacc.h>
@@ -120,7 +123,7 @@ static HRESULT ReadText(void* object,wchar_t* output,unsigned int capacity,int* 
     return S_OK;
 }
 
-extern "C" __declspec(dllexport) HRESULT susu_read_ia2(HWND target,wchar_t* output,unsigned int capacity,int* reason){
+extern "C" __declspec(dllexport) HRESULT susu_selection_ia2(HWND target,wchar_t* output,unsigned int capacity,int* reason){
     if(!target||!output||capacity<2||capacity>65537||!reason)return E_INVALIDARG;
     output[0]=0;*reason=2;
     HRESULT hr=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
@@ -190,7 +193,7 @@ static HRESULT STDMETHODCALLTYPE Text(void* object,LONG,LONG end,BSTR* value){
     auto fake=static_cast<FakeText*>(object);++fake->calls;
     *value=fake->mode==8?SysAllocStringLen(L"a\0b",3):SysAllocString(end==5?L"first":L"next");return *value?S_OK:E_OUTOFMEMORY;
 }
-extern "C" __declspec(dllexport) HRESULT susu_ia2_abi_probe(){
+extern "C" __declspec(dllexport) HRESULT susu_selection_self_test(){
     void* table[11]{};
     table[7]=reinterpret_cast<void*>(&Count);table[9]=reinterpret_cast<void*>(&Range);table[10]=reinterpret_cast<void*>(&Text);
     for(int mode=0;mode<=8;++mode){

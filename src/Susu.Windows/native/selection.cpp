@@ -1,26 +1,32 @@
+// Product (susu_selection.dll, F08.1): level 1 of the selection helper, UIA TextPattern read
+// (ARCHITECTURE 4.1). Loaded only by `susu.exe --selection-host`, which calls it on its own MTA
+// thread; the parent process enforces the hard deadline by terminating the helper. Level 2 (IA2)
+// is ia2.cpp. Read-only: never sets focus, selection or clipboard.
 #include <windows.h>
 #include <objbase.h>
 #include <oleauto.h>
 #include <UIAutomation.h>
 #include <wrl.h>
-#include <string>
-#include <cstdio>
-#include <thread>
 #include <algorithm>
+#include <string>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 struct Apartment { HRESULT status=CoInitializeEx(nullptr,COINIT_MULTITHREADED); ~Apartment(){if(SUCCEEDED(status))CoUninitialize();} };
 
-static HRESULT ReadSelection(HWND target, wchar_t* text, unsigned int capacity, int* reason, double* rect) {
-    if(!target||!text||capacity<2||capacity>65537||!reason)return E_INVALIDARG;
-    text[0]=0;*reason=0;
+// reason: 0 selected, 1 password, 2 unsupported (no TextPattern), 3 empty selection, 4 focus changed.
+static HRESULT ReadSelection(HWND target,unsigned int timeoutMs,wchar_t* text,unsigned int capacity,int* reason,double* rect,int* ranges){
+    if(!target||!text||capacity<2||capacity>65537||!reason||!rect||!ranges)return E_INVALIDARG;
+    text[0]=0;*reason=0;*ranges=0;
+    rect[0]=rect[1]=rect[2]=rect[3]=0;
     Apartment apartment;
     if(FAILED(apartment.status))return apartment.status;
     ComPtr<IUIAutomation> automation;
     HRESULT hr=CoCreateInstance(CLSID_CUIAutomation8,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&automation));
     if(FAILED(hr))return hr;
     ComPtr<IUIAutomation2> automation2;
-    if(SUCCEEDED(automation.As(&automation2))){automation2->put_ConnectionTimeout(150);automation2->put_TransactionTimeout(300);}
+    const DWORD budget=std::clamp(timeoutMs,50u,5000u);
+    if(SUCCEEDED(automation.As(&automation2))){automation2->put_ConnectionTimeout(std::min<DWORD>(150,budget));automation2->put_TransactionTimeout(budget);}
     ComPtr<IUIAutomationElement> element;
     const bool foreground=target==GetForegroundWindow();
     if(foreground){
@@ -37,6 +43,7 @@ static HRESULT ReadSelection(HWND target, wchar_t* text, unsigned int capacity, 
         }
     }else hr=automation->ElementFromHandle(target,&element);
     if(FAILED(hr))return hr;
+    // SEL03: a password field is never read, whatever its provider says about its selection.
     BOOL password=FALSE;
     hr=element->get_CurrentIsPassword(&password);
     if(FAILED(hr))return hr;
@@ -63,27 +70,39 @@ static HRESULT ReadSelection(HWND target, wchar_t* text, unsigned int capacity, 
         }
         if(!pattern){*reason=2;return S_OK;}
     }
-    ComPtr<IUIAutomationTextRangeArray> ranges;
-    hr=pattern->GetSelection(&ranges);
+    ComPtr<IUIAutomationTextRangeArray> array;
+    hr=pattern->GetSelection(&array);
     if(FAILED(hr))return hr;
     int count=0;
-    hr=ranges->get_Length(&count);
+    hr=array->get_Length(&count);
     if(FAILED(hr))return hr;
     if(count<0||count>32)return HRESULT_FROM_WIN32(ERROR_BUFFER_OVERFLOW);
-    std::wstring selected;
+    std::vector<ComPtr<IUIAutomationTextRange>> list;
     for(int i=0;i<count;++i){
         ComPtr<IUIAutomationTextRange> range;
-        hr=ranges->GetElement(i,&range);if(FAILED(hr))return hr;
+        hr=array->GetElement(i,&range);if(FAILED(hr))return hr;
+        list.push_back(range);
+    }
+    // Multiple selections (ARCHITECTURE 4.1): merged in document order, which is the reading order
+    // of one text provider, each separated by an explicit line break.
+    std::stable_sort(list.begin(),list.end(),[](const ComPtr<IUIAutomationTextRange>& a,const ComPtr<IUIAutomationTextRange>& b){
+        int order=0;
+        return SUCCEEDED(a->CompareEndpoints(TextPatternRangeEndpoint_Start,b.Get(),TextPatternRangeEndpoint_Start,&order))&&order<0;
+    });
+    std::wstring selected;
+    for(auto& range:list){
         BSTR value=nullptr;
         hr=range->GetText(static_cast<int>(capacity),&value);if(FAILED(hr))return hr;
         const auto length=SysStringLen(value);
         if(length&&wmemchr(value,0,length)){SysFreeString(value);return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);}
-        if(length>0){if(!selected.empty())selected+=L"\n";selected.append(value,length);}
+        if(length>0){if(!selected.empty())selected+=L"\n";selected.append(value,length);++*ranges;}
         SysFreeString(value);
         if(selected.size()>=capacity)return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
-        // Union of the selection's bounding rectangles (physical screen pixels) for the float anchor.
+        if(length==0)continue;
+        // Union of the selection's bounding rectangles (physical screen pixels: the helper is
+        // per-monitor DPI aware) for the float anchor.
         SAFEARRAY* boxes=nullptr;
-        if(rect&&SUCCEEDED(range->GetBoundingRectangles(&boxes))&&boxes){
+        if(SUCCEEDED(range->GetBoundingRectangles(&boxes))&&boxes){
             double* values=nullptr;
             LONG upper=-1;
             if(SUCCEEDED(SafeArrayGetUBound(boxes,1,&upper))&&SUCCEEDED(SafeArrayAccessData(boxes,reinterpret_cast<void**>(&values)))){
@@ -98,45 +117,21 @@ static HRESULT ReadSelection(HWND target, wchar_t* text, unsigned int capacity, 
             SafeArrayDestroy(boxes);
         }
     }
-    if(selected.empty()){*reason=3;return S_OK;}
+    // SEL03: an empty selection is an explicit failure; the caret paragraph is never substituted.
+    if(selected.empty()){*reason=3;*ranges=0;rect[0]=rect[1]=rect[2]=rect[3]=0;return S_OK;}
     if(foreground){
         ComPtr<IUIAutomationElement> current;
         BOOL same=FALSE;
         hr=automation->GetFocusedElement(&current);
         if(SUCCEEDED(hr))hr=automation->CompareElements(element.Get(),current.Get(),&same);
         if(FAILED(hr))return hr;
-        if(GetForegroundWindow()!=target||!same){*reason=4;return S_OK;}
+        if(GetForegroundWindow()!=target||!same){*reason=4;*ranges=0;return S_OK;}
     }
     memcpy(text,selected.c_str(),(selected.size()+1)*sizeof(wchar_t));
     return S_OK;
 }
 
-static void Target(bool password,bool empty){
-    HWND parent=CreateWindowExW(WS_EX_NOACTIVATE,L"STATIC",L"Su-Su synthetic selection target",WS_OVERLAPPEDWINDOW,
-        50,50,500,200,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
-    if(!parent){printf("0\n");fflush(stdout);return;}
-    HWND edit=CreateWindowExW(0,L"EDIT",L"prefix selected text suffix",WS_CHILD|WS_VISIBLE|(password?(ES_PASSWORD|ES_AUTOHSCROLL):ES_MULTILINE),
-        10,10,450,100,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
-    if(!edit){DestroyWindow(parent);printf("0\n");fflush(stdout);return;}
-    SendMessageW(edit,EM_SETSEL,7,empty?7:20);
-    ShowWindow(parent,SW_SHOWNOACTIVATE);
-    printf("%llu\n",reinterpret_cast<unsigned long long>(edit));fflush(stdout);
-    const ULONGLONG deadline=GetTickCount64()+15000;
-    while(IsWindow(parent)&&GetTickCount64()<deadline){
-        MSG msg{};while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}
-        MsgWaitForMultipleObjectsEx(0,nullptr,20,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
-    }
-    if(IsWindow(parent))DestroyWindow(parent);
-}
-extern "C" __declspec(dllexport) void susu_selection_target(int password,int empty){std::thread worker([&]{Target(password!=0,empty!=0);});worker.join();}
-
-extern "C" __declspec(dllexport) HRESULT susu_read_selection(HWND target, wchar_t* text, unsigned int capacity, int* reason) {
-    return ReadSelection(target, text, capacity, reason, nullptr);
-}
-
 // rect: left, top, right, bottom in physical screen pixels; all zero when unavailable.
-extern "C" __declspec(dllexport) HRESULT susu_read_selection_ex(HWND target, wchar_t* text, unsigned int capacity, int* reason, double* rect) {
-    if (!rect) return E_POINTER;
-    rect[0] = rect[1] = rect[2] = rect[3] = 0;
-    return ReadSelection(target, text, capacity, reason, rect);
+extern "C" __declspec(dllexport) HRESULT susu_selection_uia(HWND target,unsigned int timeoutMs,wchar_t* text,unsigned int capacity,int* reason,double* rect,int* ranges){
+    return ReadSelection(target,timeoutMs,text,capacity,reason,rect,ranges);
 }
