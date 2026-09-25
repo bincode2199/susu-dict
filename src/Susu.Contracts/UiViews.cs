@@ -45,11 +45,13 @@ public sealed record NetworkView(string ProxyMode, string ProxyHost, int ProxyPo
 /// <remarks>
 /// CredentialTargets (F06.3a): where each secret will be written under the current config - the service
 /// and target shown when the user first enters a key (PLAN 4.5.4). Plan: DeepL's endpoint, "free" or "pro",
-/// set by the host from the key's ":fx" suffix. Order: position in the translation order, -1 otherwise.
+/// set by the host from the key's ":fx" suffix. Order: position in the merged translation order (translation and AI
+/// services, the order result cards follow), -1 otherwise. UsageThisMonth: local count of characters sent this
+/// month (DATA04; not a vendor balance), null when the host does not track the service.
 /// </remarks>
 [TsExport("ui")]
 public sealed record ServiceView(string ServiceId, string InstanceId, string Capability, string Page, bool Enabled, string Availability, bool Implemented, string[] SecretNames, string? AccountId,
-    CredentialTargetView[]? CredentialTargets = null, string? Plan = null, int Order = -1);
+    CredentialTargetView[]? CredentialTargets = null, string? Plan = null, int Order = -1, long? UsageThisMonth = null);
 
 /// <summary>Use: header:Authorization, signer:tencent-tc3, ... Granted: the user confirmed this package, origin and use for the secret.</summary>
 [TsExport("ui")]
@@ -94,9 +96,12 @@ public sealed record ValidateProviderRequest(string ServiceId);
 [TsExport("ui")]
 public sealed record ServiceValidationView(string ServiceId, string Credential, bool ServiceAvailable, ErrorKind? Error = null);
 
-/// <summary>Settings.ReorderService: moves a service to Index among the services of its own settings page (CFG03).</summary>
+/// <summary>
+/// Settings.ReorderService: moves a service to Index among the services of its own settings page, leaving the
+/// other page's slots in place (CFG03). Merged: Index is a position in the merged list of the General page.
+/// </summary>
 [TsExport("ui")]
-public sealed record ReorderServiceRequest(string ServiceId, int Index);
+public sealed record ReorderServiceRequest(string ServiceId, int Index, bool Merged = false);
 
 [TsExport("ui")]
 public sealed record SecretDeleteRequest(string InstanceId, string SecretName);

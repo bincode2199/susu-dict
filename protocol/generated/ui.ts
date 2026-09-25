@@ -118,6 +118,7 @@ export interface NetworkView {
 export interface ReorderServiceRequest {
   serviceId: string;
   index: number;
+  merged?: boolean;
 }
 
 export interface SecretDeleteRequest {
@@ -167,6 +168,7 @@ export interface ServiceView {
   credentialTargets?: CredentialTargetView[];
   plan?: string;
   order?: number;
+  usageThisMonth?: number;
 }
 
 export interface SettingsIssueView {

@@ -232,7 +232,7 @@ public class TranslationSettingsCommandTests
         private long counter;
         private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-        public Rig(Func<AppSettings, string, ITranslationProvider?>? validation = null, Func<AppSettings, IReadOnlyList<ITranslationProvider>>? providers = null)
+        public Rig(Func<AppSettings, string, ITranslationProvider?>? validation = null, Func<AppSettings, IReadOnlyList<ITranslationProvider>>? providers = null, Func<string, long>? usage = null)
         {
             Settings = new SettingsStore(Root.Paths, new ManualClock());
             Secrets = new SecretStore(Root.Paths.Secrets, new XorProtector());
@@ -247,7 +247,7 @@ public class TranslationSettingsCommandTests
                     new InvocationScheduler(new SchedulerLimits()), new ManualClock(), new FixedJitter(), new RecordingUsage());
             };
             Shell = new ShellCoordinator(Platform, Config, features, c => c == Capability.Translate, new ShellOptions(false, false), sessions, null,
-                new TranslationBackend(true, validation ?? ((_, _) => null)));
+                new TranslationBackend(true, validation ?? ((_, _) => null), usage));
             Shell.Diagnostic += d => { lock (Diagnostics) Diagnostics.Add(d); };
             Shell.Start();
             Shell.Open(WindowKind.Settings);
@@ -421,6 +421,84 @@ public class TranslationSettingsCommandTests
         Assert.Equal(before.ToList().IndexOf("openai/translate"), after.ToList().IndexOf("openai/translate")); // the AI page's slots are untouched
         Assert.Equal(0, rig.Service("deepl/translate").Order);
         Assert.Equal("unknown-service", rig.Run(WindowKind.Settings, UiCommands.ReorderService, new ReorderServiceRequest("native-els/detect", 0)).Error);
+    }
+
+    [Fact] // CFG03: the General page moves across categories; a later page-local move keeps the other page's slots
+    public void Merged_reorder_crosses_pages_and_page_moves_keep_the_other_category_in_place()
+    {
+        using var rig = new Rig();
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.ReorderService, new ReorderServiceRequest("openai/translate", 0, Merged: true)).Ok);
+        var merged = rig.Settings.State.Effective.TranslationOrder;
+        Assert.Equal("openai/translate", merged[0]);
+        Assert.Equal(0, rig.Service("openai/translate").Order);
+
+        // Engines page: DeepL to the top of its own page takes the first engines slot (1), not the AI slot 0.
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.ReorderService, new ReorderServiceRequest("deepl/translate", 0)).Ok);
+        var after = rig.Settings.State.Effective.TranslationOrder;
+        Assert.Equal(("openai/translate", "deepl/translate"), (after[0], after[1]));
+        var aiSlots = merged.Select((id, i) => (id, i)).Where(x => BuiltInCatalog.Find(x.id.Split('/')[0])!.Page == "ai").ToList();
+        Assert.All(aiSlots, x => Assert.Equal(x.id, after[x.i]));
+
+        // AI page: moving Claude to the top of the AI page only permutes AI slots.
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.ReorderService, new ReorderServiceRequest("claude/translate", 0)).Ok);
+        var ai = rig.Settings.State.Effective.TranslationOrder;
+        Assert.Equal(("claude/translate", "deepl/translate"), (ai[0], ai[1]));
+        Assert.Equal(after.Where(id => BuiltInCatalog.Find(id.Split('/')[0])!.Page == "engines"), ai.Where(id => BuiltInCatalog.Find(id.Split('/')[0])!.Page == "engines"));
+        // Views report the merged position the cards follow.
+        Assert.Equal(ai.Select((id, i) => (id, i)), rig.View.Services.Where(s => s.Order >= 0).OrderBy(s => s.Order).Select(s => (s.ServiceId, s.Order)));
+    }
+
+    [Fact] // CFG03: cards follow the merged order, so the default expanded count counts across both categories
+    public void Resolved_cards_follow_the_merged_order()
+    {
+        using var rig = new Rig();
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("openai", "apiKey", "sk-x", true)).Ok);
+        rig.Enable("openai/translate");
+        Assert.Equal(["mymemory/translate", "openai/translate"], TranslationPackages.Resolve(rig.Settings.State.Effective, rig.Secrets.Has).Select(p => p.Service.ServiceId));
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.ReorderService, new ReorderServiceRequest("openai/translate", 0, Merged: true)).Ok);
+        // TranslationSession expands the first DefaultExpanded providers of this list.
+        Assert.Equal(["openai/translate", "mymemory/translate"], TranslationPackages.Resolve(rig.Settings.State.Effective, rig.Secrets.Has).Select(p => p.Service.ServiceId));
+    }
+
+    [Fact] // CFG01: a shared Tencent account is bound, but not usable until the binding's grants are confirmed
+    public void Shared_account_needs_a_binding_grant_and_identity_stays_stable()
+    {
+        using var rig = new Rig();
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("tencent-ocr", "secretId", "AKID-x")).Ok);
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("tencent-ocr", "secretKey", "SK-x")).Ok);
+        rig.Enable("tencent-translate/translate");
+        var before = rig.Service("tencent-translate/translate");
+
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.BindAccount, new BindAccountRequest("tencent-translate", "tencent-ocr", ConfirmGrants: false)).Ok);
+        var bound = rig.Service("tencent-translate/translate");
+        Assert.Equal("tencent-ocr", bound.AccountId);
+        Assert.Equal("MissingCredential", bound.Availability); // complete config is not usable without the grant
+        Assert.All(bound.CredentialTargets!, t => Assert.Equal((true, false), (t.Saved, t.Granted)));
+        Assert.Contains("tencent-translate", rig.View.Accounts.Single(a => a.Id == "tencent-ocr").UsedBy);
+
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.BindAccount, new BindAccountRequest("tencent-translate")).Ok);
+        var ready = rig.Service("tencent-translate/translate");
+        Assert.Equal("Ready", ready.Availability);
+        Assert.Equal((before.ServiceId, before.InstanceId, before.Capability, before.Page, before.Order), (ready.ServiceId, ready.InstanceId, ready.Capability, ready.Page, ready.Order));
+        Assert.All(rig.Settings.State.Effective.Accounts.Single(a => a.Id == "tencent-ocr").Grants, g => Assert.Equal("app.susu.tencent-translate", g.Package));
+
+        // Disabling and re-enabling keeps the same service identity, binding and grants.
+        var view = rig.View;
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SettingsSave, new SettingsSaveRequest(view.Revision, view.FileHash, view.General, view.Hotkeys, view.Network, [new ServiceToggle("tencent-translate/translate", false)])).Ok);
+        Assert.Equal("Disabled", rig.Service("tencent-translate/translate").Availability);
+        rig.Enable("tencent-translate/translate");
+        Assert.Equal(("Ready", "tencent-ocr", before.Order), (rig.Service("tencent-translate/translate").Availability, rig.Service("tencent-translate/translate").AccountId, rig.Service("tencent-translate/translate").Order));
+    }
+
+    [Fact] // usage is the local monthly count, shown only for services the host tracks
+    public void Service_views_carry_local_monthly_usage()
+    {
+        using var rig = new Rig(usage: id => id == "mymemory/translate" ? 1234 : 0);
+        Assert.Equal(1234, rig.Service("mymemory/translate").UsageThisMonth);
+        Assert.Equal(0, rig.Service("deepl/translate").UsageThisMonth);
+        Assert.Null(rig.Service("tencent-ocr/ocr").UsageThisMonth);
+        using var plain = new Rig();
+        Assert.Null(plain.Service("mymemory/translate").UsageThisMonth);
     }
 
     [Fact] // validate runs through the configured provider and keeps credential validity apart from availability

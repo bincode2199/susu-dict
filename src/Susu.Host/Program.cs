@@ -140,7 +140,8 @@ internal static class MainMode
         Func<Capability, bool> capabilityReady = c => c == Capability.Translate && translation.Providers(config.State.Effective).Count > 0;
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
             new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector(),
-            new TranslationBackend(translation.Supervisor is not null, translation.ValidationProvider));
+            new TranslationBackend(translation.Supervisor is not null, translation.ValidationProvider,
+                serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture))));
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;

@@ -46,9 +46,10 @@ public sealed record ShellOptions(bool DevelopmentBuild, bool DevPreview, TimeSp
 /// <summary>
 /// Host services behind the F06.3a settings commands. RuntimeAvailable: the plugin runtime was composed
 /// (the wired built-in translation packages can run). ValidationProvider: a provider for one service built
-/// from the given settings whether or not it is enabled, for Settings.ValidateProvider.
+/// from the given settings whether or not it is enabled, for Settings.ValidateProvider. MonthlyUsage: local
+/// characters sent this month by a service id (DATA04), shown next to the service.
 /// </summary>
-public sealed record TranslationBackend(bool RuntimeAvailable, Func<AppSettings, string, ITranslationProvider?> ValidationProvider);
+public sealed record TranslationBackend(bool RuntimeAvailable, Func<AppSettings, string, ITranslationProvider?> ValidationProvider, Func<string, long>? MonthlyUsage = null);
 
 /// <summary>
 /// The UI brain on the message thread: window sessions, snapshot + patch sequencing, command dispatch,
@@ -511,7 +512,10 @@ public sealed class ShellCoordinator
     private static AppSettings WithInstance(AppSettings s, InstanceSettings instance)
         => s with { Instances = [.. s.Instances.Select(i => i.Id == instance.Id ? instance : i)] };
 
-    /// <summary>Settings.ReorderService: page-local move within the shared translation order (CFG03).</summary>
+    /// <summary>
+    /// Settings.ReorderService: page-local move within the shared translation order, or a move in the merged
+    /// list of the General page (CFG03). Result cards and the default expanded count follow this one order.
+    /// </summary>
     private CommandResult Reorder(ReorderServiceRequest request)
     {
         var s = config.State.Effective;
@@ -520,7 +524,7 @@ public sealed class ShellCoordinator
         var order = s.TranslationOrder.ToList();
         if (!order.Contains(request.ServiceId)) order.Add(request.ServiceId);
         string page = PageOf(request.ServiceId);
-        var next = CapabilityResolver.ReorderWithinPage(order, id => PageOf(id) == page, request.ServiceId, request.Index);
+        var next = CapabilityResolver.ReorderWithinPage(order, id => request.Merged || PageOf(id) == page, request.ServiceId, request.Index);
         var state = config.State;
         return Outcome(config.Save(s with { TranslationOrder = next }, state.Revision, state.FileHash));
     }
@@ -634,8 +638,9 @@ public sealed class ShellCoordinator
             }
             else if (backend is not null) implemented = false;
             int order = x.Capability == Capability.Translate ? translationOrder.IndexOf(x.ServiceId) : -1;
+            long? usage = targets is not null && backend?.MonthlyUsage is { } monthly ? monthly(x.ServiceId) : null;
             return new ServiceView(x.ServiceId, x.Instance, x.Capability.ToString().ToLowerInvariant(), package?.Page ?? "general", x.Enabled, availability,
-                implemented, secrets, secrets.Length > 0 && instance.AccountBindings.TryGetValue(secrets[0], out var a) ? a : null, targets, plan, order);
+                implemented, secrets, secrets.Length > 0 && instance.AccountBindings.TryGetValue(secrets[0], out var a) ? a : null, targets, plan, order, usage);
         }).ToArray();
         var accounts = s.Accounts.Select(a => new AccountView(a.Id, a.Label,
             [.. a.Secrets.Select(name => new SecretSlotView(name, config.Secrets.Has(a.Id, name)))],
