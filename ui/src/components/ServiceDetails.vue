@@ -162,7 +162,7 @@ const validationFailed = computed(() => !!validation.value && !validation.value.
       <span class="tag plan">{{ t(`plan.${service.plan}`) }}</span>
     </SettingRow>
 
-    <div v-if="wired" class="status-line">
+    <div v-if="wired && service.capability === 'translate'" class="status-line">
       <button type="button" class="btn" :disabled="validation?.running" @click="validate">{{ t('validate.run') }}</button>
       <Icon v-if="validationOk" name="check" :size="13" />
       <Icon v-else-if="validationFailed" name="warning" :size="13" class="error-text" />

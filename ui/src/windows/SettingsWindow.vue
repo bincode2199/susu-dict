@@ -12,6 +12,7 @@ import SecretField from '../components/SecretField.vue';
 import ServiceDetails from '../components/ServiceDetails.vue';
 import HotkeyField from '../components/HotkeyField.vue';
 import PromptSettings from '../components/PromptSettings.vue';
+import SpeechSettings from '../components/SpeechSettings.vue';
 import { t, serviceName } from '../locales/i18n';
 
 // Settings 900×700 (DESIGN 9): centered each time, 190 px navigation, content padding 20/26. F03 provides the
@@ -279,7 +280,8 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
 
         <PromptSettings v-else-if="page === 'prompt' && view.prompt" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
 
-        <section v-else class="group">
+        <SpeechSettings v-if="page === 'speech' && view.speech" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
+        <section v-if="!['general', 'hotkeys', 'network', 'prompt'].includes(page)" class="group">
           <h2>{{ t(`services.${page}`) }}</h2>
           <p class="hint-text">{{ t('services.credentialNote') }}</p>
           <div v-for="service in listedOnPage" :key="service.serviceId" class="service">

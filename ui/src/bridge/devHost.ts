@@ -2,7 +2,7 @@
 // it behind import.meta.env.DEV). It answers Ready and commands with fixture data so layouts can be reviewed in a
 // browser. Nothing here talks to a real service or stores anything; typed secrets are dropped at once and only a
 // "saved" flag is kept, like the real host (S07).
-import { UI_VERSION, type CardSnapshot, type ConfigFieldView, type CredentialTargetView, type ServiceView, type SettingsView, type TranslationSnapshot, type UiEnvelope, type WindowKind } from '@protocol/ui';
+import { UI_VERSION, type CardSnapshot, type ConfigFieldView, type CredentialTargetView, type ServiceView, type SettingsView, type SpeechSlotView, type TranslationSnapshot, type UiEnvelope, type WindowKind } from '@protocol/ui';
 import type { HostPort } from './bridge';
 
 export function createDevHost(kind: WindowKind, session: string, language: string): HostPort {
@@ -116,6 +116,28 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
       variables: ['text', 'from', 'to', 'level'],
     },
   };
+  // F07.4 fixture: the three speech selections over the catalog's planned packages (none installed yet).
+  const speechSel: Record<string, [string, string]> = { tts: ['native-sapi', ''], asr: ['openai-asr', 'whisper-1'], videoAsr: ['openai-asr', 'whisper-1'] };
+  const speechCatalog = [
+    { instanceId: 'native-sapi', cap: 'tts', native: true, installed: true, plan: 'F10.1', models: [] as [string, boolean][] },
+    { instanceId: 'microsoft-tts', cap: 'tts', native: false, installed: false, plan: 'F10.1 P-S01', models: [] as [string, boolean][] },
+    { instanceId: 'google-tts', cap: 'tts', native: false, installed: false, plan: 'F10.1 P-S02', models: [] as [string, boolean][] },
+    { instanceId: 'tencent-tts', cap: 'tts', native: false, installed: false, plan: 'F10.1 P-S03', models: [] as [string, boolean][] },
+    { instanceId: 'openai-asr', cap: 'asr', native: false, installed: false, plan: 'F12.2 P-R01', models: [['whisper-1', true], ['gpt-4o-transcribe', false], ['gpt-4o-mini-transcribe', false]] as [string, boolean][] },
+    { instanceId: 'gemini-asr', cap: 'asr', native: false, installed: false, plan: 'F12.2 P-R02', models: [['gemini-2.5-flash', false]] as [string, boolean][] },
+  ];
+  const speechSlot = (slot: string): SpeechSlotView => {
+    const video = slot === 'videoAsr';
+    const [instance, model] = speechSel[slot];
+    const choices = speechCatalog.filter((c) => c.cap === (slot === 'tts' ? 'tts' : 'asr')).map((c) => {
+      const timecodes = c.models.some(([, tc]) => tc);
+      return { instanceId: c.instanceId, native: c.native, installed: c.installed, plan: c.plan, timecodes, selectable: !video || timecodes, availability: c.native ? 'Ready' : 'MissingCredential',
+        models: c.models.map(([id, tc]) => ({ id, timecodes: tc, selectable: !video || tc })), reasonKey: video && !timecodes ? 'needs-timecodes' : undefined };
+    });
+    const chosen = speechCatalog.find((c) => c.instanceId === instance);
+    const reasonKey = !chosen ? (video ? 'needs-timecodes' : 'none-selected') : chosen.native ? 'not-built' : 'not-installed';
+    return { slot, instance, model, choices, ready: false, reasonKey };
+  };
   // Dev-only stand-in for the host's single-pass renderer (Susu.Domain.PromptTemplate): values are never rescanned.
   const renderPrompt = (template: string, values: Record<string, string>, text: string) => {
     let inserted = false;
@@ -133,6 +155,7 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     settings.accounts = ['deepl', 'tencent-translate', 'openai'].filter((id) => [...saved].some((k) => k.startsWith(`${id}/`))).map((id) => ({
       id, label: id, secrets: (targets(id) ?? []).map((c) => ({ name: c.secret, saved: c.saved })), usedBy: [id],
     }));
+    settings.speech = { tts: speechSlot('tts'), asr: speechSlot('asr'), videoAsr: speechSlot('videoAsr') };
     return structuredClone(settings);
   };
 
@@ -256,6 +279,17 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         settings.prompt = { ...settings.prompt!, level: String(payload?.level), profile: String(payload?.profile), scope: payload?.scope as string[], profiles: payload?.profiles as NonNullable<SettingsView['prompt']>['profiles'] };
         ok(project());
         return;
+      case 'Settings.SelectSpeech': {
+        const slot = String(payload?.slot);
+        const instance = String(payload?.instance ?? '');
+        const model = String(payload?.model ?? '');
+        const entry = speechCatalog.find((c) => c.instanceId === instance);
+        if (slot === 'videoAsr' && entry && !entry.models.some(([id, tc]) => id === model && tc)) { fail('needs-timecodes'); return; }
+        speechSel[slot] = [instance, model];
+        settings.revision++;
+        ok(project());
+        return;
+      }
       case 'Settings.TestNetwork': {
         const mode = (payload?.network as SettingsView['network'] | undefined)?.proxyMode;
         setTimeout(() => ok({
