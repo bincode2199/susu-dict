@@ -3,6 +3,7 @@ using Susu.Abstractions;
 using Susu.Contracts;
 using Susu.Domain;
 using Susu.Jobs;
+using Susu.Plugins;
 using Susu.Storage;
 using Susu.Ui;
 using Susu.Windows;
@@ -118,20 +119,27 @@ internal static class MainMode
             new WindowStateRepository(db), () => config.State.Effective.General.UiLanguage);
 
         var features = new FeatureRegistry();
-        foreach (var id in new[] { FeatureRegistry.Ids.InputTranslation, FeatureRegistry.Ids.Selection, FeatureRegistry.Ids.Clipboard, FeatureRegistry.Ids.Ocr,
+        // Input translation is F06's real, shipped entry point (DEV-PLAN G1); everything else is still
+        // in development and stays off the release entry-point list regardless of capabilityReady.
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.InputTranslation, FeatureState.Available, null, [Capability.Translate]));
+        foreach (var id in new[] { FeatureRegistry.Ids.Selection, FeatureRegistry.Ids.Clipboard, FeatureRegistry.Ids.Ocr,
                      FeatureRegistry.Ids.Voice, FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, FeatureRegistry.Ids.Pronunciation, "update" })
-            features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", id == FeatureRegistry.Ids.InputTranslation ? [Capability.Translate] : []));
+            features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 
-        Func<AppSettings, TranslationSession?>? sessions = null;
-        Func<Capability, bool> capabilityReady = _ => false; // no adapter exists before F05/F06
-#if DEV_PREVIEW
         var usage = new UsageRepository(db, clock);
-        capabilityReady = c => c == Capability.Translate;
-        sessions = s => new TranslationSession(FixtureProvider.All(), new TranslationSessionOptions(s.Snapshot(), s.General.DefaultExpandedCards),
-            new InvocationScheduler(SchedulerLimits.Default), clock, new SystemJitter(), usage);
+        var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log);
+        Func<AppSettings, TranslationSession?> sessions = s =>
+        {
+            var providers = translation.Providers;
+#if DEV_PREVIEW
+            providers = [.. providers, .. FixtureProvider.All()];
 #endif
+            return providers.Count == 0 ? null : new TranslationSession(providers, new TranslationSessionOptions(s.Snapshot(), s.General.DefaultExpandedCards),
+                new InvocationScheduler(SchedulerLimits.Default), clock, new SystemJitter(), usage);
+        };
+        Func<Capability, bool> capabilityReady = c => c == Capability.Translate && translation.Providers.Count > 0;
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
-            new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions);
+            new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector());
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;
@@ -168,6 +176,7 @@ internal static class MainMode
         dispatcher.Run();
 
         log.Event("app.exit");
+        translation.Supervisor?.Dispose(); // bounded: kills the plugin-host child process (ARCHITECTURE 5.2)
         smoke?.Finish();
 #if DEV_PREVIEW
         if (guard is not null) return guard.ExitCode;
@@ -179,6 +188,52 @@ internal static class MainMode
     private static TimeSpan? ReleaseAfter(StartupMode mode)
         => mode.SmokeReport is not null ? TimeSpan.FromSeconds(2)
         : Program.DevelopmentBuild && mode.ReleaseAfterSeconds is int seconds ? TimeSpan.FromSeconds(seconds) : null;
+
+    private sealed record TranslationRuntime(IReadOnlyList<ITranslationProvider> Providers, Supervisor<HostSession>? Supervisor);
+
+    /// <summary>
+    /// F06.1 composition root: the real F04/F05 plugin runtime (NetworkBrokerProvider, Supervisor
+    /// &lt;HostSession&gt;, PluginProvider, S02's AccountAuthorization built from live settings), wired to
+    /// the one built-in translation package that ships enabled by default - MyMemory, keyless (P-T01).
+    /// The child plugin-host process is this same susu.exe re-invoked with --plugin-host (Program.Main),
+    /// so its resource directory is exactly this install's own exeFolder (susu.exe + every DLL it loads +
+    /// the "plugins" subfolder), no staging copy needed the way tests need one.
+    ///
+    /// A failure anywhere here (sandbox unavailable, plugin failed to load) never blocks app startup: it
+    /// is logged and input translation stays unavailable (capabilityReady stays false) instead of
+    /// crashing the host - the same "detection/adapter failure never blocks the app" rule as ARCHITECTURE 7.
+    /// </summary>
+    private static TranslationRuntime BuildTranslationRuntime(string exeFolder, SettingsStore settings, SecretStore secrets, ConfigService config, FileLeases leases, IClock clock, RedactingLog log)
+    {
+        try
+        {
+            var networkBrokerProvider = new NetworkBrokerProvider(settings, secrets);
+            var accountAuthorization = new AccountAuthorization(() => (config.State.Effective.Accounts, config.State.Effective.Instances));
+            string executable = Environment.ProcessPath ?? Path.Combine(exeFolder, "susu.exe");
+            var hostOptions = new HostSession.Options(executable, exeFolder, "quickjs",
+                MakeBroker: () => new Broker(networkBrokerProvider, leases, secrets, accountAuthorization));
+            const string packageId = "app.susu.mymemory", instanceId = "mymemory";
+            var supervisor = new Supervisor<HostSession>(() =>
+            {
+                var session = HostSession.Start(hostOptions);
+                var loaded = session.Load(packageId, "plugins/mymemory");
+                if (!loaded.Ok) { session.Shutdown(2000); throw new InvalidOperationException($"mymemory plugin failed to load: {loaded.Error}"); }
+                return session;
+            }, clock);
+            supervisor.RestartFailed += error => log.Event("plugin-host.restart-failed", ("code", error.GetType().Name));
+            supervisor.Stalled += () => log.Event("plugin-host.stalled");
+            supervisor.Start();
+            var limits = new TranslationLimits(InputUnit.Utf8Bytes, 500, BatchMode.Single, 1, 500);
+            IReadOnlyList<ITranslationProvider> providers =
+                [new PluginProvider(packageId, "mymemory/translate", "MyMemory", limits, supervisor, ["https://api.mymemory.translated.net"], instanceId)];
+            return new TranslationRuntime(providers, supervisor);
+        }
+        catch (Exception error)
+        {
+            log.Event("plugin-host.start-failed", ("code", error.GetType().Name));
+            return new TranslationRuntime([], null);
+        }
+    }
 
     private static void ApplyAutostart(bool enabled)
     {
