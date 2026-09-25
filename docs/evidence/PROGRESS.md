@@ -4,7 +4,7 @@
 
 Where the project stands, what to do next, and how it got here. This is the one place that records project status; specs and plans link here.
 
-**Summary (2026-09-24):** F00–F04 are complete. F05 is waiting for integration acceptance (vendor accounts). F06, the first product loop, is paused halfway: real translation with MyMemory works in `susu.exe`; the remaining adapters and the UI are next. Resume at [F06 § Handoff](F06/F06.md#handoff).
+**Summary (2026-09-25):** F00–F04 are complete. F05 and F06 are pending integration acceptance: vendor accounts are missing, and so is an interactive run of the G1 demo. F06, the first product loop, is built and independently verified. F07 is next; the plan for F06–F19 is in [Execution plan](#execution-plan-goal-set-2026-09-25).
 
 Ground rules: work started 2026-09-22 in the Windows development VM on branch `work/f00-f03-foundation`. Local commits only; **no remote push** is authorized. Dependencies may be fetched from official sources. No rate-limit reset credits are to be used.
 
@@ -18,7 +18,8 @@ Ground rules: work started 2026-09-22 in the Windows development VM on branch `w
 | F03 | Complete. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows. Multi-monitor and mixed DPI, a real IME, screen reader, high contrast and PER03 on the real shell moved to the F19 final acceptance on a physical Windows machine (D-67). | [F03](F03/F03.md) |
 | F04 | Complete. Plugin runtime (`Susu.Runtime`), host side (`Susu.Plugins`), production sandbox module `susu_plugin_sandbox.dll`, supervised sessions and `susu-plugin check/test`. X01–X07 re-ran 54/54 against the production module; S09, J04, J06 and J07 pass; 279 tests. Live stream-chunk limits wait for the first streaming capability. | [F04](F04/F04.md) |
 | F05 | Pending integration acceptance. Network broker (origin, DNS and redirect policy; proxy; cancel; SSE), signers checked against official vectors, file handles and transforms, S10 credential-leak interception, 9 contract probes through the real sandbox, one real MyMemory call; 380 tests. Vendor accounts are missing, so A01–A04 and the other real calls are not executed. | [F05](F05/F05.md) |
-| F06 | In progress, **paused**. F06.1 (composition root, ELS detection, MyMemory, real loop) and F06.2a (lazy plugin host, key validation, OpenAI streaming) done; 411 tests. Remaining: F06.2b, F06.3, testing. | [F06](F06/F06.md) |
+| F06 | Pending integration acceptance (2026-09-25). Four built-in packages (MyMemory, Tencent, DeepL, OpenAI with streaming), services built from settings, key entry with origin-confirmed grants, the production input-translation UI. Independently verified: T01/T02, J01–J06, UI03/UI04, S07/S08, plugin contracts, PER02 with the lazy host (idle 4.72 MiB). 493 C# + 37 UI tests. Missing: real Tencent/DeepL/OpenAI calls (no accounts) and the interactive G1 walk-through. | [F06](F06/F06.md) |
+| F07 | Not started. Next. | |
 
 Environment notes for building and running (PowerShell setup, non-interactive RDP sessions, data roots) are in [BUILD § Environment notes](../development/BUILD.md#environment-notes).
 
@@ -28,13 +29,13 @@ Environment notes for building and running (PowerShell setup, non-interactive RD
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
 3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24)** at the product owner's request, to be resumed manually. A master agent coordinates, writes the docs and watches the usage limits; a fresh coding agent handles each sub-item and an independent testing agent verifies each module. Modules run one at a time.
 4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window because one sub-agent ran 370 turns in a single uncompacted context. The rules that prevent a repeat are in [CLAUDE.md](../../CLAUDE.md).
-5. **Active (2026-09-25):** F06.2b, 3a and 3b are done and the verification pass has run (490 tests: 486 pass, 4 skipped as bug pins). **Next action:** a fresh coding agent fixes the three bugs listed in the F06 work log (PluginProvider cancel leaves the stream open; OpenAI accepts a stream without `[DONE]`; `susu-plugin test` crashes on bare origins), removes the four Skips, and runs the full suite. Then record F06 as pending integration acceptance (no Tencent/DeepL/OpenAI accounts; interactive G1 demo not driven) and start F07.1. The 5-hour window was at 72 % when the fix agent started; if it stops early, resume from its last commit.
+5. **Active (2026-09-25):** F06 is pending integration acceptance (G1 reached apart from vendor accounts and the interactive walk-through). **Next action:** start F07. First read DEV-PLAN § F07 and the TEST-PLAN rows CFG01–CFG05, A02, A03 and UI04, and record the sub-item plan in `docs/evidence/F07/F07.md` (from MODULE-TEMPLATE). Then run a fresh coding agent for F07.1 (full service list: enable, order, validate, usage; credential validity separate from availability; translation and AI filtering and ordering). Carried in from F06: the OpenAI `baseUrl`/`model` UI, and Esc closing the key confirmation bar.
 6. **Original resume plan:** follow [F06 § Handoff](F06/F06.md#handoff): F06.2b (Tencent, DeepL), then F06.3 (UI and dynamic providers), then the F06 testing agent. After F06 (G1), per DEV-PLAN: F07, then F08–F18 (after F07, OCR, recording and vocab do not depend on each other), then F19 on a physical machine. Before starting a sub-agent, check the 5-hour and weekly usage windows. At about 90 %, have agents commit and stop, and pause until the reset.
 7. **Open items carried forward:**
    - F05 real vendor calls and A01–A04 need accounts.
    - F04/F05 WebSocket is not built (no v1 adapter needs it).
-   - An intermittent `NetworkBrokerTests` failure has not been diagnosed.
-   - PER02 idle memory must be re-measured with the lazy plugin host.
+   - F06 real Tencent/DeepL/OpenAI calls need accounts; the interactive G1 walk-through needs a drivable desktop.
+   - Resolved 2026-09-25: the intermittent `NetworkBrokerTests` failure (timing assumptions in test code); PER02 re-measured with the lazy host (pass).
 
 ## Execution plan (goal set 2026-09-25)
 
@@ -74,3 +75,11 @@ Unresolved questions (assumptions recorded, not blocking): vendor accounts are n
 - 2026-09-24: F04 complete. Plugin runtime, IPC, production sandbox module, supervisor and `susu-plugin` CLI; 279 tests; X-matrix re-run 54\/54 on the production module.
 - 2026-09-24: F05 pending integration acceptance. Broker, signers, file transforms, SSE, proxy, cancel, S02 at the broker, S10; 380 tests; S05 test blind spot found and fixed by the testing agent. F06 started.
 - 2026-09-24 (late): F06.1 and F06.2a done (411 tests, all local; nothing pushed). Paused at the product owner's request; the resume plan is in F06 § Handoff.
+- 2026-09-25: goal set to finish F06–F19; execution plan recorded. F06.2b (Tencent, DeepL), 3a (services from settings) and 3b (UI) done. Testing found and the team fixed five production bugs:
+  - the signer grant use;
+  - a stream error read as a normal end;
+  - cancel not reaching the vendor;
+  - OpenAI without `[DONE]`;
+  - a `susu-plugin test` crash.
+  
+  Testing also fixed the flaky timing tests. F06 is pending integration acceptance at 493 + 37 tests.
