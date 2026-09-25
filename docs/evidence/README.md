@@ -15,5 +15,6 @@ What has been delivered and verified. [PROGRESS](PROGRESS.md) is the one-page cu
 | [F05](F05/F05.md) | Network broker and executable plugin contracts |
 | [F06](F06/F06.md) | Input translation (first product loop) |
 | [F07](F07/F07.md) | Service settings and prompts |
+| [F08](F08/F08.md) | Selection and clipboard translation |
 
 New records are created from [MODULE-TEMPLATE](../development/MODULE-TEMPLATE.md).

@@ -52,6 +52,7 @@ Each folder has a `README.md` that indexes its documents. Every document names i
     - [F05](docs/evidence/F05/F05.md): network broker and executable plugin contracts.
     - [F06](docs/evidence/F06/F06.md): input translation (first product loop).
     - [F07](docs/evidence/F07/F07.md): service settings and prompts.
+    - [F08](docs/evidence/F08/F08.md): selection and clipboard translation.
   - [Windows VMs](docs/vm/README.md): the development and clean-test virtual machines.
     - [WINDOWS-VM-OPERATIONS](docs/vm/WINDOWS-VM-OPERATIONS.md) · 运行与维护手册: current spec, daily operation, maintenance, troubleshooting, rebuild.
     - [WINDOWS-VM-DEPLOYMENT](docs/vm/WINDOWS-VM-DEPLOYMENT.md) · 部署记录: what was deployed and verified.

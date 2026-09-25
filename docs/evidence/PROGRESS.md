@@ -20,7 +20,7 @@ Ground rules: work started 2026-09-22 in the Windows development VM on branch `w
 | F05 | Pending integration acceptance. Network broker (origin, DNS and redirect policy; proxy; cancel; SSE), signers checked against official vectors, file handles and transforms, S10 credential-leak interception, 9 contract probes through the real sandbox, one real MyMemory call; 380 tests. Vendor accounts are missing, so A01–A04 and the other real calls are not executed. | [F05](F05/F05.md) |
 | F06 | Pending integration acceptance (2026-09-25). Four built-in packages (MyMemory, Tencent, DeepL, OpenAI with streaming), services built from settings, key entry with origin-confirmed grants, the production input-translation UI. Independently verified: T01/T02, J01–J06, UI03/UI04, S07/S08, plugin contracts, PER02 with the lazy host (idle 4.72 MiB). 493 C# + 37 UI tests. Missing: real Tencent/DeepL/OpenAI calls (no accounts) and the interactive G1 walk-through. | [F06](F06/F06.md) |
 | F07 | Pending integration acceptance (2026-09-26); only the interactive demo in the real window remains. Full service list with merged order, schema-generated config and dynamic options, SetPrompt, SetNetwork with proxy test, and speech selections. CFG01–CFG05, A02/A03 (selection) and UI04 pass; no production bugs found in verification. 597 C# + 70 UI tests. | [F07](F07/F07.md) |
-| F08 | Not started. Next. | |
+| F08 | In progress (2026-09-26). Plan: 08.1 selection helper → 08.2 capture and clipboard → 08.3 UI → testing. | [F08](F08/F08.md) |
 
 Environment notes for building and running (PowerShell setup, non-interactive RDP sessions, data roots) are in [BUILD § Environment notes](../development/BUILD.md#environment-notes).
 
