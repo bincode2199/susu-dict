@@ -10,7 +10,7 @@ Su-Su is a Windows 11 desktop translator. It lives in the system tray. Text come
 | Text capture | UIA → IA2/MSAA → optional clipboard borrowing, isolated in a bounded selection-host process |
 | Distribution | Per-user NSIS installer; license MIT (tentative, confirmed before release) |
 
-**Status (2026-09-24):** F00–F04 are complete: feasibility probes, contracts and job framework, settings and data, the NativeAOT `susu.exe` shell with tray, hotkeys, production Vue UI and minimal settings, and the sandboxed plugin runtime with IPC and supervision. Two PER03 latency misses are accepted as a known gap (D-66). Hardware-dependent checks move to the F19 final acceptance on a physical Windows machine (D-67). Next is F05. Translation adapters arrive in F05/F06, so there is no usable translator yet. See [PROGRESS](evidence/PROGRESS.md) and [BUILD](development/BUILD.md).
+**Status (2026-09-24):** F00–F04 are complete: feasibility probes, contracts and job framework, settings and data, the NativeAOT `susu.exe` shell with tray, hotkeys, production Vue UI and minimal settings, and the sandboxed plugin runtime with IPC and supervision. Two PER03 latency misses are accepted as a known gap (D-66). Hardware-dependent checks move to the F19 final acceptance on a physical Windows machine (D-67). F05 is pending integration acceptance (vendor accounts). F06 (input translation) is in progress and paused: the real translation loop with MyMemory works in `susu.exe`, and the UI and the remaining adapters are still to come. See [PROGRESS](evidence/PROGRESS.md) and [BUILD](development/BUILD.md).
 
 ## Repository layout
 

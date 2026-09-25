@@ -15,7 +15,7 @@ Started 2026-09-22 in the Windows development VM. Branch: `work/f00-f03-foundati
 | F03 | Complete. NativeAOT `susu.exe` shell, WebView2 host, tray, hotkeys, production Vue UI and minimal settings are in place. PER02, PER04, S07, S08 and UI06 pass. UI01–UI05 pass as far as this single-display VM allows. Multi-monitor and mixed DPI, a real IME, screen reader, high contrast and PER03 on the real shell moved to the F19 final acceptance on a physical Windows machine (D-67). | [F03](F03/F03.md) |
 | F04 | Complete. Plugin runtime (`Susu.Runtime`), host side (`Susu.Plugins`), production sandbox module `susu_plugin_sandbox.dll`, supervised sessions and `susu-plugin check/test`. X01–X07 re-ran 54/54 against the production module; S09, J04, J06 and J07 pass; 279 tests. Live stream-chunk limits wait for the first streaming capability. | [F04](F04/F04.md) |
 | F05 | Pending integration acceptance. Network broker (origin, DNS and redirect policy; proxy; cancel; SSE), signers checked against official vectors, file handles and transforms, S10 credential-leak interception, 9 contract probes through the real sandbox, one real MyMemory call; 380 tests. Vendor accounts are missing, so A01–A04 and the other real calls are not executed. | [F05](F05/F05.md) |
-| F06 | In progress: F06.1 and F06.2a done (real loop with MyMemory; lazy plugin host; key validation; OpenAI streaming; 411 tests). F06.2b (Tencent, DeepL) next. | [F06](F06/F06.md) |
+| F06 | In progress, **paused**. F06.1 (composition root, ELS detection, MyMemory, real loop) and F06.2a (lazy plugin host, key validation, OpenAI streaming) done; 411 tests. Remaining: F06.2b, F06.3, testing. | [F06](F06/F06.md) |
 
 Environment notes for whoever resumes:
 
@@ -29,8 +29,14 @@ Environment notes for whoever resumes:
 
 1. **Resolved (2026-09-24), D-66:** the product owner accepted the two PER03 misses as a known gap. See [F00 § G0 decision](F00/F00.md#g0-decision).
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
-3. **F04 complete; F05 pending integration acceptance (vendor accounts needed) (2026-09-24).** Master agent coordinates one coding agent and one testing agent per module; modules run one at a time. **Now: F06** (input translation, the first product loop).
+3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24).** Work was paused at the product owner's request, to be resumed manually. How the work is organized: a master agent coordinates the work, writes the docs and watches the usage limits. A fresh coding agent handles each sub-item, and an independent testing agent verifies each module. Modules run one at a time.
 4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window, mostly because one sub-agent ran 370 turns in a single uncompacted context (up to 645k tokens). From now on the master starts a fresh coding agent per sub-item, agents run filtered tests and keep only the tail of the output, and they read files by section. The rules are in [CLAUDE.md](../../CLAUDE.md).
+5. **Resume here:** follow [F06 § Handoff](F06/F06.md#handoff): F06.2b (Tencent, DeepL), then F06.3 (UI and dynamic providers), then the F06 testing agent. After F06 (G1), per DEV-PLAN: F07, then F08–F18 (after F07, OCR, recording and vocab do not depend on each other), then F19 on a physical machine. Before starting a sub-agent, check the 5-hour and weekly usage windows. At about 90 %, have agents commit and stop, and pause until the reset.
+6. **Open items carried forward:**
+   - F05 real vendor calls and A01–A04 need accounts.
+   - F04/F05 WebSocket is not built (no v1 adapter needs it).
+   - An intermittent `NetworkBrokerTests` failure has not been diagnosed.
+   - PER02 idle memory must be re-measured with the lazy plugin host.
 
 ## History (condensed)
 
@@ -42,3 +48,4 @@ Environment notes for whoever resumes:
 - 2026-09-24 (decisions): the product owner accepted the PER03 misses (D-66) and moved the hardware-dependent checks to F19 on a physical machine (D-67). F00 and F03 are marked complete.
 - 2026-09-24: F04 complete. Plugin runtime, IPC, production sandbox module, supervisor and `susu-plugin` CLI; 279 tests; X-matrix re-run 54\/54 on the production module.
 - 2026-09-24: F05 pending integration acceptance. Broker, signers, file transforms, SSE, proxy, cancel, S02 at the broker, S10; 380 tests; S05 test blind spot found and fixed by the testing agent. F06 started.
+- 2026-09-24 (late): F06.1 and F06.2a done (411 tests, all local; nothing pushed). Paused at the product owner's request; the resume plan is in F06 § Handoff.
