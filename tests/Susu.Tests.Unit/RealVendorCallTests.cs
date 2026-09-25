@@ -46,6 +46,58 @@ public class RealVendorCallTests
         return staged;
     }
 
+    /// <summary>Also stages the real, shipped MyMemory built-in package (src/Susu.Host/plugins/mymemory,
+    /// published alongside susu.exe) next to the fixtures - F06.1's own real-vendor evidence, calling
+    /// "translate" through the actual production adapter rather than the echo fixture's generic httpGet.</summary>
+    private static string? StageHostWithMyMemoryPackage()
+    {
+        string? output = FindHostBuildOutput();
+        if (output is null) return null;
+        string sourcePlugin = Path.Combine(output, "plugins", "mymemory");
+        if (!File.Exists(Path.Combine(sourcePlugin, "main.js"))) return null;
+        string? staged = StageHost();
+        if (staged is null) return null;
+        string targetPlugin = Path.Combine(staged, "plugins", "mymemory");
+        Directory.CreateDirectory(targetPlugin);
+        foreach (string file in Directory.EnumerateFiles(sourcePlugin))
+            File.Copy(file, Path.Combine(targetPlugin, Path.GetFileName(file)));
+        return staged;
+    }
+
+    [Fact] // F06.1: the real production adapter (not the echo fixture's generic httpGet) against the real vendor
+    public async Task MyMemory_package_translate_answers_through_the_real_sandbox_and_broker()
+    {
+        string? staged = StageHostWithMyMemoryPackage();
+        if (staged is null) return;
+        using var session = HostSession.Start(new HostSession.Options(Path.Combine(staged, "susu.exe"), staged, "quickjs", KeepProfile: false));
+        try
+        {
+            Assert.True(session.Load("app.susu.mymemory", "plugins/mymemory").Ok);
+            string requestJson = JsonSerializer.Serialize(new TranslateRequest("hello", "en", "zh-Hans"), ContractsJson.Default.TranslateRequest);
+            var (_, _, task) = session.Invoke("app.susu.mymemory", "translate", requestJson, jobId: "job-mymemory-real",
+                origins: ["https://api.mymemory.translated.net"]);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
+            Assert.Equal(IpcMessageType.Completed, envelope.Type);
+            var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
+            Assert.True(completed.Ok, completed.Error?.Detail);
+            var result = completed.Result!.Value.Deserialize(ContractsJson.Default.TranslateResult)!;
+            Assert.False(string.IsNullOrWhiteSpace(result.Text));
+
+            string scratchpad = Environment.GetEnvironmentVariable("CLAUDE_SCRATCHPAD_DIR")
+                ?? Path.Combine(Path.GetTempPath(), "susu-f06-evidence");
+            Directory.CreateDirectory(scratchpad);
+            File.WriteAllText(Path.Combine(scratchpad, "f06-mymemory-package-real-call.json"), JsonSerializer.Serialize(new
+            {
+                timestampUtc = DateTime.UtcNow.ToString("O"),
+                origin = "https://api.mymemory.translated.net",
+                package = "app.susu.mymemory",
+                translatedTextLength = result.Text.Length,
+                note = "sanitized: no request/response body or headers persisted, only shape/length",
+            }, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        finally { session.Shutdown(2000); }
+    }
+
     [Fact]
     public async Task MyMemory_free_endpoint_answers_through_the_real_sandbox_and_broker()
     {
