@@ -41,6 +41,22 @@ public abstract record CardEffect
 }
 
 /// <summary>
+/// Service-level network state (ARCHITECTURE 13, UI04): one service failing proves nothing about the
+/// others, so each card carries its own error, and the shared "offline" notice appears only when every
+/// card that requested in the current generation has settled on a retryable network failure.
+/// </summary>
+public static class NetworkState
+{
+    public static bool IsNetworkFailure(ErrorKind? kind) => kind is ErrorKind.Network or ErrorKind.Timeout;
+
+    public static bool IsOffline(IEnumerable<Card> cards)
+    {
+        var requested = cards.Where(c => c.Generation > 0 && c.Attempts > 0 && c.State is not (CardState.CollapsedIdle or CardState.Cancelled or CardState.Unsupported)).ToList();
+        return requested.Count > 0 && requested.All(c => c.State == CardState.Failed && IsNetworkFailure(c.Error));
+    }
+}
+
+/// <summary>
 /// Pure card reducer. Only the current generation and attempt may change a card; sequences are strictly
 /// increasing; a terminal result is applied once. The first expand creates the request; collapsing cancels
 /// unfinished work and clears partial text; a completed result is reused on re-expand within its generation.

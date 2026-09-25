@@ -16,6 +16,7 @@ export const UI_COMMANDS = {
   ValidateProvider: 'Settings.ValidateProvider',
   LoadOptions: 'Settings.LoadOptions',
   BindAccount: 'Settings.BindAccount',
+  ReorderService: 'Settings.ReorderService',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -46,10 +47,17 @@ export interface AccountView {
   usedBy: string[];
 }
 
+export interface BindAccountRequest {
+  instanceId: string;
+  accountId?: string;
+  confirmGrants?: boolean;
+}
+
 export interface CardPatch {
   revision: number;
   generation: number;
   card: CardSnapshot;
+  offline?: boolean;
 }
 
 export interface CardSnapshot {
@@ -69,6 +77,14 @@ export interface CommandResult {
   ok: boolean;
   error?: string;
   value?: unknown;
+}
+
+export interface CredentialTargetView {
+  secret: string;
+  origin: string;
+  use: string;
+  saved: boolean;
+  granted: boolean;
 }
 
 export type ErrorKind = 'auth' | 'quota' | 'rate_limited' | 'network' | 'timeout' | 'unsupported_language' | 'bad_response' | 'cancelled' | 'busy' | 'unavailable';
@@ -99,6 +115,11 @@ export interface NetworkView {
   aiTimeoutSeconds: number;
 }
 
+export interface ReorderServiceRequest {
+  serviceId: string;
+  index: number;
+}
+
 export interface SecretDeleteRequest {
   instanceId: string;
   secretName: string;
@@ -113,6 +134,7 @@ export interface SecretWriteRequest {
   instanceId: string;
   secretName: string;
   value: string;
+  confirmGrants?: boolean;
 }
 
 export interface SelectLanguageRequest {
@@ -125,6 +147,13 @@ export interface ServiceToggle {
   enabled: boolean;
 }
 
+export interface ServiceValidationView {
+  serviceId: string;
+  credential: string;
+  serviceAvailable: boolean;
+  error?: ErrorKind;
+}
+
 export interface ServiceView {
   serviceId: string;
   instanceId: string;
@@ -135,6 +164,9 @@ export interface ServiceView {
   implemented: boolean;
   secretNames: string[];
   accountId?: string;
+  credentialTargets?: CredentialTargetView[];
+  plan?: string;
+  order?: number;
 }
 
 export interface SettingsIssueView {
@@ -215,6 +247,10 @@ export interface UiSnapshot {
   translation?: TranslationSnapshot;
   settings?: SettingsView;
   tray?: TrayView;
+}
+
+export interface ValidateProviderRequest {
+  serviceId: string;
 }
 
 export type WindowKind = 'Main' | 'Selection' | 'Clipboard' | 'Ocr' | 'Voice' | 'Transcribe' | 'Settings' | 'Error' | 'Tray';

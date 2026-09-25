@@ -74,7 +74,7 @@ public sealed class TranslationSession
     public Task<TranslationSnapshot> SnapshotAsync()
     {
         var result = new TaskCompletionSource<TranslationSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
-        mailbox.Post(() => result.SetResult(new TranslationSnapshot(revision, generation, source, from, to, [.. providers.Select(p => Project(cards[p.ServiceId]))])));
+        mailbox.Post(() => result.SetResult(new TranslationSnapshot(revision, generation, source, from, to, [.. providers.Select(p => Project(cards[p.ServiceId]))], NetworkState.IsOffline(cards.Values))));
         return result.Task;
     }
 
@@ -103,7 +103,7 @@ public sealed class TranslationSession
         if (!Equals(before, after))
         {
             revision++;
-            CardChanged?.Invoke(new CardPatch(revision, generation, Project(after)));
+            CardChanged?.Invoke(new CardPatch(revision, generation, Project(after), NetworkState.IsOffline(cards.Values)));
         }
         foreach (var effect in effects)
         {
@@ -141,6 +141,11 @@ public sealed class TranslationSession
             var assembled = new StringBuilder();
             bool streamed = false;
             ProviderError? failure = null;
+            // Usage (DATA04, F06.2 de-duplication): one event per attempt, keyed by the attempt id, carrying
+            // the characters of every chunk the vendor accepted in that attempt. Recording per chunk under the
+            // shared attempt id dropped every chunk after the first (the event table is unique per attempt
+            // and metric); a retry is a new attempt and a new vendor request, so it is its own event.
+            long accepted = 0;
             foreach (var chunk in chunks)
             {
                 TimeSpan remaining = TimeSpan.FromMilliseconds(Math.Max(0, deadline - clock.NowMilliseconds));
@@ -150,18 +155,18 @@ public sealed class TranslationSession
                     Post(serviceId, new CardEvent.Chunk(Next(), piece));
                     return ValueTask.CompletedTask;
                 }, cancel);
-                if (cancel.IsCancellationRequested) { usage.Record(serviceId, attemptId, "chars", chunk.Text.Length, "cancelled"); return; }
+                if (cancel.IsCancellationRequested) { usage.Record(serviceId, attemptId, "chars", accepted, "cancelled"); return; }
                 if (outcome is ProviderOutcome.Success success)
                 {
-                    usage.Record(serviceId, attemptId, "chars", chunk.Text.Length, "ok");
+                    accepted += chunk.Text.Length;
                     assembled.Append(success.Text);
                     if (!streamed && chunks.Count > 1) Post(serviceId, new CardEvent.Chunk(Next(), success.Text)); // in-order progress for chunked text
                     continue;
                 }
                 failure = ((ProviderOutcome.Failure)outcome).Error;
-                usage.Record(serviceId, attemptId, "chars", chunk.Text.Length, failure.Kind.ToString());
                 break;
             }
+            usage.Record(serviceId, attemptId, "chars", accepted, failure is null ? "ok" : failure.Kind.ToString());
             if (failure is null) { Post(serviceId, new CardEvent.Completed(Next(), assembled.ToString())); return; }
             var decision = RetryPolicy.Decide(failure, attemptsMade, TimeSpan.FromMilliseconds(Math.Max(0, deadline - clock.NowMilliseconds)), streamed || assembled.Length > 0, readOnly: true, jitter.Next());
             if (decision is RetryDecision.Stop) { Post(serviceId, new CardEvent.Failed(Next(), failure.Kind)); return; }

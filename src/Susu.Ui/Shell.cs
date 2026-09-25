@@ -44,6 +44,13 @@ public static class UiInbound
 public sealed record ShellOptions(bool DevelopmentBuild, bool DevPreview, TimeSpan? ReleaseAfter = null);
 
 /// <summary>
+/// Host services behind the F06.3a settings commands. RuntimeAvailable: the plugin runtime was composed
+/// (the wired built-in translation packages can run). ValidationProvider: a provider for one service built
+/// from the given settings whether or not it is enabled, for Settings.ValidateProvider.
+/// </summary>
+public sealed record TranslationBackend(bool RuntimeAvailable, Func<AppSettings, string, ITranslationProvider?> ValidationProvider);
+
+/// <summary>
 /// The UI brain on the message thread: window sessions, snapshot + patch sequencing, command dispatch,
 /// close/minimize semantics, keep-warm/release, tray menu model and hotkey registration. It never touches
 /// Win32 or COM directly (<see cref="IWindowPlatform"/>) and never hands a page a secret, grant or path.
@@ -93,11 +100,15 @@ public sealed class ShellCoordinator
     private readonly Dictionary<WindowKind, WindowSession> windows = [];
     private readonly WebViewLifecycle lifecycle = new();
     private Dictionary<string, bool> hotkeyResults = new(StringComparer.Ordinal);
+    private readonly TranslationBackend? backend;
     private TranslationSession? translation;
+    // Settings changed since the session was built: the next submit rebuilds it from the current services,
+    // so enable/disable/reorder/key changes apply without a restart while shown results stay until then.
+    private bool translationStale;
     private (string From, string To)? languageOverride;
 
     public ShellCoordinator(IWindowPlatform platform, IConfigService config, FeatureRegistry features, Func<Capability, bool> capabilityReady,
-        ShellOptions options, Func<AppSettings, TranslationSession?>? sessionFactory = null, ILanguageDetector? languageDetector = null)
+        ShellOptions options, Func<AppSettings, TranslationSession?>? sessionFactory = null, ILanguageDetector? languageDetector = null, TranslationBackend? backend = null)
     {
         this.platform = platform;
         this.config = config;
@@ -106,6 +117,7 @@ public sealed class ShellCoordinator
         this.options = options;
         this.sessionFactory = sessionFactory ?? (_ => null);
         this.languageDetector = languageDetector;
+        this.backend = backend;
     }
 
     public event Action<string>? Diagnostic;
@@ -248,6 +260,7 @@ public sealed class ShellCoordinator
                 return Ok();
             case UiCommands.SubmitText:
             {
+                if (translation is null || translationStale) ReattachTranslation();
                 if (translation is null) return new CommandResult(false, "unavailable");
                 var text = Read(payload, ContractsJson.Default.SubmitTextRequest).Text;
                 if (string.IsNullOrWhiteSpace(text) || text.Length > 100_000) return new CommandResult(false, "text-length");
@@ -278,6 +291,9 @@ public sealed class ShellCoordinator
             case UiCommands.SettingsSave: return Save(Read(payload, ContractsJson.Default.SettingsSaveRequest));
             case UiCommands.SecretWriteNew: return WriteSecret(Read(payload, ContractsJson.Default.SecretWriteRequest));
             case UiCommands.SecretDelete: return DeleteSecret(Read(payload, ContractsJson.Default.SecretDeleteRequest));
+            case UiCommands.BindAccount: return BindAccount(Read(payload, ContractsJson.Default.BindAccountRequest));
+            case UiCommands.ReorderService: return Reorder(Read(payload, ContractsJson.Default.ReorderServiceRequest));
+            case UiCommands.ValidateProvider: return await ValidateAsync(Read(payload, ContractsJson.Default.ValidateProviderRequest));
             case UiCommands.TrayOpen: return TrayOpen(Read(payload, ContractsJson.Default.TrayOpenRequest).Id);
             case UiCommands.TrayExit: platform.Exit(); return Ok();
             default: return new CommandResult(false, "unavailable"); // whitelisted but its module is not built yet
@@ -327,6 +343,14 @@ public sealed class ShellCoordinator
 
     // ---------- translation projection ----------
 
+    private void ReattachTranslation()
+    {
+        if (translation is { } old) _ = old.CloseAsync(TimeSpan.FromSeconds(3));
+        translation = null;
+        translationStale = false;
+        AttachTranslation();
+    }
+
     private void AttachTranslation()
     {
         translation = sessionFactory(config.State.Effective);
@@ -369,6 +393,7 @@ public sealed class ShellCoordinator
     {
         platform.StartTimer(TimeSpan.Zero, () =>
         {
+            translationStale = true;
             ApplyHotkeys(state.Effective);
             Broadcast(UiMessageKind.Event, "settings", JsonSerializer.SerializeToElement(ProjectSettings(state), ContractsJson.Default.SettingsView), WindowKind.Settings);
             foreach (var (kind, session) in windows)
@@ -417,9 +442,105 @@ public sealed class ShellCoordinator
             config.Secrets.Write(NetworkSettings.ProxyAccountId, "password", request.Value);
             return Ok(SettingsElement());
         }
-        var (proposed, accountId) = BindAccount(request.InstanceId, request.SecretName);
+        var (proposed, accountId) = EnsureOwnAccount(request.InstanceId, request.SecretName);
+        if (TranslationPackages.Find(request.InstanceId) is { } package)
+        {
+            var instance = proposed.Instances.First(i => i.Id == request.InstanceId);
+            var nextConfig = package.ConfigAfterSecret(instance.Config, request.SecretName, request.Value);
+            if (!ReferenceEquals(nextConfig, instance.Config))
+            {
+                instance = instance with { Config = nextConfig, Revision = instance.Revision + 1 };
+                proposed = WithInstance(proposed, instance);
+            }
+            if (request.ConfirmGrants) proposed = ConfirmGrants(proposed, package, instance, request.SecretName);
+        }
         var state = config.State;
         return Outcome(config.SaveWithSecrets(proposed, state.Revision, state.FileHash, [(accountId, request.SecretName, request.Value)]));
+    }
+
+    /// <summary>
+    /// Settings.BindAccount (F06.3a): optionally re-binds the instance's secrets to an existing account that
+    /// holds the same secret names, then grants the targets the instance currently needs (PLAN 4.5.4: a
+    /// changed plan or address is confirmed here; nothing is widened without this call).
+    /// </summary>
+    private CommandResult BindAccount(BindAccountRequest request)
+    {
+        var s = config.State.Effective;
+        var package = TranslationPackages.Find(request.InstanceId) ?? throw new ArgumentException("unknown-instance");
+        var instance = s.Instances.FirstOrDefault(i => i.Id == request.InstanceId) ?? throw new ArgumentException("unknown-instance");
+        var proposed = s;
+        if (request.AccountId is { } accountId)
+        {
+            var account = s.Accounts.FirstOrDefault(a => a.Id == accountId) ?? throw new ArgumentException("unknown-account");
+            if (package.SecretNames.Any(name => !account.Secrets.Contains(name))) throw new ArgumentException("account-secrets");
+            var bindings = new Dictionary<string, string>(instance.AccountBindings, StringComparer.Ordinal);
+            foreach (var name in package.SecretNames) bindings[name] = accountId;
+            instance = instance with { AccountBindings = bindings, Revision = instance.Revision + 1 };
+            proposed = WithInstance(proposed, instance);
+        }
+        if (request.ConfirmGrants)
+        {
+            if (package.SecretNames.Any(name => !instance.AccountBindings.ContainsKey(name))) throw new ArgumentException("not-bound");
+            proposed = ConfirmGrants(proposed, package, instance, null);
+        }
+        if (ReferenceEquals(proposed, s)) return Ok(SettingsElement());
+        var state = config.State;
+        return Outcome(config.Save(proposed, state.Revision, state.FileHash));
+    }
+
+    /// <summary>Grants the package's current targets (optionally for one secret) on the bound accounts.</summary>
+    private static AppSettings ConfirmGrants(AppSettings s, TranslationPackage package, InstanceSettings instance, string? onlySecret)
+    {
+        var accounts = s.Accounts.ToList();
+        foreach (var grant in package.RequiredGrants(instance.Config).Where(g => onlySecret is null || g.Secret == onlySecret))
+        {
+            if (!instance.AccountBindings.TryGetValue(grant.Secret, out var accountId)) continue;
+            int index = accounts.FindIndex(a => a.Id == accountId);
+            if (index < 0) continue;
+            var account = accounts[index];
+            if (!account.Secrets.Contains(grant.Secret)) account = account with { Secrets = [.. account.Secrets, grant.Secret] };
+            accounts[index] = CredentialAuthorizer.Confirm(account, [grant]);
+        }
+        return s with { Accounts = accounts };
+    }
+
+    private static AppSettings WithInstance(AppSettings s, InstanceSettings instance)
+        => s with { Instances = [.. s.Instances.Select(i => i.Id == instance.Id ? instance : i)] };
+
+    /// <summary>Settings.ReorderService: page-local move within the shared translation order (CFG03).</summary>
+    private CommandResult Reorder(ReorderServiceRequest request)
+    {
+        var s = config.State.Effective;
+        if (!s.Services.Any(x => x.ServiceId == request.ServiceId && x.Capability == Capability.Translate)) throw new ArgumentException("unknown-service");
+        static string PageOf(string serviceId) => BuiltInCatalog.Find(serviceId.Split('/')[0])?.Page ?? "general";
+        var order = s.TranslationOrder.ToList();
+        if (!order.Contains(request.ServiceId)) order.Add(request.ServiceId);
+        string page = PageOf(request.ServiceId);
+        var next = CapabilityResolver.ReorderWithinPage(order, id => PageOf(id) == page, request.ServiceId, request.Index);
+        var state = config.State;
+        return Outcome(config.Save(s with { TranslationOrder = next }, state.Revision, state.FileHash));
+    }
+
+    /// <summary>
+    /// Settings.ValidateProvider (F06.2a/F06.3a): one minimal real call through the service's provider, built
+    /// from the current settings even while the service is disabled. Only the classification comes back;
+    /// vendor detail text is not sent to the page.
+    /// </summary>
+    private async Task<CommandResult> ValidateAsync(ValidateProviderRequest request)
+    {
+        var s = config.State.Effective;
+        var service = s.Services.FirstOrDefault(x => x.ServiceId == request.ServiceId) ?? throw new ArgumentException("unknown-service");
+        if (backend is null || !backend.RuntimeAvailable) return new CommandResult(false, "unavailable");
+        var package = TranslationPackages.Find(service.Instance);
+        var instance = s.Instances.FirstOrDefault(i => i.Id == service.Instance);
+        if (package is null || instance is null) return new CommandResult(false, "unavailable");
+        if (TranslationPackages.CredentialStates(s, package, instance, config.Secrets.Has).Any(c => !c.Saved || !c.Granted)) return new CommandResult(false, "missing-credential");
+        var provider = backend.ValidationProvider(s, service.ServiceId);
+        if (provider is null) return new CommandResult(false, "unavailable");
+        var timeout = TimeSpan.FromSeconds(Math.Clamp(s.Network.AiTimeoutSeconds, 5, 60));
+        var result = await ServiceValidator.ValidateAsync(provider, Languages.English.Code, Languages.ChineseSimplified.Code, timeout, CancellationToken.None);
+        var view = new ServiceValidationView(service.ServiceId, result.Credential.ToString().ToLowerInvariant(), result.ServiceAvailable, result.Error);
+        return Ok(JsonSerializer.SerializeToElement(view, ContractsJson.Default.ServiceValidationView));
     }
 
     private CommandResult DeleteSecret(SecretDeleteRequest request)
@@ -441,7 +562,7 @@ public sealed class ShellCoordinator
     /// Minimal F03 binding: an instance's secrets go to its own account (created on first write). Sharing an
     /// account between services is an explicit user choice added in F07; grants are confirmed per origin in F05.
     /// </summary>
-    private (AppSettings Proposed, string AccountId) BindAccount(string instanceId, string secretName)
+    private (AppSettings Proposed, string AccountId) EnsureOwnAccount(string instanceId, string secretName)
     {
         var s = config.State.Effective;
         var package = BuiltInCatalog.Find(instanceId) ?? throw new ArgumentException("unknown-instance");
@@ -478,6 +599,7 @@ public sealed class ShellCoordinator
                 : hotkeyResults.TryGetValue(action, out bool registered) && !registered ? "failed" : "ok";
             return new HotkeyView(action, chord, status, status == "unavailable" ? reason : null);
         }).ToArray();
+        var translationOrder = s.TranslationOrder.ToList();
         var services = s.Services.Select(x =>
         {
             var package = BuiltInCatalog.Find(x.Instance);
@@ -485,8 +607,22 @@ public sealed class ShellCoordinator
             string[] secrets = package?.Secrets ?? [];
             bool missing = secrets.Any(name => !instance.AccountBindings.TryGetValue(name, out var account) || !config.Secrets.Has(account, name));
             string availability = !x.Enabled ? nameof(Availability.Disabled) : missing ? nameof(Availability.MissingCredential) : nameof(Availability.Ready);
+            bool implemented = capabilityReady(x.Capability) && x.Enabled;
+            CredentialTargetView[]? targets = null;
+            string? plan = null;
+            // A wired built-in translation package (F06.3a): availability also needs the grants, and the
+            // page gets the exact targets to show with the key field.
+            if (x.Capability == Capability.Translate && TranslationPackages.Find(x.Instance) is { } wired && instance.Package == wired.PackageId)
+            {
+                availability = TranslationPackages.AvailabilityOf(s, x, config.Secrets.Has).ToString();
+                targets = [.. TranslationPackages.CredentialStates(s, wired, instance, config.Secrets.Has).Select(t => new CredentialTargetView(t.Secret, t.Origin, t.Use, t.Saved, t.Granted))];
+                if (wired.InstanceId == TranslationPackages.DeepL) plan = instance.Config.TryGetValue("plan", out var p) && p == "pro" ? "pro" : "free";
+                if (backend is not null) implemented = backend.RuntimeAvailable;
+            }
+            else if (backend is not null) implemented = false;
+            int order = x.Capability == Capability.Translate ? translationOrder.IndexOf(x.ServiceId) : -1;
             return new ServiceView(x.ServiceId, x.Instance, x.Capability.ToString().ToLowerInvariant(), package?.Page ?? "general", x.Enabled, availability,
-                capabilityReady(x.Capability) && x.Enabled, secrets, secrets.Length > 0 && instance.AccountBindings.TryGetValue(secrets[0], out var a) ? a : null);
+                implemented, secrets, secrets.Length > 0 && instance.AccountBindings.TryGetValue(secrets[0], out var a) ? a : null, targets, plan, order);
         }).ToArray();
         var accounts = s.Accounts.Select(a => new AccountView(a.Id, a.Label,
             [.. a.Secrets.Select(name => new SecretSlotView(name, config.Secrets.Has(a.Id, name)))],

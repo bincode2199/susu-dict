@@ -130,16 +130,17 @@ internal static class MainMode
         var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log, ReleaseAfter(mode) ?? TimeSpan.FromMinutes(10));
         Func<AppSettings, TranslationSession?> sessions = s =>
         {
-            var providers = translation.Providers;
+            var providers = translation.Providers(s);
 #if DEV_PREVIEW
             providers = [.. providers, .. FixtureProvider.All()];
 #endif
             return providers.Count == 0 ? null : new TranslationSession(providers, new TranslationSessionOptions(s.Snapshot(), s.General.DefaultExpandedCards),
                 new InvocationScheduler(SchedulerLimits.Default), clock, new SystemJitter(), usage);
         };
-        Func<Capability, bool> capabilityReady = c => c == Capability.Translate && translation.Providers.Count > 0;
+        Func<Capability, bool> capabilityReady = c => c == Capability.Translate && translation.Providers(config.State.Effective).Count > 0;
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
-            new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector());
+            new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector(),
+            new TranslationBackend(translation.Supervisor is not null, translation.ValidationProvider));
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;
@@ -189,12 +190,16 @@ internal static class MainMode
         => mode.SmokeReport is not null ? TimeSpan.FromSeconds(2)
         : Program.DevelopmentBuild && mode.ReleaseAfterSeconds is int seconds ? TimeSpan.FromSeconds(seconds) : null;
 
-    private sealed record TranslationRuntime(IReadOnlyList<ITranslationProvider> Providers, Supervisor<HostSession>? Supervisor);
+    /// <summary>Providers are built from the settings each call (F06.3a), so service changes need no restart.</summary>
+    private sealed record TranslationRuntime(Supervisor<HostSession>? Supervisor, Func<AppSettings, IReadOnlyList<ITranslationProvider>> Providers,
+        Func<AppSettings, string, ITranslationProvider?> ValidationProvider);
 
     /// <summary>
-    /// F06.1 composition root: the real F04/F05 plugin runtime (NetworkBrokerProvider, Supervisor
-    /// &lt;HostSession&gt;, PluginProvider, S02's AccountAuthorization built from live settings), wired to
-    /// the one built-in translation package that ships enabled by default - MyMemory, keyless (P-T01).
+    /// F06.1/F06.3a composition root: the real F04/F05 plugin runtime (NetworkBrokerProvider, Supervisor
+    /// &lt;HostSession&gt;, PluginProvider, S02's AccountAuthorization built from live settings). One plugin
+    /// host loads the four wired built-in translation packages (<see cref="TranslationPackages"/>: MyMemory,
+    /// keyless and on by default; Tencent, DeepL and OpenAI once enabled with a granted key); the providers
+    /// are rebuilt from the current settings for every translation session.
     /// The child plugin-host process is this same susu.exe re-invoked with --plugin-host (Program.Main),
     /// so its resource directory is exactly this install's own exeFolder (susu.exe + every DLL it loads +
     /// the "plugins" subfolder), no staging copy needed the way tests need one.
@@ -218,25 +223,18 @@ internal static class MainMode
             string executable = Environment.ProcessPath ?? Path.Combine(exeFolder, "susu.exe");
             var hostOptions = new HostSession.Options(executable, exeFolder, "quickjs",
                 MakeBroker: () => new Broker(networkBrokerProvider, leases, secrets, accountAuthorization));
-            const string packageId = "app.susu.mymemory", instanceId = "mymemory";
-            var supervisor = new Supervisor<HostSession>(() =>
-            {
-                var session = HostSession.Start(hostOptions);
-                var loaded = session.Load(packageId, "plugins/mymemory");
-                if (!loaded.Ok) { session.Shutdown(2000); throw new InvalidOperationException($"mymemory plugin failed to load: {loaded.Error}"); }
-                return session;
-            }, clock, idleTimeout);
+            var supervisor = new Supervisor<HostSession>(
+                () => PluginTranslationProviders.LoadAll(HostSession.Start(hostOptions), (package, _) => log.Event("plugin.load-failed", ("package", package))),
+                clock, idleTimeout);
             supervisor.RestartFailed += error => log.Event("plugin-host.restart-failed", ("code", error.GetType().Name));
             supervisor.Stalled += () => log.Event("plugin-host.stalled");
-            var limits = new TranslationLimits(InputUnit.Utf8Bytes, 500, BatchMode.Single, 1, 500);
-            IReadOnlyList<ITranslationProvider> providers =
-                [new PluginProvider(packageId, "mymemory/translate", "MyMemory", limits, supervisor, ["https://api.mymemory.translated.net"], instanceId)];
-            return new TranslationRuntime(providers, supervisor);
+            return new TranslationRuntime(supervisor, settings => PluginTranslationProviders.Build(settings, secrets.Has, supervisor),
+                (settings, serviceId) => PluginTranslationProviders.ForValidation(settings, serviceId, supervisor));
         }
         catch (Exception error)
         {
             log.Event("plugin-host.start-failed", ("code", error.GetType().Name));
-            return new TranslationRuntime([], null);
+            return new TranslationRuntime(null, _ => [], (_, _) => null);
         }
     }
 

@@ -50,8 +50,13 @@ public sealed record TranslationSnapshot(
     CardSnapshot[] Cards,
     bool Offline = false);
 
+/// <summary>
+/// Offline (ARCHITECTURE 13, DESIGN "译文 · 离线"): true only when every card that requested in this
+/// generation failed with a retryable network error. Each card keeps its own error either way; the page
+/// shows the shared notice on top of, never instead of, cards that already hold text.
+/// </summary>
 [TsExport("ui")]
-public sealed record CardPatch(long Revision, long Generation, CardSnapshot Card);
+public sealed record CardPatch(long Revision, long Generation, CardSnapshot Card, bool Offline = false);
 
 [TsExport("ui")]
 public sealed record CommandResult(bool Ok, string? Error = null, JsonElement? Value = null);
@@ -66,7 +71,7 @@ public static class UiCommands
         SelectLanguage = "Translation.SelectLanguage", CopyText = "Window.CopyText", Close = "Window.Close", Pin = "Window.Pin",
         Minimize = "Window.Minimize", Maximize = "Window.Maximize",
         SettingsRead = "Settings.Read", SettingsSave = "Settings.Save", ValidateProvider = "Settings.ValidateProvider",
-        LoadOptions = "Settings.LoadOptions", BindAccount = "Settings.BindAccount",
+        LoadOptions = "Settings.LoadOptions", BindAccount = "Settings.BindAccount", ReorderService = "Settings.ReorderService",
         SecretWriteNew = "Secret.WriteNew", SecretDelete = "Secret.Delete", SecretExportEncrypted = "Secret.ExportEncrypted", SecretImportEncrypted = "Secret.ImportEncrypted",
         BeginCapture = "Capture.BeginCapture", StartRecording = "Audio.StartRecording", PauseRecording = "Audio.PauseRecording", StopRecording = "Audio.StopRecording",
         PickMedia = "Transcription.PickMedia", StartTranscription = "Transcription.Start", PauseTranscription = "Transcription.Pause",
@@ -84,7 +89,7 @@ public static class UiCommands
         [Close] = allWindows, [Pin] = [WindowKind.Main, WindowKind.Selection, WindowKind.Clipboard],
         [Minimize] = [WindowKind.Main, WindowKind.Settings, WindowKind.Transcribe], [Maximize] = [WindowKind.Main, WindowKind.Settings, WindowKind.Transcribe],
         [SettingsRead] = [WindowKind.Settings], [SettingsSave] = [WindowKind.Settings], [ValidateProvider] = [WindowKind.Settings],
-        [LoadOptions] = [WindowKind.Settings], [BindAccount] = [WindowKind.Settings],
+        [LoadOptions] = [WindowKind.Settings], [BindAccount] = [WindowKind.Settings], [ReorderService] = [WindowKind.Settings],
         [SecretWriteNew] = [WindowKind.Settings], [SecretDelete] = [WindowKind.Settings],
         [SecretExportEncrypted] = [WindowKind.Settings], [SecretImportEncrypted] = [WindowKind.Settings],
         [BeginCapture] = [WindowKind.Ocr], [StartRecording] = [WindowKind.Voice], [PauseRecording] = [WindowKind.Voice], [StopRecording] = [WindowKind.Voice],
