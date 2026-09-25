@@ -248,7 +248,7 @@ public class F06VerificationTests
     /// J03 / F05.2 through the production path: after a collapse cancels a streaming call, the vendor
     /// connection must close (a cancelled call must not keep network I/O and a broker stream running).
     /// </summary>
-    [Fact(Skip = "Production bug (F06 verification): cancelling through PluginProvider leaves the vendor stream open (Broker.ActiveStreams stays 1, socket open until the vendor ends it). Likely cause: WaitAsync's cancellation callback (registered after, so run first) resumes TranslateAsync inline, whose `await using` disposes the host.Cancel registration before it runs, so HostSession.Cancel is never sent. HostSession.Cancel called directly does close it (next test). Coordinator to fix in PluginProvider.")]
+    [Fact]
     public async Task J03_collapsing_a_streaming_card_closes_the_vendor_connection()
     {
         string? staged = OpenAIPluginTests.StageHost();
@@ -269,7 +269,7 @@ public class F06VerificationTests
     }
 
     /// <summary>The same cancel at the PluginProvider seam, token cancelled as the first piece arrives.</summary>
-    [Fact(Skip = "Production bug (F06 verification): see J03_collapsing_a_streaming_card_closes_the_vendor_connection.")]
+    [Fact]
     public async Task Cancelling_a_PluginProvider_stream_closes_the_vendor_connection()
     {
         string? staged = OpenAIPluginTests.StageHost();

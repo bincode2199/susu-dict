@@ -59,10 +59,17 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
             try { invocation = host.Invoke(pluginId, "translate", requestJson, call.AttemptId, hostOrigins, secrets: secrets, configJson: configJson, instanceId: instanceId, signer: signer, onChunk: onChunk); }
             catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }
             var (requestId, callId, task) = invocation;
-            await using var registration = cancellationToken.Register(() => { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } });
+            // Cancel is sent explicitly in the OperationCanceledException path, not from a
+            // CancellationToken.Register callback: WaitAsync's own registration completes the task
+            // first (callbacks run LIFO) and resumes this method inline, so an `await using`
+            // registration was disposed before its callback ever ran and the vendor stream stayed
+            // open (F06 verification bug 1, J03). One-shot guard: Cancel goes out at most once.
+            int cancelSent = 0;
+            void SendCancel() { if (Interlocked.Exchange(ref cancelSent, 1) == 0) try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } }
             IpcEnvelope envelope;
             try { envelope = await task.WaitAsync(call.Timeout, cancellationToken); }
-            catch (TimeoutException) { try { host.Cancel(pluginId, requestId, call.AttemptId, callId); } catch (IOException) { } return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Timeout)); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { SendCancel(); throw; }
+            catch (TimeoutException) { SendCancel(); return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Timeout)); }
             catch (IOException) { return new ProviderOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); } // crash mid-call: no replay, Supervisor is already relaunching
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             if (!completed.Ok || completed.Result is null)
