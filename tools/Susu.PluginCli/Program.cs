@@ -93,6 +93,19 @@ internal static class Program
             return 1;
         }
 
+        // Manifest hosts are bare host names; Broker grants exact origins. Same https default the host
+        // runtime grants a package (Susu.Domain.Origin), so the test run matches production.
+        var origins = new List<string>();
+        foreach (string manifestHost in manifest.Hosts)
+        {
+            if (!Susu.Domain.Origin.TryFromManifestHost(manifestHost, out string origin))
+            {
+                Console.Error.WriteLine($"test: manifest host '{manifestHost}' is not a valid host or origin");
+                return 1;
+            }
+            origins.Add(origin);
+        }
+
         // The AppContainer profile grants read access to exactly one directory: stage the host
         // executable/DLLs plus this package under it (same shape as HostSession's other callers).
         string staged = Path.Combine(Path.GetTempPath(), "susu-plugin-test-" + Guid.NewGuid().ToString("N"));
@@ -117,7 +130,7 @@ internal static class Program
                 }
                 Console.WriteLine($"test: loaded {manifest.Id} in {loaded.Milliseconds:F1} ms, engine {loaded.EngineBytes} bytes");
 
-                var (_, _, task) = session.Invoke(manifest.Id, capability, requestJson, jobId: "susu-plugin-test", origins: manifest.Hosts);
+                var (_, _, task) = session.Invoke(manifest.Id, capability, requestJson, jobId: "susu-plugin-test", origins: origins);
                 var envelope = task.Wait(TimeSpan.FromSeconds(30)) ? task.Result : throw new TimeoutException($"capability '{capability}' did not respond within 30 s");
                 var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
                 if (envelope.Type == IpcMessageType.Completed && completed.Ok)

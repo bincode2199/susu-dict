@@ -139,7 +139,8 @@ public sealed class Broker : IDisposable
         DateTime? expiresAt = null, string? instanceId = null, string? signer = null)
     {
         var info = new GrantInfo(Convert.ToHexString(RandomNumberGenerator.GetBytes(24)), requestId, pluginId, callId,
-            [.. origins.Select(o => Origin(new Uri(o)) ?? throw new ArgumentException($"Invalid origin {o}"))], [.. secrets ?? []], [.. handles ?? []],
+            [.. origins.Select(o => (Uri.TryCreate(o, UriKind.Absolute, out var uri) ? Origin(uri) : null)
+                ?? throw new ArgumentException($"Invalid origin '{o}': expected an absolute http(s) origin such as https://api.example.com", nameof(origins)))],[.. secrets ?? []], [.. handles ?? []],
             expiresAt ?? DateTime.UtcNow.AddMinutes(10), instanceId ?? pluginId, signer ?? $"unsigned:{pluginId}");
         lock (grants) grants[info.Grant] = info;
         return info;

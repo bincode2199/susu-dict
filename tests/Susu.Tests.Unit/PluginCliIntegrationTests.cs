@@ -94,7 +94,7 @@ public class PluginCliIntegrationTests
     /// F06 plugin contracts: `susu-plugin test` on a shipped package loads it and gets a classified answer
     /// (ok for keyless MyMemory; a plugin error for the keyed ones, which the CLI gives no key), never a crash.
     /// </summary>
-    [Theory(Skip = "Tool bug (F06 verification): susu-plugin test passes the manifest's bare host names (e.g. api.mymemory.translated.net) as origins to HostSession.Invoke; Broker.Issue does new Uri(origin) and the CLI dies with an unhandled UriFormatException for every package that declares hosts. Coordinator to fix in tools/Susu.PluginCli (pass https://<host> origins).")]
+    [Theory]
     [InlineData("mymemory")]
     [InlineData("openai")]
     [InlineData("tencent-translate")]

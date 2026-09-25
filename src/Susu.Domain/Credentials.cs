@@ -31,6 +31,19 @@ public static class Origin
     }
 
     public static string Normalize(string text) => TryNormalize(text, out var origin) ? origin : throw new ArgumentException($"'{text}' is not an exact origin.", nameof(text));
+
+    /// <summary>
+    /// A manifest <c>hosts:</c> entry as an exact origin. Shipped manifests list bare host names
+    /// (<c>api.openai.com</c>), which mean https on the default port - the same origin the host runtime
+    /// grants (TranslationPackages' <c>https://</c> default origins through <see cref="Normalize"/>).
+    /// An entry that is already a full origin is normalized as is.
+    /// </summary>
+    public static bool TryFromManifestHost(string? host, out string origin)
+    {
+        origin = "";
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        return host.Contains("://", StringComparison.Ordinal) ? TryNormalize(host, out origin) : TryNormalize("https://" + host, out origin);
+    }
 }
 
 /// <summary>Package id plus confirmed signing identity, or <c>unsigned:&lt;installationId&gt;</c> for unsigned installs.</summary>
