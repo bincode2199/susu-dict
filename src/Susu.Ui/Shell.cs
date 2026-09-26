@@ -157,6 +157,8 @@ public sealed partial class ShellCoordinator
     {
         ApplyHotkeys(config.State.Effective);
         config.Changed += state => OnSettingsChanged(state);
+        // The player reports from its worker threads; the shell projects its state on the message thread.
+        if (Speech is { } speech) speech.Player.StateChanged += state => platform.StartTimer(TimeSpan.Zero, () => OnPlayerState(state));
     }
 
     // ---------- windows ----------
@@ -263,7 +265,11 @@ public sealed partial class ShellCoordinator
         if (outcome.Status == CaptureStatus.Failed && outcome.Message is { } message) lines.Add(LineFor(message));
         if (outcome.Notice is { } notice) lines.Add(LineFor(notice));
         if (lines.Count > 0) ShowErrorBar([.. lines]);
-        if (outcome.Status is CaptureStatus.Text or CaptureStatus.Empty)
+        if (outcome.Trigger == CaptureTrigger.Pronounce)
+        {
+            if (outcome.Status == CaptureStatus.Text) await PronounceAsync(coordinator, outcome); // F10.2: spoken, no window
+        }
+        else if (outcome.Status is CaptureStatus.Text or CaptureStatus.Empty)
         {
             string origin = outcome.Source == "clipboard" ? "clipboard" : "selection";
             bool empty = outcome.Status == CaptureStatus.Empty;
@@ -319,7 +325,9 @@ public sealed partial class ShellCoordinator
             kind == WindowKind.Settings ? ProjectSettings(config.State) : null,
             kind == WindowKind.Tray ? TrayModel() : null,
             kind == WindowKind.Selection ? captureView : null,
-            kind == WindowKind.Error ? errorBar : null);
+            kind == WindowKind.Error ? errorBar : null,
+            kind == WindowKind.Speech || UiCommands.IsAllowed(kind, UiCommands.SpeakCard) ? speechState : null,
+            kind == WindowKind.Speech ? speechBar : null);
         session.Ready = true;
         session.PendingCards.Clear();
         Send(kind, session, UiMessageKind.Snapshot, null, null, JsonSerializer.SerializeToElement(payload, ContractsJson.Default.UiSnapshot));
@@ -399,6 +407,9 @@ public sealed partial class ShellCoordinator
             case UiCommands.PreviewPrompt: return PreviewPrompt(Read(payload, ContractsJson.Default.PromptPreviewRequest));
             case UiCommands.TestNetwork: return await TestNetworkAsync(Read(payload, ContractsJson.Default.NetworkTestRequest));
             case UiCommands.SelectSpeech: return SelectSpeech(Read(payload, ContractsJson.Default.SpeechSelectRequest));
+            case UiCommands.SpeakCard: return await SpeakCardAsync(kind, Read(payload, ContractsJson.Default.SpeakCardRequest));
+            case UiCommands.SpeechPlay: return PlayBarService(Read(payload, ContractsJson.Default.SpeechPlayRequest).Instance);
+            case UiCommands.SpeechStop: Speech?.Player.Stop(); return Ok();
             case UiCommands.TrayOpen: return TrayOpen(Read(payload, ContractsJson.Default.TrayOpenRequest).Id);
             case UiCommands.TrayExit: platform.Exit(); return Ok();
             default: return new CommandResult(false, "unavailable"); // whitelisted but its module is not built yet
@@ -992,8 +1003,8 @@ public sealed partial class ShellCoordinator
             && CredentialPackages.States(s, package, instance, config.Secrets.Has).All(t => t.Saved && t.Granted);
 
     /// <summary>
-    /// One SetSpeech/SetSpeechB selection with its choices (F07.4). Nothing is ready before F10/F12: native SAPI is
-    /// not built and no speech package is installed, so recording, audio, video and pronunciation stay unavailable.
+    /// One SetSpeech/SetSpeechB selection with its choices (F07.4). The pronunciation selection is ready once its package
+    /// is installed and its credentials are saved and granted (F10); recording, audio and video stay unavailable until F12.
     /// </summary>
     private SpeechSlotView SpeechSlotOf(AppSettings s, SpeechSlot slot)
     {
@@ -1010,7 +1021,7 @@ public sealed partial class ShellCoordinator
         else if (SpeechCatalog.Check(slot, selection) is { } problem) why = problem;
         else if (!package.Installed) why = "not-installed";
         else if (package.Credentials.Count > 0 && !SpeechCredentialsReady(s, package)) why = "missing-credential";
-        else why = "not-built"; // installed (native SAPI) but the capture/playback feature itself comes in F10/F12
+        else if (slot != SpeechSlot.Tts) why = "not-built"; // pronunciation plays since F10.2; recording and transcription come in F12
         return new SpeechSlotView(speechSlotNames[slot], selection.Instance, selection.Model, choices, why is null, why);
     }
 

@@ -168,6 +168,8 @@ public sealed class FakePlatform : IWindowPlatform
     public void ToggleMaximize(WindowKind kind) => Calls.Add($"max:{kind}");
     public void FitHeight(WindowKind kind, int contentHeightDip) => Calls.Add($"fit:{kind}:{contentHeightDip}");
     public void SetPinned(WindowKind kind, bool pinned) => Calls.Add($"pin:{kind}:{pinned}");
+    public List<(WindowKind Kind, PixelRect? Selection, int WidthDip)> Anchors { get; } = [];
+    public void Anchor(WindowKind kind, PixelRect? selection, int widthDip) { Anchors.Add((kind, selection, widthDip)); Calls.Add($"anchor:{kind}"); }
     public void Post(WindowKind kind, string json) => Posted.Enqueue((kind, JsonSerializer.Deserialize(json, ContractsJson.Default.UiEnvelope)!));
     public void Suspend(WindowKind kind) => Calls.Add($"suspend:{kind}");
     public void ReleaseAll() { Calls.Add("release"); sessions.Clear(); }

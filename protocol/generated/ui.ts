@@ -43,6 +43,9 @@ export const UI_COMMANDS = {
   Painted: 'Window.Painted',
   OpenInMain: 'Window.OpenInMain',
   FitContent: 'Window.FitContent',
+  SpeakCard: 'Speech.SpeakCard',
+  SpeechPlay: 'Speech.Play',
+  SpeechStop: 'Speech.Stop',
 } as const;
 
 export type UiCommandName = (typeof UI_COMMANDS)[keyof typeof UI_COMMANDS];
@@ -372,6 +375,17 @@ export interface SettingsView {
   speech?: SpeechView;
 }
 
+export interface SpeakCardRequest {
+  serviceId: string;
+  phonetic?: number;
+}
+
+export interface SpeechBarView {
+  id: number;
+  services: SpeechServiceView[];
+  active: string;
+}
+
 export interface SpeechChoiceView {
   instanceId: string;
   native: boolean;
@@ -390,12 +404,21 @@ export interface SpeechModelView {
   selectable: boolean;
 }
 
+export interface SpeechPlayRequest {
+  instance: string;
+}
+
 export interface SpeechSelectRequest {
   expectedRevision: number;
   expectedFileHash: string;
   slot: string;
   instance: string;
   model: string;
+}
+
+export interface SpeechServiceView {
+  instance: string;
+  default: boolean;
 }
 
 export interface SpeechSlotView {
@@ -405,6 +428,14 @@ export interface SpeechSlotView {
   choices: SpeechChoiceView[];
   ready: boolean;
   reasonKey?: string;
+}
+
+export interface SpeechStateView {
+  generation: number;
+  phase: string;
+  target?: string;
+  error?: ErrorKind;
+  device?: string;
 }
 
 export interface SpeechView {
@@ -466,13 +497,15 @@ export interface UiSnapshot {
   tray?: TrayView;
   capture?: CaptureView;
   errorBar?: ErrorBarView;
+  speech?: SpeechStateView;
+  speechBar?: SpeechBarView;
 }
 
 export interface ValidateProviderRequest {
   serviceId: string;
 }
 
-export type WindowKind = 'Main' | 'Selection' | 'Clipboard' | 'Ocr' | 'Voice' | 'Transcribe' | 'Settings' | 'Error' | 'Tray';
+export type WindowKind = 'Main' | 'Selection' | 'Clipboard' | 'Ocr' | 'Voice' | 'Transcribe' | 'Settings' | 'Error' | 'Tray' | 'Speech';
 
 export interface WindowView {
   kind: WindowKind;

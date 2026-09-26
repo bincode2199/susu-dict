@@ -22,6 +22,11 @@ public enum CaptureTrigger
     Shared,
     /// <summary>"Translate clipboard" (hotkey or tray): reads the text already on the clipboard; never sends Ctrl+C.</summary>
     Clipboard,
+    /// <summary>
+    /// The pronunciation hotkey (PLAN 6.5, F10.2): the same three-level capture as <see cref="Selection"/> (never the
+    /// clipboard fallback, never shared with another chord); the text is spoken, not translated.
+    /// </summary>
+    Pronounce,
 }
 
 public enum CaptureStatus
@@ -76,6 +81,7 @@ public sealed class CaptureCoordinator(ISelectionReader reader, ClipboardBorrowe
         {
             "selectionTranslate" => Chord("selectionTranslate") is { Length: > 0 } chord && chord == Chord("clipboardTranslate") ? CaptureTrigger.Shared : CaptureTrigger.Selection,
             "clipboardTranslate" => CaptureTrigger.Clipboard,
+            "pronounce" => CaptureTrigger.Pronounce,
             _ => null,
         };
     }

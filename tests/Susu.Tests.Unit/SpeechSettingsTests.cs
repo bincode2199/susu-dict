@@ -62,15 +62,15 @@ public class SpeechSettingsTests
     }
 
     [Fact]
-    public void Defaults_pronounce_with_sapi_and_transcribe_with_whisper_but_nothing_is_ready_before_F10_F12()
+    public void Defaults_pronounce_with_sapi_and_transcribe_with_whisper_and_only_pronunciation_is_ready_before_F12()
     {
         using var rig = new Rig();
         var speech = rig.Speech;
         Assert.Equal(("native-sapi", ""), (speech.Tts.Instance, speech.Tts.Model));
         Assert.Equal(("openai-asr", "whisper-1"), (speech.Asr.Instance, speech.Asr.Model));
         Assert.Equal(("openai-asr", "whisper-1"), (speech.VideoAsr.Instance, speech.VideoAsr.Model));
-        Assert.False(speech.Tts.Ready);
-        Assert.Equal("not-built", speech.Tts.ReasonKey);
+        Assert.True(speech.Tts.Ready); // F10.2: native SAPI is installed and needs no credentials
+        Assert.Null(speech.Tts.ReasonKey);
         Assert.Equal("not-installed", speech.Asr.ReasonKey);
         Assert.Equal("not-installed", speech.VideoAsr.ReasonKey);
         // Planned packages are catalog entries only: listed, not installed, never implemented.

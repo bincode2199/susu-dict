@@ -15,6 +15,9 @@ internal sealed class ShellWindow : IMessageTarget
     public const string ClassName = "SuSu.Window";
     private readonly WindowPlatform owner;
 
+    /// <summary>The bars that point at their trigger (DESIGN 9): shown and clicked without activation.</summary>
+    public bool NoActivate => Kind is WindowKind.Error or WindowKind.Speech;
+
     public ShellWindow(WindowPlatform owner, WindowKind kind)
     {
         this.owner = owner;
@@ -22,8 +25,8 @@ internal sealed class ShellWindow : IMessageTarget
         Spec = WindowSpec.For(kind);
         Framed = kind is WindowKind.Main or WindowKind.Settings or WindowKind.Ocr or WindowKind.Transcribe;
         uint style = Framed ? WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CLIPCHILDREN : WS_POPUP | WS_CLIPCHILDREN;
-        // The failure bar never takes focus from the program the user was working in (DESIGN 9, UI03).
-        uint exStyle = Framed ? WS_EX_APPWINDOW : WS_EX_TOOLWINDOW | (kind == WindowKind.Tray ? WS_EX_TOPMOST : 0) | (kind == WindowKind.Error ? WS_EX_TOPMOST | WS_EX_NOACTIVATE : 0);
+        // The failure bar and the pronunciation bar never take focus from the program the user was working in (DESIGN 9, UI03).
+        uint exStyle = Framed ? WS_EX_APPWINDOW : WS_EX_TOOLWINDOW | (kind == WindowKind.Tray ? WS_EX_TOPMOST : 0) | (NoActivate ? WS_EX_TOPMOST | WS_EX_NOACTIVATE : 0);
         Handle = WindowClasses.Create(this, ClassName, exStyle, style, 0, 0, 400, 300);
         int corner = DWMWCP_ROUND;
         DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, corner, sizeof(int));
@@ -102,6 +105,8 @@ internal sealed class ShellWindow : IMessageTarget
             case WM_CLOSE:
                 owner.Request(Kind, WindowRequest.Close);
                 return 0;
+            case WM_MOUSEACTIVATE when NoActivate:
+                return MA_NOACTIVATE; // clicking a bar key keeps the user's window active (F10.2)
             case WM_ACTIVATE:
                 if (LowWord(wParam) != 0) View?.Focus();
                 else if (Kind == WindowKind.Tray && Visible) owner.Request(Kind, WindowRequest.Escape); // menu closes on deactivate

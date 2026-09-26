@@ -5,7 +5,39 @@ namespace Susu.Contracts;
 /// <summary>First message to a page after Ready; later changes arrive as Patch/Event.</summary>
 [TsExport("ui")]
 public sealed record UiSnapshot(WindowView Window, TranslationSnapshot? Translation = null, SettingsView? Settings = null, TrayView? Tray = null,
-    CaptureView? Capture = null, ErrorBarView? ErrorBar = null);
+    CaptureView? Capture = null, ErrorBarView? ErrorBar = null, SpeechStateView? Speech = null, SpeechBarView? SpeechBar = null);
+
+/// <summary>
+/// The one player's state as the pages show it (F10.2). Phase: idle, loading (synthesis or download), playing,
+/// stopped (ended, stopped by the user, or replaced) or error. Target names what the shell asked to play: "bar" (the
+/// pronunciation bar's text), "card:&lt;serviceId&gt;" (a card's read-aloud key) or "card:&lt;serviceId&gt;:&lt;index&gt;"
+/// (a dictionary phonetic key). Error: the service failure; Device: the audio output failure (no-device, device-lost,
+/// unsupported, failed). Never carries text or paths.
+/// </summary>
+[TsExport("ui")]
+public sealed record SpeechStateView(long Generation, string Phase, string? Target = null, ErrorKind? Error = null, string? Device = null);
+
+/// <summary>
+/// The pronunciation bar (DESIGN 9 "发音浮条", PLAN 6.5): one square per usable pronunciation service, the default one
+/// first; Active is the service whose playback the bar started last. The spoken text stays in the host.
+/// </summary>
+[TsExport("ui")]
+public sealed record SpeechBarView(long Id, SpeechServiceView[] Services, string Active);
+
+[TsExport("ui")]
+public sealed record SpeechServiceView(string Instance, bool Default);
+
+/// <summary>
+/// Speech.SpeakCard: read a shown card aloud. Without Phonetic the card's translation is spoken with the default service;
+/// with Phonetic (an index into the entry's phonetics) the dictionary's own audio plays when the entry has it, else the
+/// word is spoken with the default service. Only a result already on screen is used (TTS03).
+/// </summary>
+[TsExport("ui")]
+public sealed record SpeakCardRequest(string ServiceId, int? Phonetic = null);
+
+/// <summary>Speech.Play (pronunciation bar): speak the bar's text again with one of its services.</summary>
+[TsExport("ui")]
+public sealed record SpeechPlayRequest(string Instance);
 
 /// <summary>
 /// The capture shown in the floating Selection window (F08.3). Origin: "selection" (UIA/IA2/borrow) or "clipboard"

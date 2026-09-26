@@ -127,8 +127,10 @@ internal static class MainMode
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.InputTranslation, FeatureState.Available, null, [Capability.Translate]));
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Selection, FeatureState.Available, null, [Capability.Translate]));
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Clipboard, FeatureState.Available, null, [Capability.Translate]));
+        // F10.2: pronunciation (hotkey, bar, card read-aloud) is available once the selected pronunciation service can run.
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Pronunciation, FeatureState.Available, null, [Capability.Tts]));
         foreach (var id in new[] { FeatureRegistry.Ids.Ocr,
-                     FeatureRegistry.Ids.Voice, FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, FeatureRegistry.Ids.Pronunciation, "update" })
+                     FeatureRegistry.Ids.Voice, FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, "update" })
             features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 
         var usage = new UsageRepository(db, clock);
@@ -149,7 +151,13 @@ internal static class MainMode
             return providers.Count == 0 ? null : new TranslationSession(providers, new TranslationSessionOptions(s.Snapshot(), s.General.DefaultExpandedCards),
                 new InvocationScheduler(SchedulerLimits.Default), clock, new SystemJitter(), usage);
         };
-        Func<Capability, bool> capabilityReady = c => c == Capability.Translate && translation.Providers(config.State.Effective).Count > 0;
+        SpeechBackend? speechPort = null;
+        Func<Capability, bool> capabilityReady = c => c switch
+        {
+            Capability.Translate => translation.Providers(config.State.Effective).Count > 0,
+            Capability.Tts => speechPort is { } port && port.Tts(config.State.Effective, config.State.Effective.Speech.Tts.Instance) is not null,
+            _ => false,
+        };
         // F07.2: dynamic fields load through the package's own options method with the instance's current config and grants.
         OptionsBroker? optionsBroker = translation.Supervisor is not { } supervisor ? null : new OptionsBroker(async (query, cancel) =>
         {
@@ -178,6 +186,7 @@ internal static class MainMode
             (s, instanceId) => instanceId == BuiltInCatalog.NativeTts ? sapi
                 : translation.Supervisor is { } ttsHost ? PluginTtsProviders.Create(s, instanceId, secrets.Has, ttsHost, schemas) : null,
             dictionaryAudio is null ? null : dictionaryAudio.FetchClipAsync);
+        speechPort = speech;
         speech.Player.StateChanged += state => log.Event("tts.player", ("phase", state.Phase.ToString()));
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
             new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector(),

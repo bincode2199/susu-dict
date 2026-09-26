@@ -5,7 +5,7 @@ namespace Susu.Contracts;
 
 [TsExport("ui")]
 [JsonConverter(typeof(JsonStringEnumConverter<WindowKind>))]
-public enum WindowKind { Main, Selection, Clipboard, Ocr, Voice, Transcribe, Settings, Error, Tray }
+public enum WindowKind { Main, Selection, Clipboard, Ocr, Voice, Transcribe, Settings, Error, Tray, Speech }
 
 [TsExport("ui")]
 [JsonConverter(typeof(JsonStringEnumConverter<UiMessageKind>))]
@@ -95,7 +95,8 @@ public static class UiCommands
         PickMedia = "Transcription.PickMedia", StartTranscription = "Transcription.Start", PauseTranscription = "Transcription.Pause",
         ChangeTranslator = "Transcription.ChangeTranslator", Export = "Transcription.Export",
         Collect = "Vocab.Collect", Speak = "Vocab.Speak", TrayOpen = "Tray.Open", TrayExit = "Tray.Exit", OpenSettings = "Window.OpenSettings", Painted = "Window.Painted",
-        OpenInMain = "Window.OpenInMain", FitContent = "Window.FitContent";
+        OpenInMain = "Window.OpenInMain", FitContent = "Window.FitContent",
+        SpeakCard = "Speech.SpeakCard", SpeechPlay = "Speech.Play", SpeechStop = "Speech.Stop";
 
     private static readonly WindowKind[] resultWindows = [WindowKind.Main, WindowKind.Selection, WindowKind.Clipboard, WindowKind.Ocr, WindowKind.Voice];
     private static readonly WindowKind[] allWindows = Enum.GetValues<WindowKind>();
@@ -123,6 +124,8 @@ public static class UiCommands
         [FitContent] = [WindowKind.Selection, WindowKind.Clipboard, WindowKind.Voice, WindowKind.Error],
         // Local timing signal only (ARCHITECTURE 11 UiReady/first frame): no payload, never leaves the machine.
         [Painted] = allWindows,
+        // F10.2: card read-aloud keys in result windows; the pronunciation bar replays with one of its services; both can stop.
+        [SpeakCard] = resultWindows, [SpeechPlay] = [WindowKind.Speech], [SpeechStop] = [.. resultWindows, WindowKind.Speech],
     };
 
     public static IReadOnlyCollection<string> All => allowed.Keys;

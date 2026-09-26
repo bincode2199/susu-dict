@@ -25,6 +25,7 @@ public sealed record WindowSpec(WindowKind Kind, int WidthDip, int HeightDip, bo
         WindowKind.Transcribe => new(kind, 760, 580, true, "transcribe", false, true, true),
         WindowKind.Settings => new(kind, 900, 700, false, "settings", false, true, true),
         WindowKind.Tray => new(kind, 236, 360, false, "tray", true, false, true),
+        WindowKind.Speech => new(kind, SpeechBarWidthDip(1), 34, false, "speech", false, false, false),
         _ => new(kind, 460, 34, false, "error", true, false, false),
     };
 
@@ -32,6 +33,12 @@ public sealed record WindowSpec(WindowKind Kind, int WidthDip, int HeightDip, bo
     public const int FloatMarginDip = 32;
     /// <summary>Title bar height used to decide whether a remembered position is still reachable.</summary>
     public const int TitleBarDip = 40;
+
+    /// <summary>
+    /// Width of the pronunciation bar (DESIGN 9 "发音浮条") with <paramref name="services"/> squares: 5 DIP padding each
+    /// side, the 26 DIP status key, a 1 DIP divider with 4 DIP on each side, then 26 DIP squares 4 DIP apart.
+    /// </summary>
+    public static int SpeechBarWidthDip(int services) => 5 + 26 + 9 + Math.Max(1, services) * 30 - 4 + 5;
 }
 
 public static class Dip
@@ -99,6 +106,39 @@ public static class PlacementPolicy
         int gap = Dip.ToPixels(PointerGapDip, screen.Dpi);
         int x = pointer.X + gap / 2, y = pointer.Y + gap;
         if (y + height > work.Bottom) y = pointer.Y - gap / 2 - height;
+        x = Math.Clamp(x, work.X, work.Right - width);
+        y = Math.Clamp(y, work.Y, work.Bottom - height);
+        return new PixelRect(x, y, width, height);
+    }
+
+    /// <summary>Gap between the selected text and the pronunciation bar, in DIPs.</summary>
+    public const int SelectionGapDip = 6;
+
+    /// <summary>
+    /// The pronunciation bar (PLAN 6.5, DESIGN 9: it "贴选中文本"): placed from the UIA <c>BoundingRectangle</c> of the
+    /// selection when there is one, else from the pointer (<see cref="NearPointer"/>). With a selection it is sized
+    /// with the DPI of the monitor whose work area holds the selection's bottom-left corner (else its center), left-aligned
+    /// with the selection just below its bottom edge, flipped above the selection when it would run off the bottom, then
+    /// clamped inside that work area. A selection outside every work area falls back to the pointer. Width comes from
+    /// <paramref name="widthDip"/> (one square per service).
+    /// </summary>
+    public static PixelRect NearSelection(WindowSpec spec, IReadOnlyList<MonitorInfo> monitors, MonitorInfo fallback, PixelRect? selection, (int X, int Y) pointer, int widthDip)
+    {
+        var sized = spec with { WidthDip = widthDip };
+        if (selection is not { Width: > 0, Height: > 0 } s) return NearPointer(sized, monitors, fallback, pointer);
+        MonitorInfo? target = null;
+        foreach (var monitor in monitors)
+            if (monitor.WorkArea.Contains(s.X, s.Bottom - 1)) { target = monitor; break; }
+        if (target is null)
+            foreach (var monitor in monitors)
+                if (monitor.WorkArea.Contains(s.X + s.Width / 2, s.Y + s.Height / 2)) { target = monitor; break; }
+        if (target is null) return NearPointer(sized, monitors, fallback, pointer);
+        var work = target.WorkArea;
+        int width = Math.Min(Dip.ToPixels(widthDip, target.Dpi), work.Width);
+        int height = Math.Min(Dip.ToPixels(spec.HeightDip, target.Dpi), work.Height);
+        int gap = Dip.ToPixels(SelectionGapDip, target.Dpi);
+        int x = s.X, y = s.Bottom + gap;
+        if (y + height > work.Bottom) y = s.Y - gap - height;
         x = Math.Clamp(x, work.X, work.Right - width);
         y = Math.Clamp(y, work.Y, work.Bottom - height);
         return new PixelRect(x, y, width, height);

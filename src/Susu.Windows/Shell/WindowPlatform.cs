@@ -27,6 +27,7 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
     private readonly Func<string> uiLanguage;
     private readonly Dictionary<WindowKind, ShellWindow> windows = [];
     private readonly Dictionary<int, string> hotkeyIds = [];
+    private readonly Dictionary<WindowKind, (PixelRect? Selection, int WidthDip)> anchors = [];
     private WebViewEnvironment? environment;
     private int nextHotkey = 1;
 
@@ -104,6 +105,12 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
     public void SetPinned(WindowKind kind, bool pinned)
     {
         if (windows.TryGetValue(kind, out var window)) SetWindowPos(window.Handle, pinned ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    public void Anchor(WindowKind kind, PixelRect? selection, int widthDip)
+    {
+        anchors[kind] = (selection, widthDip);
+        if (windows.TryGetValue(kind, out var window) && window.Visible) window.Place(Placement(window));
     }
 
     public void Post(WindowKind kind, string json)
@@ -229,6 +236,11 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
             return new PixelRect(Math.Clamp(cursor.X - width, work.X, work.Right - width), Math.Clamp(cursor.Y - height, work.Y, work.Bottom - height), width, height);
         }
         if (window.Kind == WindowKind.Error) return PlacementPolicy.NearPointer(window.Spec, monitors, cursorMonitor, (cursor.X, cursor.Y));
+        if (window.Kind == WindowKind.Speech)
+        {
+            var anchor = anchors.TryGetValue(WindowKind.Speech, out var a) ? a : (null, window.Spec.WidthDip);
+            return PlacementPolicy.NearSelection(window.Spec, monitors, cursorMonitor, anchor.Selection, (cursor.X, cursor.Y), anchor.WidthDip);
+        }
         (int, int)? remembered = null;
         if (window.Spec.RemembersPosition)
         {

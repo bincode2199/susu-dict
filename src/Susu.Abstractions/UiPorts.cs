@@ -23,6 +23,11 @@ public interface IWindowPlatform
     /// <summary>Auto-height windows (floats, failure bar): resize to the page's content height (PlacementPolicy.FitHeight).</summary>
     void FitHeight(WindowKind kind, int contentHeightDip);
     void SetPinned(WindowKind kind, bool pinned);
+    /// <summary>
+    /// The pronunciation bar's anchor (PLAN 6.5): the selection's bounds in physical pixels (null: none, use the pointer)
+    /// and the bar width in DIPs. Used when the window is next placed; a visible window moves at once.
+    /// </summary>
+    void Anchor(WindowKind kind, PixelRect? selection, int widthDip);
     /// <summary>Posts one UI envelope (JSON) to the page of a window.</summary>
     void Post(WindowKind kind, string json);
     /// <summary>Hidden WebViews: suspend script and release memory while warm.</summary>
