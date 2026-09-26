@@ -16,5 +16,6 @@ What has been delivered and verified. [PROGRESS](PROGRESS.md) is the one-page cu
 | [F06](F06/F06.md) | Input translation (first product loop) |
 | [F07](F07/F07.md) | Service settings and prompts |
 | [F08](F08/F08.md) | Selection and clipboard translation |
+| [F09](F09/F09.md) | Dictionary card |
 
 New records are created from [MODULE-TEMPLATE](../development/MODULE-TEMPLATE.md).
