@@ -33,7 +33,12 @@ Environment notes for building and running (PowerShell setup, non-interactive RD
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
 3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24)** at the product owner's request, to be resumed manually. A master agent coordinates, writes the docs and watches the usage limits; a fresh coding agent handles each sub-item and an independent testing agent verifies each module. Modules run one at a time.
 4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window because one sub-agent ran 370 turns in a single uncompacted context. The rules that prevent a repeat are in [CLAUDE.md](../../CLAUDE.md).
-5. **Active (2026-09-26):** F06–F10 are pending integration acceptance. G2 (F07–F10) is reached below the window. **Next action:** start F11 (OCR). Read DEV-PLAN § F11 and TEST-PLAN OCR01–OCR03, B01, B05–B08, UI01 and DATA08. Write the plan in `docs/evidence/F11/F11.md`, then run a fresh coding agent for F11.1: multi-monitor capture overlay with screenshot coordinates, Esc to cancel, hide/restore windows, and an optional screenshot copy with retention cleanup. Capture uses GDI BitBlt, per the F00 decision.
+5. **Active (2026-09-26, paused at 91 % of the 5-hour window; resets 17:00 UTC; weekly 59 %):** F06–F10 are pending integration acceptance. F11.1–F11.3 are done (1226 tests, 3 skip; UI 133). **Next action:** run the F11 testing agent. It covers:
+   - OCR01–OCR03, B01, B05–B08, UI01 and DATA08;
+   - `susu-plugin check/test` on tencent-ocr and simple-latex;
+   - the real GDI capture, if the desktop is interactive.
+   
+   Then close F11 and start F12 (ASR and microphone).
 6. **Input needed from the product owner (not blocking the next module):** an attended interactive desktop with a foreground window. The desktop was interactive for a few minutes on 2026-09-26 (09:36–09:43), long enough to pass the F08 SEL01 matrix, the SendInput tests and the Notepad end-to-end run. Still waiting for the next interactive window, in this order (helper `tools/interactive.ps1`):
    - the F11 real GDI capture;
    - the F06 G1 walk-through;
