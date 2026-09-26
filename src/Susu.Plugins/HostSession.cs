@@ -173,13 +173,19 @@ public sealed class HostSession : IHostSessionHandle
     /// <param name="onChunk">Streaming capabilities only (F06.2a P-A01 OpenAI): called with each piece the
     /// plugin pushes via ctx.$emit while this call is still in flight (fire-and-forget - never awaited
     /// before the plugin's own $http.stream.read continues). Omitted for non-streaming capabilities.</param>
-    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null, string? instanceId = null, string? signer = null, Func<string, ValueTask>? onChunk = null)
+    /// <param name="adoptResultFiles">F10.1 result takeover (B07): when the call completes, the host takes a reference
+    /// on every response file this call produced whose id appears in the result, before the call's grant (and with it
+    /// every other response file of the call) is released. The caller collects them with <see cref="TakeAdoptedFiles"/>,
+    /// or gives up on the call with <see cref="Abandon"/>; either way nothing leaks.</param>
+    public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null, string? instanceId = null, string? signer = null, Func<string, ValueTask>? onChunk = null,
+        bool adoptResultFiles = false)
     {
         int callId = Interlocked.Increment(ref nextCall);
         string requestId = $"r{callId}-{Guid.NewGuid():N}";
         var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles, instanceId: instanceId, signer: signer);
         var waiter = calls[requestId] = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         callGrants[requestId] = grant.Grant;
+        if (adoptResultFiles) lock (adoptGate) adoptPending.Add(requestId);
         if (onChunk is not null) chunkHandlers[requestId] = onChunk;
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Invoke, requestId, jobId, PluginId: pluginId, Grant: grant.Grant,
             Payload: Json(new InvokePayload(callId, capability, Element(requestJson), Element(configJson)))));
@@ -193,6 +199,50 @@ public sealed class HostSession : IHostSessionHandle
         // the background just because the plugin-visible promise already rejected (F05.2).
         if (callGrants.TryGetValue(requestId, out var grant)) Broker.CancelCall(grant);
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Cancel, requestId, jobId, PluginId: pluginId, Payload: Json(new CancelPayload(callId))));
+    }
+
+    private readonly object adoptGate = new();
+    private readonly HashSet<string> adoptPending = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<Susu.Storage.FileLease>> adopted = new(StringComparer.Ordinal);
+
+    /// <summary>The response files adopted from a completed call's result (see <c>adoptResultFiles</c>); the caller now owns
+    /// one reference on each and must release it through <see cref="Broker.Leases"/>. Empty when none, or taken already.</summary>
+    public IReadOnlyList<Susu.Storage.FileLease> TakeAdoptedFiles(string requestId)
+    {
+        lock (adoptGate)
+        {
+            adoptPending.Remove(requestId);
+            return adopted.Remove(requestId, out var files) ? files : [];
+        }
+    }
+
+    /// <summary>The caller no longer wants the call's result (timeout, cancel): nothing will be adopted, and anything
+    /// already adopted is released (B07: a cancelled call leaves no file behind).</summary>
+    public void Abandon(string requestId)
+    {
+        foreach (var lease in TakeAdoptedFiles(requestId)) Broker.Leases?.Release(lease);
+    }
+
+    private void AdoptResultFiles(IpcEnvelope envelope, string grant)
+    {
+        string requestId = envelope.RequestId!;
+        lock (adoptGate) if (!adoptPending.Remove(requestId)) return;
+        var ids = new List<string>();
+        if (envelope.Type == IpcMessageType.Completed && envelope.Payload is { ValueKind: JsonValueKind.Object } payload
+            && payload.TryGetProperty("result", out var result)) CollectStrings(result, ids, 0);
+        var files = ids.Count == 0 ? [] : Broker.Adopt(grant, ids);
+        if (files.Count > 0) lock (adoptGate) adopted[requestId] = files;
+    }
+
+    private static void CollectStrings(JsonElement element, List<string> into, int depth)
+    {
+        if (depth > 8 || into.Count > 64) return;
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String: into.Add(element.GetString()!); break;
+            case JsonValueKind.Object: foreach (var p in element.EnumerateObject()) CollectStrings(p.Value, into, depth + 1); break;
+            case JsonValueKind.Array: foreach (var item in element.EnumerateArray()) CollectStrings(item, into, depth + 1); break;
+        }
     }
 
     private static int ReadApiId(IpcEnvelope envelope)
@@ -224,7 +274,11 @@ public sealed class HostSession : IHostSessionHandle
                     case IpcMessageType.Completed or IpcMessageType.Failed:
                         if (envelope.RequestId is not null && calls.TryRemove(envelope.RequestId, out var waiter))
                         {
-                            if (callGrants.TryRemove(envelope.RequestId, out var grant)) Broker.Revoke(grant); // revoke immediately at termination
+                            if (callGrants.TryRemove(envelope.RequestId, out var grant))
+                            {
+                                AdoptResultFiles(envelope, grant); // result takeover comes before the call's leases go (B07)
+                                Broker.Revoke(grant); // revoke immediately at termination
+                            }
                             chunkHandlers.TryRemove(envelope.RequestId, out _);
                             waiter.TrySetResult(envelope);
                         }
@@ -242,6 +296,9 @@ public sealed class HostSession : IHostSessionHandle
             }
         }
         catch (Exception error) { ReaderError = $"{error.GetType().Name}: {error.Message}"; }
+        // Plugin exit (B07): every call still open loses its grant, which stops its I/O and deletes its response files.
+        foreach (var requestId in callGrants.Keys) if (callGrants.TryRemove(requestId, out var orphan)) Broker.Revoke(orphan);
+        lock (adoptGate) adoptPending.Clear();
         foreach (var waiter in calls.Values) waiter.TrySetException(new IOException("Plugin host disconnected."));
         Disconnected?.Invoke();
     }

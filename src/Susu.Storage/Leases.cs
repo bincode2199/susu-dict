@@ -109,3 +109,26 @@ public sealed class FileLeases : IDisposable
         try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 }
+
+/// <summary>
+/// One owner's reference on a leased audio file (F10.1): <see cref="Dispose"/> releases it exactly once, so the file
+/// goes when the last owner (player, cache) lets go (ARCHITECTURE 8.4).
+/// </summary>
+public sealed class LeasedAudioClip(FileLeases leases, FileLease lease, string mime) : Susu.Abstractions.IAudioClip
+{
+    private int disposed;
+
+    public FileLease Lease { get; } = lease;
+    public string Mime { get; } = mime;
+    public string FilePath => leases.PathOf(Lease);
+    public long Bytes { get { try { return new FileInfo(FilePath).Length; } catch (Exception e) when (e is IOException or ObjectDisposedException) { return 0; } } }
+    public bool Released => Volatile.Read(ref disposed) != 0;
+
+    public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) == 0) leases.Release(Lease); }
+}
+
+/// <summary>Empty leased files for host-produced audio (SAPI synthesis).</summary>
+public sealed class LeasedAudioFiles(FileLeases leases, string purpose = "tts") : Susu.Abstractions.IAudioFileFactory
+{
+    public Susu.Abstractions.IAudioClip Create(string mime, string extension) => new LeasedAudioClip(leases, leases.Create(purpose, extension), mime);
+}

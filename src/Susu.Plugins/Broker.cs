@@ -146,6 +146,41 @@ public sealed class Broker : IDisposable
         return info;
     }
 
+    /// <summary>The lease store response files are written to (host code only; never exposed to plugins or UI).</summary>
+    public FileLeases? Leases => leases;
+
+    /// <summary>
+    /// Result takeover (B07, PLAN 4.5.1 "结果接管先于调用租约释放"): every file a $http response produced under
+    /// <paramref name="grant"/> is owned by that call and released when the call's grant is revoked. Before that
+    /// happens, the host takes an extra reference on the ids named in the call's result, so the audio the plugin
+    /// returned outlives the call while every other response file of the call is still deleted. Ids that were not
+    /// produced under this grant are ignored (a plugin cannot adopt another call's file).
+    /// </summary>
+    public IReadOnlyList<FileLease> Adopt(string grant, IEnumerable<string> ids)
+    {
+        if (leases is null) return [];
+        var adopted = new List<FileLease>();
+        lock (responseLeases)
+        {
+            if (!responseLeases.TryGetValue(grant, out var owned)) return [];
+            foreach (string id in ids.Distinct(StringComparer.Ordinal))
+                if (owned.FirstOrDefault(l => l.Id == id) is { } lease && leases.AddReference(id) is { } reference) adopted.Add(reference);
+        }
+        return adopted;
+    }
+
+    /// <summary>Response files currently owned by live calls (diagnostics/tests, B07).</summary>
+    public int ActiveResponseFiles { get { lock (responseLeases) return responseLeases.Values.Sum(l => l.Count); } }
+
+    private readonly Dictionary<string, List<FileLease>> responseLeases = new(StringComparer.Ordinal);
+
+    private void ReleaseResponseFiles(string grant)
+    {
+        List<FileLease>? owned;
+        lock (responseLeases) responseLeases.Remove(grant, out owned);
+        if (owned is not null && leases is not null) foreach (var lease in owned) leases.Release(lease);
+    }
+
     public void Revoke(string grant)
     {
         List<(string Id, StreamState State)>? toClose = null;
@@ -160,6 +195,7 @@ public sealed class Broker : IDisposable
         // StreamWindow credit it still holds rather than leaking it until process exit.
         if (toClose is not null) foreach (var (id, state) in toClose) { state.Cts.Cancel(); streamWindow.Reset(id); }
         CancelCall(grant); // any plain (non-stream) $http still in flight for this call is aborted too
+        ReleaseResponseFiles(grant); // B07: the call's response files go with its grant unless the host adopted them first
     }
 
     /// <summary>Aborts the upstream HTTP request(s) currently in flight for one capability call, so a
@@ -270,7 +306,7 @@ public sealed class Broker : IDisposable
                 // any other transformation of the value is out of scope, PLAN says so explicitly).
                 BrokerSuccess success when CredentialLeakScanner.ContainsKnownForm(success.Response, resolvedSecrets)
                     => Deny(call.ApiId, "response echoed a known credential form", "bad_response"),
-                BrokerSuccess success => Allow(call.ApiId, BuildResultJson(success.Response)),
+                BrokerSuccess success => Allow(call.ApiId, BuildResultJson(grant, success.Response)),
                 BrokerFailure failure => Deny(call.ApiId, failure.Detail, failure.Kind),
                 _ => Deny(call.ApiId, "unknown broker outcome"),
             };
@@ -421,30 +457,39 @@ public sealed class Broker : IDisposable
     /// <summary>Turns a completed response into the plugin-visible <c>$http</c> result shape (PLAN 4.5).
     /// Every extracted/raw binary is written into a fresh <see cref="FileLease"/> here, never inlined as
     /// bytes into the JSON that crosses IPC to the plugin (PLAN "大二进制永不进 JS").</summary>
-    private string BuildResultJson(BrokerHttpResponse response)
+    private string BuildResultJson(GrantInfo grant, BrokerHttpResponse response)
     {
         var result = new JsonObject { ["status"] = response.Status, ["headers"] = HeadersNode(response.Headers) };
         if (response.Truncated) result["truncated"] = true;
         if (response.RedirectUrl is not null) result["redirectUrl"] = response.RedirectUrl;
         if (response.RawFile is not null)
-            result["body"] = FileHandleNode(response.RawFile, response.RawFileMime ?? "application/octet-stream");
+            result["body"] = FileHandleNode(grant, response.RawFile, response.RawFileMime ?? "application/octet-stream");
         else if (response.JsonBody is not null) result["body"] = response.JsonBody.DeepClone();
         else if (response.TextBody is not null) result["body"] = response.TextBody;
         else result["body"] = null;
         if (response.Files.Count > 0)
         {
             var files = new JsonObject();
-            foreach (var file in response.Files) files[file.Name] = FileHandleNode(file.Bytes, file.Mime);
+            foreach (var file in response.Files) files[file.Name] = FileHandleNode(grant, file.Bytes, file.Mime);
             result["files"] = files;
         }
         return result.ToJsonString();
     }
 
-    private JsonObject FileHandleNode(byte[] bytes, string mime)
+    private JsonObject FileHandleNode(GrantInfo grant, byte[] bytes, string mime)
     {
         if (leases is null) throw new BrokerDenyException("no file lease store is configured for this host");
         var lease = leases.Create("http-response", ExtensionFor(mime));
-        File.WriteAllBytes(leases.PathOf(lease), bytes);
+        try { File.WriteAllBytes(leases.PathOf(lease), bytes); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { leases.Release(lease); throw new BrokerDenyException("could not store the response file"); }
+        bool live;
+        lock (responseLeases)
+        {
+            lock (grants) live = !grant.Revoked;
+            if (live) (responseLeases.TryGetValue(grant.Grant, out var owned) ? owned : responseLeases[grant.Grant] = []).Add(lease);
+        }
+        // The call ended (cancel/plugin exit) while the response was downloading: its partial result is deleted at once (B07).
+        if (!live) { leases.Release(lease); throw new BrokerDenyException("call already ended", "cancelled"); }
         return new JsonObject { ["id"] = lease.Id, ["mime"] = mime, ["bytes"] = bytes.LongLength };
     }
 
