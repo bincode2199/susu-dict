@@ -13,6 +13,7 @@ import ServiceDetails from '../components/ServiceDetails.vue';
 import HotkeyField from '../components/HotkeyField.vue';
 import PromptSettings from '../components/PromptSettings.vue';
 import SpeechSettings from '../components/SpeechSettings.vue';
+import OcrSettings from '../components/OcrSettings.vue';
 import { t, serviceName } from '../locales/i18n';
 
 // Settings 900×700 (DESIGN 9): centered each time, 190 px navigation, content padding 20/26. F03 provides the
@@ -147,7 +148,9 @@ const hotkeyError = (action: string): string | null => {
   return null;
 };
 const hotkeyNote = (action: string): string | undefined => {
-  if (hotkeyView(action)?.state === 'unavailable') return t('hotkeys.state.unavailable');
+  const saved = hotkeyView(action);
+  // A feature waiting for a service says which one (e.g. OCR without a usable OCR service); one not built yet says so.
+  if (saved?.state === 'unavailable') return saved.reasonKey && saved.reasonKey !== 'feature.inDevelopment' ? t(saved.reasonKey) : t('hotkeys.state.unavailable');
   const key = `hotkeys.note.${action}`;
   const note = t(key);
   return note === key ? undefined : note;
@@ -167,6 +170,7 @@ async function testNetwork(): Promise<void> {
   } finally { networkTesting.value = false; }
 }
 const testedAt = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
+const ocrSettings = ref<InstanceType<typeof OcrSettings> | null>(null);
 const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; draft.general.sourceLanguage = targetLanguage; draft.general.targetLanguage = sourceLanguage; };
 </script>
 
@@ -314,9 +318,17 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
         <SpeechSettings v-if="page === 'speech' && view.speech" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
         <section v-if="!['general', 'hotkeys', 'network', 'prompt'].includes(page)" class="group">
           <h2>{{ t(`services.${page}`) }}</h2>
-          <p class="hint-text">{{ t('services.credentialNote') }}</p>
+          <p class="hint-text">{{ page === 'ocr' ? t('ocr.settings.hint') : t('services.credentialNote') }}</p>
+          <!-- F11.3 SetOcr: whether the OCR entry points are usable, and why not (the same reason the tray and SetHotkeys show). -->
+          <p v-if="page === 'ocr' && view.ocr" class="ocr-status small" :class="view.ocr.ready ? 'hint-text' : 'error-text'" role="status" data-ocr-status>
+            {{ view.ocr.ready ? t('ocr.settings.ready') : t('ocr.settings.notReady', { reason: t(view.ocr.reasonKey ?? 'feature.noService.ocr') }) }}
+          </p>
           <div v-for="service in listedOnPage" :key="service.serviceId" class="service">
             <SettingRow :title="serviceTitle(service)" :hint="serviceHint(service)">
+              <template v-if="page === 'ocr' && view.ocr">
+                <span v-if="view.ocr.service === service.instanceId" class="tag" data-ocr-default>{{ t('ocr.settings.default') }}</span>
+                <button v-else type="button" class="link-btn" :data-ocr-make-default="service.instanceId" @click="ocrSettings?.save({ service: service.instanceId })">{{ t('ocr.settings.useDefault') }}</button>
+              </template>
               <template v-if="orderable(service)">
                 <button type="button" class="icon-btn" :disabled="pageIndex(service) === 0" :aria-label="t('services.moveUp', { name: serviceName(service.instanceId) })" @click="move(service, -1)"><Icon name="chevronUp" /></button>
                 <button type="button" class="icon-btn" :disabled="pageIndex(service) === orderedOnPage.length - 1" :aria-label="t('services.moveDown', { name: serviceName(service.instanceId) })" @click="move(service, 1)"><Icon name="chevronDown" /></button>
@@ -331,6 +343,7 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
               @settings="(next) => (state.settings = next)" @error="message = { kind: 'error', text: t('save.failed') }" />
           </div>
         </section>
+        <OcrSettings v-if="page === 'ocr' && view.ocr" ref="ocrSettings" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
 
         <ul v-if="issues.length" class="issues error-text">
           <li v-for="issue in issues" :key="issue.path + issue.code">{{ issue.path }}: {{ issue.message }}</li>
@@ -371,6 +384,8 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
 .paths .origin { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .paths .result { margin-left: auto; font-size: 11px; }
 .small { font-size: 11px; }
+.ocr-status { margin: 4px 0 2px; }
+.link-btn { border: none; background: transparent; padding: 0; font-size: 11px; color: var(--accent); cursor: pointer; }
 .issues { font-size: 11px; padding-left: 18px; }
 .savebar { height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 20px; border-top: 1px solid var(--line); font-size: 11px; }
 .spacer { flex: 1; }

@@ -14,6 +14,8 @@ const roots: Partial<Record<WindowKind, ReturnType<typeof defineAsyncComponent>>
   Selection: defineAsyncComponent(() => import('./windows/SelectionWindow.vue')),
   Clipboard: defineAsyncComponent(() => import('./windows/SelectionWindow.vue')),
   Error: defineAsyncComponent(() => import('./windows/ErrorBar.vue')),
+  // F11.3: the OCR result window (DESIGN 9 "结果窗", Ocr artboard).
+  Ocr: defineAsyncComponent(() => import('./windows/OcrWindow.vue')),
   // F10.2: the pronunciation bar next to the selection (DESIGN 9).
   Speech: defineAsyncComponent(() => import('./windows/SpeechBar.vue')),
 };

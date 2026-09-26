@@ -100,7 +100,7 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
       { action: 'inputTranslate', chord: 'Alt+A', state: 'ok' },
       { action: 'selectionTranslate', chord: 'Alt+D', state: 'unavailable', reasonKey: 'feature.inDevelopment' },
       { action: 'clipboardTranslate', chord: 'Alt+D', state: 'unavailable', reasonKey: 'feature.inDevelopment' },
-      { action: 'ocrTranslate', chord: 'Alt+S', state: 'unavailable', reasonKey: 'feature.inDevelopment' },
+      { action: 'ocrTranslate', chord: 'Alt+S', state: 'unavailable', reasonKey: 'feature.noService.ocr' },
       { action: 'voiceTranslate', chord: 'Alt+V', state: 'unavailable', reasonKey: 'feature.inDevelopment' },
       { action: 'audioTranslate', chord: 'Alt+B', state: 'failed' },
       { action: 'videoTranscribe', chord: '', state: 'unassigned' },
@@ -148,6 +148,12 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     });
     return inserted ? out : `${out}\n\n${text}`;
   };
+  // F11.3 fixture: SetOcr fields and a recognized OCR window (dev preview only; nothing is captured or sent).
+  const ocrSettings = { service: 'tencent-ocr', autoTranslate: true, keepScreenshots: false, retentionDays: 7 };
+  const ocrView = {
+    id: 1, phase: 'recognized', serviceId: 'tencent-ocr', text: 'Rendering is the art of failing better.\nE = mc^2', blocks: [{ text: 'Rendering is the art of failing better.', kind: 'text' }, { text: 'E = mc^2', kind: 'formula' }],
+    width: 832, height: 264, translated: true, autoTranslate: true, hotkey: 'Alt+S', elapsedMs: 800,
+  };
   const project = (): SettingsView => {
     settings.services = [
       service('mymemory/translate', []), service('deepl/translate', ['apiKey']), service('tencent-translate/translate', ['secretId', 'secretKey']), service('openai/translate', ['apiKey']),
@@ -156,6 +162,9 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
       id, label: id, secrets: (targets(id) ?? []).map((c) => ({ name: c.secret, saved: c.saved })), usedBy: [id],
     }));
     settings.speech = { tts: speechSlot('tts'), asr: speechSlot('asr'), videoAsr: speechSlot('videoAsr') };
+    settings.services.push(...(['tencent-ocr/ocr', 'simple-latex/ocr'] as const).map((id, i) => ({ ...service(id, i === 0 ? ['secretId', 'secretKey'] : ['apiKey']), capability: 'ocr', page: 'ocr', enabled: i === 0, availability: i === 0 ? 'MissingCredential' : 'Disabled', order: -1 })));
+    settings.ocr = { ...ocrSettings, minRetentionDays: 1, maxRetentionDays: 365, hotkey: 'Alt+S', ready: false, reasonKey: 'feature.noService.ocr',
+      choices: ['tencent-ocr', 'simple-latex'].map((id) => ({ instanceId: id, serviceId: `${id}/ocr`, enabled: id === 'tencent-ocr', availability: id === 'tencent-ocr' ? 'MissingCredential' : 'Disabled', usable: false })) };
     return structuredClone(settings);
   };
 
@@ -168,7 +177,8 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         kind: 'Snapshot',
         payload: {
           window: { kind, uiLanguage: language, theme: 'light', maximized: false, pinned: false, devPreview: true, features: ['input-translation'] },
-          translation: kind === 'Main' ? translation : undefined,
+          translation: kind === 'Main' || kind === 'Ocr' ? translation : undefined,
+          ocr: kind === 'Ocr' ? ocrView : undefined,
           settings: kind === 'Settings' ? project() : undefined,
           tray: kind === 'Tray' ? { items: ['input-translation', 'clipboard', 'ocr', 'voice', 'system-audio', 'transcription', 'settings', 'check-update', 'exit'].map((id, i) => ({ id, chord: ['Alt+A', 'Alt+D', 'Alt+S', 'Alt+V', 'Alt+B'][i] ?? '', enabled: id === 'input-translation' || id === 'settings' || id === 'exit', reasonKey: ['settings', 'exit', 'input-translation'].includes(id) ? undefined : 'feature.inDevelopment', separatorBefore: id === 'settings' })) } : undefined,
         },
@@ -278,6 +288,15 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         settings.revision++;
         settings.prompt = { ...settings.prompt!, level: String(payload?.level), profile: String(payload?.profile), scope: payload?.scope as string[], profiles: payload?.profiles as NonNullable<SettingsView['prompt']>['profiles'] };
         ok(project());
+        return;
+      case 'Settings.SaveOcr': {
+        Object.assign(ocrSettings, { service: String(payload?.service), autoTranslate: !!payload?.autoTranslate, keepScreenshots: !!payload?.keepScreenshots, retentionDays: Number(payload?.retentionDays) });
+        settings.revision++;
+        ok(project());
+        return;
+      }
+      case 'Capture.BeginCapture':
+        ok();
         return;
       case 'Settings.SelectSpeech': {
         const slot = String(payload?.slot);
