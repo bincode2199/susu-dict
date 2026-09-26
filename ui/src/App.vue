@@ -10,6 +10,10 @@ const roots: Partial<Record<WindowKind, ReturnType<typeof defineAsyncComponent>>
   Main: defineAsyncComponent(() => import('./windows/MainWindow.vue')),
   Settings: defineAsyncComponent(() => import('./windows/SettingsWindow.vue')),
   Tray: defineAsyncComponent(() => import('./windows/TrayMenu.vue')),
+  // Selection and clipboard translation share one floating window shell (DESIGN 9).
+  Selection: defineAsyncComponent(() => import('./windows/SelectionWindow.vue')),
+  Clipboard: defineAsyncComponent(() => import('./windows/SelectionWindow.vue')),
+  Error: defineAsyncComponent(() => import('./windows/ErrorBar.vue')),
 };
 
 // Esc: an open popup or a field handling Esc itself (hotkey recorder, select) goes first; otherwise the window

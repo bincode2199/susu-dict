@@ -127,11 +127,30 @@ const serviceTitle = (service: SettingsView['services'][number]) =>
   servicesOnPage.value.filter((s) => s.instanceId === service.instanceId).length > 1 ? `${serviceName(service.instanceId)} · ${t(`capability.${service.capability}`)}` : serviceName(service.instanceId);
 const servicesOnPage = computed(() => (view.value?.services ?? []).filter((s) => s.page === page.value));
 const hotkeyView = (action: string) => view.value?.hotkeys.find((h) => h.action === action);
-const hotkeyConflict = (action: string) => {
+// CFG05: only selection and clipboard translation may share a chord (and only with each other).
+const sharedActions = new Set(['selectionTranslate', 'clipboardTranslate']);
+const hotkeyConflictWith = (action: string): string | null => {
   const chord = draft.hotkeys[action];
-  if (!chord) return false;
-  const shared = new Set(['selectionTranslate', 'clipboardTranslate']);
-  return Object.entries(draft.hotkeys).some(([other, value]) => other !== action && value === chord && !(shared.has(other) && shared.has(action)));
+  if (!chord) return null;
+  const users = Object.entries(draft.hotkeys).filter(([other, value]) => other !== action && value === chord).map(([other]) => other);
+  if (users.length === 0 || (users.length === 1 && sharedActions.has(action) && sharedActions.has(users[0]))) return null;
+  return users.find((other) => !(sharedActions.has(action) && sharedActions.has(other))) ?? users[0];
+};
+// SetHotkeys artboard: an in-app conflict and a RegisterHotKey refusal each add one error line, no dialog. The
+// refusal only applies to the chord that was registered (an edited, unsaved chord has not been tried yet).
+const hotkeyError = (action: string): string | null => {
+  const other = hotkeyConflictWith(action);
+  const chord = draft.hotkeys[action] ?? '';
+  if (other) return t('hotkeys.state.conflictWith', { chord, name: t(`hotkeys.${other}`) });
+  const saved = hotkeyView(action);
+  if (saved?.state === 'failed' && saved.chord === chord) return t('hotkeys.state.failedChord', { chord });
+  return null;
+};
+const hotkeyNote = (action: string): string | undefined => {
+  if (hotkeyView(action)?.state === 'unavailable') return t('hotkeys.state.unavailable');
+  const key = `hotkeys.note.${action}`;
+  const note = t(key);
+  return note === key ? undefined : note;
 };
 // SetNetwork test (F07.3, CFG05): the proxy settings as edited (saved password) against each enabled service's
 // origin, through the host's network broker. One line per path; a failure disables nothing.
@@ -234,14 +253,26 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
           </section>
         </template>
 
-        <section v-else-if="page === 'hotkeys'" class="group">
-          <h2>{{ t('hotkeys.title') }}</h2>
-          <p class="hint-text">{{ t('hotkeys.hint') }}</p>
-          <SettingRow v-for="(chord, action) in draft.hotkeys" :key="action" :title="t(`hotkeys.${action}`)"
-            :hint="hotkeyConflict(String(action)) ? t('hotkeys.state.conflict') : hotkeyView(String(action))?.state === 'failed' ? t('hotkeys.state.failed') : hotkeyView(String(action))?.state === 'unavailable' ? t('hotkeys.state.unavailable') : undefined">
-            <HotkeyField v-model="draft.hotkeys[action]" :label="t(`hotkeys.${action}`)" :invalid="hotkeyConflict(String(action)) || hotkeyView(String(action))?.state === 'failed'" />
-          </SettingRow>
-        </section>
+        <template v-else-if="page === 'hotkeys'">
+          <section class="group">
+            <h2>{{ t('hotkeys.title') }}</h2>
+            <p class="hint-text">{{ t('hotkeys.hint') }}</p>
+            <SettingRow v-for="(chord, action) in draft.hotkeys" :key="action" :title="t(`hotkeys.${action}`)" :hint="hotkeyNote(String(action))">
+              <template #below>
+                <span v-if="sharedActions.has(String(action))" class="tag shared-tag">{{ t('hotkeys.shared') }}</span>
+                <span v-if="hotkeyError(String(action))" class="error-text hotkey-error" role="alert">{{ hotkeyError(String(action)) }}</span>
+              </template>
+              <HotkeyField v-model="draft.hotkeys[action]" :label="t(`hotkeys.${action}`)" :invalid="!!hotkeyError(String(action))" />
+            </SettingRow>
+          </section>
+          <!-- F08.3: the borrow switch sits next to the capture hotkeys too, with the same honest note (C07: the copy lands in Win+V history). -->
+          <section class="group">
+            <h2>{{ t('hotkeys.capture') }}</h2>
+            <SettingRow :title="t('general.allowBorrow')" :hint="t('general.allowBorrowHint')">
+              <Toggle v-model="draft.general.allowClipboardBorrowing" :label="t('general.allowBorrow')" />
+            </SettingRow>
+          </section>
+        </template>
 
         <section v-else-if="page === 'network'" class="group">
           <h2>{{ t('network.proxy') }}</h2>

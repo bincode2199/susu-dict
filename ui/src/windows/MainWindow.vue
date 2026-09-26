@@ -20,10 +20,14 @@ watch(() => props.state.window, focusInput);
 const available = computed(() => props.state.window?.features.includes('input-translation') ?? false);
 const from = ref('en');
 const to = ref('zh-Hans');
+let generation = -1;
 watch(() => props.state.translation, (snapshot) => {
   if (!snapshot) return;
   from.value = snapshot.from || from.value;
   to.value = snapshot.to || to.value;
+  // A new generation started by the host (e.g. the floating window's "open in main window") brings its source text.
+  if (snapshot.generation !== generation && snapshot.sourceText && snapshot.sourceText !== text.value) text.value = snapshot.sourceText;
+  generation = snapshot.generation;
 }, { immediate: true });
 
 function submit(): void {
