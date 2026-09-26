@@ -140,7 +140,10 @@ static JSValue js_host(JSContext *ctx, JSValueConst this_val, int argc, JSValueC
     size_t length = 0;
     const char *text = JS_ToCStringLen(ctx, &length, argv[1]);
     if (!text) return JS_EXCEPTION;
-    if (length > 1024 * 1024) { JS_FreeCString(ctx, text); return JS_ThrowRangeError(ctx, "host message exceeds 1 MiB"); }
+    // A completion (kind 2) may carry up to the 4 MiB reassembled JSON limit; the host splits it into
+    // frames (PLAN 4.5.4 item 4). API calls and logs stay within one 1 MiB frame.
+    size_t limit = kind == 2 ? 4 * 1024 * 1024 : 1024 * 1024;
+    if (length > limit) { JS_FreeCString(ctx, text); return JS_ThrowRangeError(ctx, kind == 2 ? "result exceeds 4 MiB" : "host message exceeds 1 MiB"); }
     if (kind != 1) {
         if (kind == 2 || kind == 3) engine->host(engine->opaque, kind, 0, text, length); // 4 is host-only
         JS_FreeCString(ctx, text);
@@ -242,7 +245,8 @@ static const char *bootstrap =
 "function toError(e){if(e&&typeof e==='object'&&typeof e.kind==='string'&&KINDS.has(e.kind))return {kind:e.kind,detail:e.detail===undefined?undefined:String(e.detail).slice(0,1024),"
 "retryAfterRaw:e.retryAfter===undefined||e.retryAfter===null?undefined:String(e.retryAfter).slice(0,64)};"
 "if(e&&e.kind==='cancelled')return {kind:'cancelled'};return {kind:'bad_response',detail:String(e&&e.message||e).slice(0,1024)};}"
-"function finish(id,message){calls.delete(id);let text;try{text=JSON.stringify(message);}catch(e){text=JSON.stringify({callId:id,ok:false,error:{kind:'bad_response',detail:'result is not JSON'}});}host(2,text);}"
+"function finish(id,message){calls.delete(id);let text;try{text=JSON.stringify(message);}catch(e){text=JSON.stringify({callId:id,ok:false,error:{kind:'bad_response',detail:'result is not JSON'}});}"
+"try{host(2,text);}catch(e){host(2,JSON.stringify({callId:id,ok:false,error:{kind:'bad_response',detail:'result exceeds 4 MiB'}}));}}"
 // $http.stream(req): the host runs the real HTTP/SSE request (http.stream.open), the plugin pulls
 // text pieces one at a time (http.stream.read) - each pull both consumes and acknowledges one piece
 // of host-side StreamWindow credit (Susu.Runtime), so the host never buffers unboundedly ahead of a

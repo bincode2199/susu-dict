@@ -139,7 +139,22 @@ public sealed class HostSession : IHostSessionHandle
         }
     }
 
-    private void Send(IpcEnvelope envelope) => IpcTransport.Write(pipe, envelope with { Sequence = Interlocked.Increment(ref sequence) }, writeGate);
+    // A payload over one frame is split by transferId/index (PLAN 4.5.4 item 4); over 4 MiB it throws
+    // IpcPayloadTooLargeException before anything is written.
+    private void Send(IpcEnvelope envelope) => IpcTransport.WriteFramed(pipe, envelope, writeGate, () => Interlocked.Increment(ref sequence));
+
+    /// <summary>Sends the answer to one ApiCall. Always sends something: a result too large for the IPC
+    /// transfer limit becomes a prompt bad_response denial instead of a silently lost frame (F09 finding:
+    /// the plugin's promise used to wait until the card deadline).</summary>
+    private void SendApiResult(IpcEnvelope call, ApiResultPayload result)
+    {
+        var envelope = new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.ApiResult, call.RequestId, call.JobId, PluginId: call.PluginId, Payload: Json(result));
+        try { Send(envelope); }
+        catch (IpcPayloadTooLargeException)
+        {
+            Send(envelope with { Payload = Json(Broker.Deny(result.ApiId, "response exceeds the 4 MiB transfer limit", "bad_response")) });
+        }
+    }
 
     public LoadedPayload Load(string pluginId, string directory, int memoryMiB = 64, int timeoutMs = 5000)
     {
@@ -180,6 +195,9 @@ public sealed class HostSession : IHostSessionHandle
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Cancel, requestId, jobId, PluginId: pluginId, Payload: Json(new CancelPayload(callId))));
     }
 
+    private static int ReadApiId(IpcEnvelope envelope)
+        => envelope.Payload is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("apiId", out var id) && id.TryGetInt32(out int value) ? value : 0;
+
     private static JsonElement Element(string json) { using var d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
     private static JsonElement Json<T>(T value) => JsonSerializer.SerializeToElement(value, (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)ContractsJson.Default.GetTypeInfo(typeof(T))!);
 
@@ -187,16 +205,20 @@ public sealed class HostSession : IHostSessionHandle
     {
         try
         {
-            while (IpcTransport.Read(pipe) is { } envelope)
+            var reassembler = new IpcReassembler();
+            while (IpcTransport.Read(pipe) is { } frame)
             {
+                if (reassembler.Accept(frame) is not { } envelope) continue; // part of a split payload
                 switch (envelope.Type)
                 {
                     case IpcMessageType.ApiCall:
                         _ = Task.Run(async () =>
                         {
-                            var result = await Broker.HandleAsync(envelope);
-                            try { Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.ApiResult, envelope.RequestId, envelope.JobId, PluginId: envelope.PluginId, Payload: Json(result))); }
-                            catch (IOException) { }
+                            ApiResultPayload result;
+                            try { result = await Broker.HandleAsync(envelope); }
+                            catch (Exception error) { result = Broker.Deny(ReadApiId(envelope), $"host error: {error.GetType().Name}", "bad_response"); }
+                            try { SendApiResult(envelope, result); }
+                            catch (Exception error) when (error is IOException or ObjectDisposedException) { }
                         });
                         break;
                     case IpcMessageType.Completed or IpcMessageType.Failed:

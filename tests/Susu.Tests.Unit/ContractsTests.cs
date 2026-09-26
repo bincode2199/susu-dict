@@ -45,6 +45,60 @@ public class IpcCodecTests
         Assert.Throws<InvalidOperationException>(() => IpcCodec.Encode(new IpcEnvelope(1, IpcMessageType.Shutdown, Payload: JsonSerializer.SerializeToElement(new string('x', ProtocolLimits.MaxFrameBytes)))));
     }
 
+    private static IpcEnvelope BigResult(int chars) => new(1, IpcMessageType.ApiResult, "r", "j", PluginId: "p",
+        Payload: JsonSerializer.SerializeToElement(new { apiId = 1, ok = true, value = new { body = new string('a', chars) } }));
+
+    private static List<IpcEnvelope> Frames(IpcEnvelope envelope)
+    {
+        long seq = 0;
+        using var stream = new MemoryStream();
+        IpcTransport.WriteFramed(stream, envelope, new object(), () => ++seq);
+        stream.Position = 0;
+        var frames = new List<IpcEnvelope>();
+        while (IpcTransport.Read(stream) is { } frame) frames.Add(frame);
+        return frames;
+    }
+
+    [Fact] // PLAN 4.5.4 item 4: JSON over one frame is split by transferId/index and reassembled
+    public void Payload_over_one_frame_is_split_and_reassembled()
+    {
+        var envelope = BigResult(2_500_000);
+        var frames = Frames(envelope);
+        Assert.True(frames.Count > 1);
+        Assert.All(frames, f => Assert.NotNull(f.Part));
+        Assert.Equal(Enumerable.Range(1, frames.Count).Select(i => (long)i), frames.Select(f => f.Sequence));
+        var reassembler = new IpcReassembler();
+        IpcEnvelope? whole = null;
+        foreach (var frame in frames) whole = reassembler.Accept(frame) ?? whole;
+        Assert.NotNull(whole);
+        Assert.Null(whole!.Part);
+        Assert.Equal(0, reassembler.Open);
+        Assert.Equal(envelope.Payload!.Value.GetRawText(), whole.Payload!.Value.GetRawText());
+        Assert.Equal(("r", "j", "p", IpcMessageType.ApiResult), (whole.RequestId, whole.JobId, whole.PluginId, whole.Type));
+        // A frame that fits is written unchanged.
+        Assert.Null(Assert.Single(Frames(BigResult(10))).Part);
+    }
+
+    [Fact] // over the 4 MiB reassembled limit nothing is written and the caller gets a typed error
+    public void Payload_over_the_transfer_limit_is_refused_before_writing()
+    {
+        using var stream = new MemoryStream();
+        Assert.Throws<IpcPayloadTooLargeException>(() => IpcTransport.WriteFramed(stream, BigResult(4_300_000), new object(), () => 1));
+        Assert.Equal(0, stream.Length);
+    }
+
+    [Fact] // parts cannot be reordered, re-bound to another request or used to exceed 4 MiB
+    public void Reassembly_rejects_out_of_order_and_rebound_parts()
+    {
+        var frames = Frames(BigResult(2_500_000));
+        Assert.Throws<InvalidDataException>(() => new IpcReassembler().Accept(frames[1]));
+        var reassembler = new IpcReassembler();
+        Assert.Null(reassembler.Accept(frames[0]));
+        Assert.Throws<InvalidDataException>(() => reassembler.Accept(frames[1] with { RequestId = "other" }));
+        var tooMany = frames[0] with { Part = frames[0].Part! with { Count = IpcFraming.MaxParts + 1 } };
+        Assert.Equal(IpcDecodeError.MalformedJson, IpcCodec.TryDecode(IpcCodec.Encode(tooMany).AsSpan(4), out _));
+    }
+
     [Fact]
     public void Encode_prefixes_little_endian_length_and_roundtrips()
     {

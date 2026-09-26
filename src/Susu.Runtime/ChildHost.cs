@@ -64,8 +64,10 @@ public sealed class ChildHost : IRuntimeCallbacks
         engineThread.Start();
         try
         {
-            while (IpcTransport.Read(client) is { } envelope)
+            var reassembler = new IpcReassembler();
+            while (IpcTransport.Read(client) is { } frame)
             {
+                if (reassembler.Accept(frame) is not { } envelope) continue; // part of a split payload
                 if (envelope.Type == IpcMessageType.Shutdown) break;
                 host.Dispatch(envelope);
             }
@@ -89,7 +91,8 @@ public sealed class ChildHost : IRuntimeCallbacks
     private static System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> Resolve<T>()
         => (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)ContractsJson.Default.GetTypeInfo(typeof(T))!;
 
-    private void Send(IpcEnvelope envelope) => IpcTransport.Write(pipe, envelope with { Sequence = Interlocked.Increment(ref sequence) }, writeGate);
+    // Split over one frame, refused over 4 MiB (PLAN 4.5.4 item 4); see IpcTransport.WriteFramed.
+    private void Send(IpcEnvelope envelope) => IpcTransport.WriteFramed(pipe, envelope, writeGate, () => Interlocked.Increment(ref sequence));
 
     private void Dispatch(IpcEnvelope envelope)
     {
@@ -257,8 +260,13 @@ public sealed class ChildHost : IRuntimeCallbacks
             error = new PluginErrorInfo(e.GetProperty("kind").GetString() ?? "bad_response", e.TryGetProperty("detail", out var d) ? d.GetString() : null,
                 e.TryGetProperty("retryAfterRaw", out var ra) ? ra.GetString() : null);
         }
-        Send(new IpcEnvelope(ProtocolVersions.Ipc, ok ? IpcMessageType.Completed : IpcMessageType.Failed, call.RequestId, call.JobId, PluginId: pluginId,
-            Payload: Json(new CompletedPayload(callId, ok, ok ? root.GetProperty("result").Clone() : null, error))));
+        try
+        {
+            Send(new IpcEnvelope(ProtocolVersions.Ipc, ok ? IpcMessageType.Completed : IpcMessageType.Failed, call.RequestId, call.JobId, PluginId: pluginId,
+                Payload: Json(new CompletedPayload(callId, ok, ok ? root.GetProperty("result").Clone() : null, error))));
+        }
+        // A result over the 4 MiB transfer limit fails the call promptly instead of being lost.
+        catch (IpcPayloadTooLargeException) { SendFailed(pluginId, call.RequestId, call.JobId, callId, "bad_response", "result exceeds the 4 MiB transfer limit"); }
     }
 
     void IRuntimeCallbacks.Log(string pluginId, string json)

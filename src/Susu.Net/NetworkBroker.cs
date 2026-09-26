@@ -460,6 +460,10 @@ public sealed class NetworkBroker : IDisposable
 
         if (!ok || request.ResponseType == ResponseKind.Text || (request.ResponseType == ResponseKind.Json && request.ResponseFiles.Count == 0))
         {
+            // A successful text/JSON body over the 4 MiB limit is an error, never a truncated "success"
+            // handed to the plugin (PLAN 4.5.1 hard limits; F09 finding DICT03). Error bodies stay
+            // truncated to 16 KiB with truncated=true so the plugin can still classify the failure.
+            if (ok && truncated) return new BrokerFailure("bad_response", "response exceeded the 4 MiB transfer size limit");
             JsonNode? asJson = null;
             string? asText = null;
             if (!truncated) { try { asJson = JsonNode.Parse(bytes); } catch (JsonException) { } }

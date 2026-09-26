@@ -105,7 +105,7 @@ public class F09SandboxVerificationTests
         finally { session.Shutdown(2000); }
     }
 
-    [Theory(Skip = "Production bug found by F09 testing: a plugin $http JSON response larger than one IPC frame (1 MiB) but within the 4 MiB reassembled limit (PLAN 4.5.4 item 4, ProtocolLimits.MaxReassembledJsonBytes) never completes - the call gets neither a result nor an error, and a dictionary card over such a Youdao response stays Loading until the card deadline (timeout). ~990 KB completes, ~1.8 MB hangs. Frame splitting by transferId is not implemented on the host -> plugin response path.")]
+    [Theory] // PLAN 4.5.4 item 4: a plugin $http JSON result over one IPC frame (1 MiB) is split by transferId and reassembled (<= 4 MiB)
     [InlineData(900_000)]
     [InlineData(2_000_000)]
     public async Task Plugin_http_json_response_over_one_frame_completes(int size)
@@ -385,7 +385,7 @@ public class F09SandboxVerificationTests
     }
 
     // DICT03: a dictionary response larger than the 4 MiB JSON limit fails the card promptly as an error, never a fallback
-    [Fact(Skip = "Production bug (same root cause as Plugin_http_json_response_over_one_frame_completes): the broker hands the plugin up to 4 MiB of truncated text, the >1 MiB result never reaches the plugin, and the card stays Loading until the 30 s deadline (Timeout) instead of failing promptly with bad_response.")]
+    [Fact]
     public async Task Oversized_youdao_response_fails_promptly_without_fallback()
     {
         string? staged = YoudaoPluginTests.StageHost();

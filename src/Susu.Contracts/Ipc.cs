@@ -23,7 +23,16 @@ public sealed record IpcEnvelope(
     long Sequence = 0,
     string? PluginId = null,
     string? Grant = null,
-    JsonElement? Payload = null);
+    JsonElement? Payload = null,
+    IpcFramePart? Part = null);
+
+/// <summary>
+/// Marks one piece of a payload too large for a single frame (PLAN 4.5.4 item 4: plain JSON over one
+/// frame is split by transferId/index and reassembled to at most 4 MiB). A part envelope keeps the
+/// original type and request/job/plugin/grant identity; its Payload is a JSON string holding the Base64
+/// of this slice of the original payload's UTF-8 JSON. See <see cref="IpcFraming"/>.
+/// </summary>
+public sealed record IpcFramePart(string TransferId, int Index, int Count);
 
 public enum IpcDecodeError { None, Empty, TooLarge, MalformedJson, UnsupportedVersion, UnknownType, MissingField }
 
@@ -66,6 +75,9 @@ public static class IpcCodec
         }
         catch (JsonException) { return IpcDecodeError.MalformedJson; }
         if (envelope is null) return IpcDecodeError.MalformedJson;
+        if (envelope.Part is { } part && (string.IsNullOrEmpty(part.TransferId) || part.TransferId.Length > 64 || part.Count < 2
+            || part.Count > IpcFraming.MaxParts || part.Index < 0 || part.Index >= part.Count || envelope.Payload is not { ValueKind: JsonValueKind.String }))
+        { envelope = null; return IpcDecodeError.MalformedJson; }
         if (IsBusiness(envelope.Type))
         {
             if (string.IsNullOrEmpty(envelope.RequestId) || string.IsNullOrEmpty(envelope.JobId) || envelope.Sequence <= 0 || envelope.Payload is null)
@@ -76,6 +88,106 @@ public static class IpcCodec
     }
 }
 
+/// <summary>An envelope's payload exceeds even the reassembled limit (4 MiB); nothing was written.</summary>
+public sealed class IpcPayloadTooLargeException(string message) : InvalidOperationException(message);
+
+/// <summary>
+/// Splits an envelope whose frame would exceed 1 MiB into Base64 parts (PLAN 4.5.4 item 4). A payload
+/// whose UTF-8 JSON exceeds 4 MiB is refused up front with <see cref="IpcPayloadTooLargeException"/>,
+/// so an oversized result is never silently dropped. Reassembly is <see cref="IpcReassembler"/>.
+/// </summary>
+public static class IpcFraming
+{
+    /// <summary>Raw payload bytes per part; Base64 (4/3) plus the envelope stays well under 1 MiB.</summary>
+    public const int PartBytes = 512 * 1024;
+    public const int MaxParts = (ProtocolLimits.MaxReassembledJsonBytes + PartBytes - 1) / PartBytes;
+
+    /// <summary>Returns the frames to write for <paramref name="envelope"/> (one frame when it fits).</summary>
+    public static List<byte[]> Split(IpcEnvelope envelope, Func<long> nextSequence)
+    {
+        byte[] body = JsonSerializer.SerializeToUtf8Bytes(envelope, ContractsJson.Default.IpcEnvelope);
+        if (body.Length <= ProtocolLimits.MaxFrameBytes) return [IpcCodec.Encode(envelope with { Sequence = nextSequence() })];
+        if (envelope.Payload is not { } payload) throw new IpcPayloadTooLargeException("IPC frame exceeds 1 MiB and has no payload to split.");
+        byte[] raw = JsonSerializer.SerializeToUtf8Bytes(payload, ContractsJson.Default.JsonElement);
+        if (raw.Length > ProtocolLimits.MaxReassembledJsonBytes)
+            throw new IpcPayloadTooLargeException($"IPC payload of {raw.Length} bytes exceeds the {ProtocolLimits.MaxReassembledJsonBytes}-byte transfer limit.");
+        string transferId = Guid.NewGuid().ToString("N");
+        int count = (raw.Length + PartBytes - 1) / PartBytes;
+        var frames = new List<byte[]>(count);
+        for (int i = 0; i < count; i++)
+        {
+            int offset = i * PartBytes;
+            string slice = Convert.ToBase64String(raw, offset, Math.Min(PartBytes, raw.Length - offset));
+            frames.Add(IpcCodec.Encode(envelope with
+            {
+                Sequence = nextSequence(),
+                Part = new IpcFramePart(transferId, i, count),
+                Payload = JsonSerializer.SerializeToElement(slice, ContractsJson.Default.String),
+            }));
+        }
+        return frames;
+    }
+}
+
+/// <summary>
+/// Reassembles <see cref="IpcFramePart"/> envelopes (one instance per reader thread). Parts of one
+/// transfer must arrive in order with the same identity; a protocol violation or a transfer over 4 MiB
+/// throws <see cref="InvalidDataException"/> (the connection is then treated as broken, like any other
+/// malformed frame). An incomplete transfer older than <see cref="StaleAfter"/> is discarded
+/// (PLAN 4.5.4: a missing part or timeout cancels the transfer).
+/// </summary>
+public sealed class IpcReassembler
+{
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(30);
+    private const int MaxOpenTransfers = 8;
+    private readonly Dictionary<string, Transfer> transfers = new(StringComparer.Ordinal);
+
+    private sealed class Transfer(IpcEnvelope first)
+    {
+        public IpcEnvelope First { get; } = first;
+        public MemoryStream Buffer { get; } = new();
+        public int Next { get; set; }
+        public DateTime Started { get; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Open (incomplete) transfers, for diagnostics/tests.</summary>
+    public int Open => transfers.Count;
+
+    /// <summary>Returns the envelope to dispatch: the input itself when it is not a part, the whole
+    /// envelope when this part completes a transfer, otherwise null.</summary>
+    public IpcEnvelope? Accept(IpcEnvelope envelope)
+    {
+        if (envelope.Part is not { } part) return envelope;
+        var now = DateTime.UtcNow;
+        foreach (var stale in transfers.Where(t => now - t.Value.Started > StaleAfter).Select(t => t.Key).ToArray()) transfers.Remove(stale);
+        Transfer? transfer;
+        if (part.Index == 0)
+        {
+            if (transfers.ContainsKey(part.TransferId)) throw new InvalidDataException("Duplicate IPC transfer id.");
+            if (transfers.Count >= MaxOpenTransfers) throw new InvalidDataException("Too many open IPC transfers.");
+            transfers[part.TransferId] = transfer = new Transfer(envelope);
+        }
+        else if (!transfers.TryGetValue(part.TransferId, out transfer)) throw new InvalidDataException("IPC part for an unknown or expired transfer.");
+        var first = transfer.First;
+        if (part.Index != transfer.Next || part.Count != first.Part!.Count || envelope.Type != first.Type || envelope.RequestId != first.RequestId
+            || envelope.JobId != first.JobId || envelope.PluginId != first.PluginId || envelope.Grant != first.Grant)
+        { transfers.Remove(part.TransferId); throw new InvalidDataException("IPC part out of order or with a different identity."); }
+        byte[] slice;
+        try { slice = Convert.FromBase64String(envelope.Payload!.Value.GetString()!); }
+        catch (FormatException) { transfers.Remove(part.TransferId); throw new InvalidDataException("IPC part is not Base64."); }
+        if (transfer.Buffer.Length + slice.Length > ProtocolLimits.MaxReassembledJsonBytes)
+        { transfers.Remove(part.TransferId); throw new InvalidDataException("Reassembled IPC payload exceeds 4 MiB."); }
+        transfer.Buffer.Write(slice);
+        transfer.Next++;
+        if (transfer.Next < part.Count) return null;
+        transfers.Remove(part.TransferId);
+        JsonElement payload;
+        try { using var document = JsonDocument.Parse(transfer.Buffer.ToArray()); payload = document.RootElement.Clone(); }
+        catch (JsonException) { throw new InvalidDataException("Reassembled IPC payload is not JSON."); }
+        return first with { Part = null, Payload = payload, Sequence = envelope.Sequence };
+    }
+}
+
 /// <summary>Frames <see cref="IpcEnvelope"/> over a byte stream (32-bit LE length + UTF-8 JSON body).</summary>
 public static class IpcTransport
 {
@@ -83,6 +195,18 @@ public static class IpcTransport
     {
         byte[] frame = IpcCodec.Encode(envelope);
         lock (gate) { stream.Write(frame); stream.Flush(); }
+    }
+
+    /// <summary>Writes <paramref name="envelope"/>, split into parts when it exceeds one frame; all parts
+    /// are written under <paramref name="gate"/> with consecutive sequence numbers. Throws
+    /// <see cref="IpcPayloadTooLargeException"/> (before writing anything) over the 4 MiB transfer limit.</summary>
+    public static void WriteFramed(Stream stream, IpcEnvelope envelope, object gate, Func<long> nextSequence)
+    {
+        lock (gate)
+        {
+            foreach (byte[] frame in IpcFraming.Split(envelope, nextSequence)) stream.Write(frame);
+            stream.Flush();
+        }
     }
 
     /// <summary>Returns null at a clean end of stream. Malformed or oversized frames throw <see cref="InvalidDataException"/>.</summary>

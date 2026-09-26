@@ -689,7 +689,7 @@ public sealed class Broker : IDisposable
     public static string? Origin(Uri uri)
         => uri.Scheme is "https" or "http" && uri.IsAbsoluteUri ? $"{uri.Scheme}://{uri.IdnHost.ToLowerInvariant()}:{uri.Port}" : null;
 
-    private static ApiResultPayload Deny(int apiId, string reason, string kind = "bad_response")
+    internal static ApiResultPayload Deny(int apiId, string reason, string kind = "bad_response")
         => new(apiId, false, JsonSerializer.SerializeToElement(new DenyValue(kind, $"denied: {reason}"), BrokerJson.Default.DenyValue));
 
     private static ApiResultPayload Allow(int apiId, string json)

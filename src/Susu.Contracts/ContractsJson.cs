@@ -6,6 +6,8 @@ namespace Susu.Contracts;
 /// <summary>Source-generated (NativeAOT-safe) serialization for every contract type.</summary>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, AllowOutOfOrderMetadataProperties = false, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 [JsonSerializable(typeof(IpcEnvelope))]
+[JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(HelloPayload))]
 [JsonSerializable(typeof(ChunkPayload))]
 [JsonSerializable(typeof(AckPayload))]
