@@ -198,12 +198,40 @@ public sealed class F09AudioVerificationTests : IDisposable
         Assert.Equal(0, leases.ActiveCount);
     }
 
-    [Fact(Skip = "F09 finding (low): DictionaryAudioFetcher.ExtensionFor accepts application/octet-stream (and a missing Content-Type, which the broker reports as octet-stream), so an HTML/JSON body served that way is kept as a .bin audio lease. F09.md says 'audio MIME types only'. Possibly deliberate while the real Youdao TTS MIME is unconfirmed; master to decide.")]
+    [Fact] // F09 decision: octet-stream (or no Content-Type) is kept only when the magic bytes are audio; an HTML body is refused
     public async Task Octet_stream_is_not_audio()
     {
         using var server = new LoopbackHttpServer(_ => new(200, "<html><script>alert(1)</script></html>"u8.ToArray(), ContentType: "application/octet-stream"));
         using var broker = Broker(server);
         Assert.Equal(new DictionaryAudioOutcome.Failure(ErrorKind.BadResponse), await Fetcher(broker, server.Origin + "/a", server.Origin).FetchAsync("audio-1", TestContext.Current.CancellationToken));
+        Assert.Equal(0, leases.ActiveCount);
+    }
+
+    [Fact] // octet-stream whose magic bytes are an MP3 (ID3) is kept, under the sniffed audio MIME
+    public async Task Octet_stream_with_mp3_bytes_is_audio()
+    {
+        using var server = new LoopbackHttpServer(_ => new(200, Mp3, ContentType: "application/octet-stream"));
+        using var broker = Broker(server);
+        var ready = Assert.IsType<DictionaryAudioOutcome.Ready>(await Fetcher(broker, server.Origin + "/a", server.Origin).FetchAsync("audio-1", TestContext.Current.CancellationToken));
+        Assert.Equal("audio/mpeg", ready.Mime);
+        Assert.EndsWith(".mp3", leases.PathOf(ready.Lease));
+        leases.Release(ready.Lease);
+    }
+
+    [Theory] // container signatures accepted for octet-stream / missing Content-Type; anything else is refused
+    [InlineData(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }, "audio/mpeg")]
+    [InlineData(new byte[] { 0xFF, 0xF1, 0x50, 0x80 }, "audio/aac")]
+    [InlineData(new byte[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F', 0, 0, 0, 0, (byte)'W', (byte)'A', (byte)'V', (byte)'E' }, "audio/wav")]
+    [InlineData(new byte[] { (byte)'O', (byte)'g', (byte)'g', (byte)'S' }, "audio/ogg")]
+    [InlineData(new byte[] { (byte)'f', (byte)'L', (byte)'a', (byte)'C' }, "audio/flac")]
+    [InlineData(new byte[] { 0, 0, 0, 0x20, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'M', (byte)'4', (byte)'A', (byte)' ' }, "audio/mp4")]
+    [InlineData(new byte[] { (byte)'{', (byte)'"' }, null)]
+    [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, null)] // JPEG
+    public void Octet_stream_is_sniffed(byte[] body, string? expected)
+    {
+        Assert.Equal(expected, DictionaryAudioFetcher.ClassifyAudio("application/octet-stream", body)?.Mime);
+        Assert.Equal(expected, DictionaryAudioFetcher.ClassifyAudio(null, body)?.Mime);
+        Assert.Null(DictionaryAudioFetcher.ClassifyAudio("text/html", body));
     }
 
     [Fact] // a cancelled fetch reports Cancelled and leaves no lease
