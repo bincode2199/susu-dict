@@ -41,6 +41,7 @@ namespace Susu.Contracts;
 [JsonSerializable(typeof(UiEnvelope))]
 [JsonSerializable(typeof(TranslationSnapshot))]
 [JsonSerializable(typeof(CardPatch))]
+[JsonSerializable(typeof(DictionaryEntryView))]
 [JsonSerializable(typeof(CommandResult))]
 [JsonSerializable(typeof(UiSnapshot))]
 [JsonSerializable(typeof(SettingsView))]

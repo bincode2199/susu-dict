@@ -25,6 +25,7 @@ public sealed class TranslationSession
     private readonly Dictionary<string, Card> cards = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CancellationTokenSource> running = new(StringComparer.Ordinal); // by attemptId
     private readonly List<Task> attempts = [];
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string ServiceId, long Generation, string Url)> audio = new(StringComparer.Ordinal);
     private readonly Func<string> newId;
     private long generation, revision;
     private string source = "", from = Languages.English.Code, to = Languages.ChineseSimplified.Code;
@@ -46,6 +47,7 @@ public sealed class TranslationSession
         if (closed) return;
         generation++;
         source = text; from = sourceLanguage; to = targetLanguage;
+        foreach (var stale in audio.Where(a => a.Value.Generation < generation).Select(a => a.Key).ToArray()) audio.TryRemove(stale, out _);
         foreach (var serviceId in cards.Keys.ToArray()) Apply(serviceId, new CardEvent.NewGeneration(generation, newId()));
     });
 
@@ -92,7 +94,8 @@ public sealed class TranslationSession
     }
 
     private CardSnapshot Project(Card card)
-        => new(card.ServiceId, byService[card.ServiceId].DisplayName, card.State, card.Collapsed, card.Text, card.Error, Chunked: byService[card.ServiceId].Limits.Measure(source) > byService[card.ServiceId].Limits.MaxInput);
+        => new(card.ServiceId, byService[card.ServiceId].DisplayName, card.State, card.Collapsed, card.Text, card.Error, Chunked: byService[card.ServiceId].Limits.Measure(source) > byService[card.ServiceId].Limits.MaxInput,
+            Dictionary: card.Entry is not null, Entry: card.Entry);
 
     /// <summary>Runs on the mailbox only.</summary>
     private void Apply(string serviceId, CardEvent @event)
@@ -135,39 +138,67 @@ public sealed class TranslationSession
         long deadline = clock.NowMilliseconds + (long)timeout.TotalMilliseconds;
         var chunks = TextChunker.Split(text, provider.Limits);
         int attemptsMade = 1;
+        // PLAN 6.1 / DICT01-02: a word form on a card whose instance has an enabled dictionary service looks the word
+        // up first, inside this same attempt (so collapse/cancel/retry/reuse are exactly an ordinary card's). The
+        // translate call runs only after a legal empty entry, never alongside the lookup; an error is the card's error.
+        var dictionary = provider as IDictionaryProvider;
+        string? word = dictionary is { DictionaryEnabled: true } ? TextForms.DictionaryWord(text) : null;
         Post(serviceId, new CardEvent.Started(Next()));
         while (true)
         {
             var assembled = new StringBuilder();
             bool streamed = false;
             ProviderError? failure = null;
-            // Usage (DATA04, F06.2 de-duplication): one event per attempt, keyed by the attempt id, carrying
-            // the characters of every chunk the vendor accepted in that attempt. Recording per chunk under the
-            // shared attempt id dropped every chunk after the first (the event table is unique per attempt
-            // and metric); a retry is a new attempt and a new vendor request, so it is its own event.
-            long accepted = 0;
-            foreach (var chunk in chunks)
+            if (word is not null)
             {
-                TimeSpan remaining = TimeSpan.FromMilliseconds(Math.Max(0, deadline - clock.NowMilliseconds));
-                var outcome = await CallAsync(provider, chunk.Text, sourceLanguage, targetLanguage, attemptId, remaining, piece =>
+                TimeSpan left = TimeSpan.FromMilliseconds(Math.Max(0, deadline - clock.NowMilliseconds));
+                var lookup = await LookupAsync(provider, dictionary!, word, sourceLanguage, targetLanguage, attemptId, left, cancel);
+                if (cancel.IsCancellationRequested) { usage.Record(serviceId, attemptId, "dictionary", 0, "cancelled"); return; }
+                if (lookup is DictionaryOutcome.Entry found)
                 {
-                    streamed = true;
-                    Post(serviceId, new CardEvent.Chunk(Next(), piece));
-                    return ValueTask.CompletedTask;
-                }, cancel);
-                if (cancel.IsCancellationRequested) { usage.Record(serviceId, attemptId, "chars", accepted, "cancelled"); return; }
-                if (outcome is ProviderOutcome.Success success)
-                {
-                    accepted += chunk.Text.Length;
-                    assembled.Append(success.Text);
-                    if (!streamed && chunks.Count > 1) Post(serviceId, new CardEvent.Chunk(Next(), success.Text)); // in-order progress for chunked text
-                    continue;
+                    long gen0 = gen;
+                    var view = DictionaryEntries.IsEmpty(found.Result) ? null : DictionaryEntries.ToView(found.Result, url => RegisterAudio(serviceId, gen0, url));
+                    bool empty = view is null || DictionaryEntries.IsEmpty(view);
+                    usage.Record(serviceId, attemptId, "dictionary", word.Length, empty ? "empty" : "ok");
+                    if (!empty) { Post(serviceId, new CardEvent.DictionaryCompleted(Next(), view!)); return; }
+                    word = null; // legal empty entry: this card falls back to the plain translation, once
                 }
-                failure = ((ProviderOutcome.Failure)outcome).Error;
-                break;
+                else
+                {
+                    failure = ((DictionaryOutcome.Failure)lookup).Error;
+                    usage.Record(serviceId, attemptId, "dictionary", 0, failure.Kind.ToString());
+                }
             }
-            usage.Record(serviceId, attemptId, "chars", accepted, failure is null ? "ok" : failure.Kind.ToString());
-            if (failure is null) { Post(serviceId, new CardEvent.Completed(Next(), assembled.ToString())); return; }
+            if (failure is null)
+            {
+                // Usage (DATA04, F06.2 de-duplication): one event per attempt, keyed by the attempt id, carrying
+                // the characters of every chunk the vendor accepted in that attempt. Recording per chunk under the
+                // shared attempt id dropped every chunk after the first (the event table is unique per attempt
+                // and metric); a retry is a new attempt and a new vendor request, so it is its own event.
+                long accepted = 0;
+                foreach (var chunk in chunks)
+                {
+                    TimeSpan remaining = TimeSpan.FromMilliseconds(Math.Max(0, deadline - clock.NowMilliseconds));
+                    var outcome = await CallAsync(provider, chunk.Text, sourceLanguage, targetLanguage, attemptId, remaining, piece =>
+                    {
+                        streamed = true;
+                        Post(serviceId, new CardEvent.Chunk(Next(), piece));
+                        return ValueTask.CompletedTask;
+                    }, cancel);
+                    if (cancel.IsCancellationRequested) { usage.Record(serviceId, attemptId, "chars", accepted, "cancelled"); return; }
+                    if (outcome is ProviderOutcome.Success success)
+                    {
+                        accepted += chunk.Text.Length;
+                        assembled.Append(success.Text);
+                        if (!streamed && chunks.Count > 1) Post(serviceId, new CardEvent.Chunk(Next(), success.Text)); // in-order progress for chunked text
+                        continue;
+                    }
+                    failure = ((ProviderOutcome.Failure)outcome).Error;
+                    break;
+                }
+                usage.Record(serviceId, attemptId, "chars", accepted, failure is null ? "ok" : failure.Kind.ToString());
+                if (failure is null) { Post(serviceId, new CardEvent.Completed(Next(), assembled.ToString())); return; }
+            }
             var decision = RetryPolicy.Decide(failure, attemptsMade, TimeSpan.FromMilliseconds(Math.Max(0, deadline - clock.NowMilliseconds)), streamed || assembled.Length > 0, readOnly: true, jitter.Next());
             if (decision is RetryDecision.Stop) { Post(serviceId, new CardEvent.Failed(Next(), failure.Kind)); return; }
             var retry = (RetryDecision.Retry)decision;
@@ -185,6 +216,58 @@ public sealed class TranslationSession
             });
             if (cancel.IsCancellationRequested) return;
         }
+    }
+
+    /// <summary>One dictionary request under the same scheduler lease, deadline and cancellation as a translate call.</summary>
+    private async Task<DictionaryOutcome> LookupAsync(ITranslationProvider provider, IDictionaryProvider dictionary, string word, string sourceLanguage, string targetLanguage,
+        string attemptId, TimeSpan remaining, CancellationToken cancel)
+    {
+        if (remaining <= TimeSpan.Zero) return new DictionaryOutcome.Failure(new ProviderError(ErrorKind.Timeout, "deadline exhausted"));
+        InvocationScheduler.Lease lease;
+        try { lease = await scheduler.AcquireAsync(new InvocationTicket(provider.ServiceId, provider.LimiterKey, options.Priority), cancel); }
+        catch (SchedulerBusyException) { return new DictionaryOutcome.Failure(new ProviderError(ErrorKind.Busy)); }
+        catch (OperationCanceledException) { return new DictionaryOutcome.Failure(new ProviderError(ErrorKind.Cancelled)); }
+        using (lease)
+        using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancel))
+        {
+            var call = dictionary.LookupAsync(new DictionaryCall(word, sourceLanguage, targetLanguage, attemptId, options.Config, remaining), linked.Token);
+            var timer = clock.Delay(remaining, linked.Token);
+            var first = await Task.WhenAny(call, timer);
+            if (first == timer && !call.IsCompleted)
+            {
+                linked.Cancel();
+                try { await call; } catch (OperationCanceledException) { }
+                return new DictionaryOutcome.Failure(new ProviderError(ErrorKind.Timeout, "call deadline"));
+            }
+            linked.Cancel();
+            try { return await call; }
+            catch (OperationCanceledException) { return new DictionaryOutcome.Failure(new ProviderError(ErrorKind.Cancelled)); }
+        }
+    }
+
+    /// <summary>An opaque id for an https audio link of an entry (never the URL itself on the page).</summary>
+    private string RegisterAudio(string serviceId, long gen, string url)
+    {
+        string id = "audio-" + Guid.NewGuid().ToString("N");
+        audio[id] = (serviceId, gen, url);
+        return id;
+    }
+
+    /// <summary>
+    /// The audio link behind <paramref name="audioId"/>, only while a card of the current generation still shows the
+    /// entry that carries it (F09.3 authorizes and plays it); null for an unknown, stale or foreign id.
+    /// </summary>
+    public Task<string?> ResolveAudioAsync(string audioId)
+    {
+        var result = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        mailbox.Post(() =>
+        {
+            string? url = null;
+            if (audio.TryGetValue(audioId, out var link) && link.Generation == generation && cards.TryGetValue(link.ServiceId, out var card)
+                && card.Entry is { } entry && entry.Phonetics.Any(p => p.AudioId == audioId)) url = link.Url;
+            result.SetResult(url);
+        });
+        return result.Task;
     }
 
     private async Task<ProviderOutcome> CallAsync(ITranslationProvider provider, string text, string sourceLanguage, string targetLanguage, string attemptId, TimeSpan remaining,

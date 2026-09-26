@@ -82,6 +82,7 @@ export interface CardSnapshot {
   error?: ErrorKind;
   chunked?: boolean;
   dictionary?: boolean;
+  entry?: DictionaryEntryView;
 }
 
 export type CardState = 'CollapsedIdle' | 'Queued' | 'Loading' | 'Streaming' | 'Ready' | 'Failed' | 'Cancelled' | 'Unsupported';
@@ -122,6 +123,35 @@ export interface CredentialTargetView {
   use: string;
   saved: boolean;
   granted: boolean;
+}
+
+export interface DictionaryEntryView {
+  word: string;
+  phonetics: DictionaryPhoneticView[];
+  parts: DictionaryPartView[];
+  forms: DictionaryFormView[];
+  examples: DictionaryExampleView[];
+}
+
+export interface DictionaryExampleView {
+  src: string;
+  dst: string;
+}
+
+export interface DictionaryFormView {
+  name: string;
+  value: string;
+}
+
+export interface DictionaryPartView {
+  pos: string;
+  means: string[];
+}
+
+export interface DictionaryPhoneticView {
+  accent: string;
+  ipa: string;
+  audioId?: string;
 }
 
 export interface ErrorBarView {

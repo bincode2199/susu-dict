@@ -38,7 +38,23 @@ public sealed record CardSnapshot(
     string Text,
     ErrorKind? Error = null,
     bool Chunked = false,
-    bool Dictionary = false);
+    bool Dictionary = false,
+    DictionaryEntryView? Entry = null);
+
+/// <summary>
+/// A dictionary card body (PLAN 6.1, F09.2): <see cref="CardSnapshot.Dictionary"/> is true and <see cref="CardSnapshot.Entry"/>
+/// is set only when the card shows a non-empty dictionary entry; a legal empty entry falls back to the plain
+/// translation in <see cref="CardSnapshot.Text"/>. Structured text only: every string is plain text the page must
+/// render as text, never as HTML. Audio links never reach the page: <see cref="DictionaryPhoneticView.AudioId"/> is
+/// an opaque, session-scoped id the host resolves (F09.3 authorizes playback).
+/// </summary>
+[TsExport("ui")]
+public sealed record DictionaryEntryView(string Word, DictionaryPhoneticView[] Phonetics, DictionaryPartView[] Parts, DictionaryFormView[] Forms, DictionaryExampleView[] Examples);
+
+[TsExport("ui")] public sealed record DictionaryPhoneticView(string Accent, string Ipa, string? AudioId = null);
+[TsExport("ui")] public sealed record DictionaryPartView(string Pos, string[] Means);
+[TsExport("ui")] public sealed record DictionaryFormView(string Name, string Value);
+[TsExport("ui")] public sealed record DictionaryExampleView(string Src, string Dst);
 
 [TsExport("ui")]
 public sealed record TranslationSnapshot(

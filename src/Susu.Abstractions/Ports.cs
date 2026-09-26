@@ -41,6 +41,27 @@ public interface ITranslationProvider
     Task<ProviderOutcome> TranslateAsync(TranslateCall call, Func<string, ValueTask> onChunk, CancellationToken cancellationToken);
 }
 
+public sealed record DictionaryCall(string Word, string From, string To, string AttemptId, ConfigSnapshot Config, TimeSpan Timeout);
+
+public abstract record DictionaryOutcome
+{
+    /// <summary>A successful lookup. It may be a legal empty entry (<see cref="DictionaryEntries.IsEmpty"/>).</summary>
+    public sealed record Entry(DictionaryResult Result) : DictionaryOutcome;
+    public sealed record Failure(ProviderError Error) : DictionaryOutcome;
+}
+
+/// <summary>
+/// The <c>dictionary</c> capability of the same provider instance as a translation card (PLAN 6.1, F09.2). A
+/// translation provider that also implements this is a dictionary source only while <see cref="DictionaryEnabled"/>
+/// (the instance's dictionary service is enabled in settings); the session then looks a word form up first on
+/// that card and falls back to <see cref="ITranslationProvider.TranslateAsync"/> only on a legal empty entry.
+/// </summary>
+public interface IDictionaryProvider
+{
+    bool DictionaryEnabled { get; }
+    Task<DictionaryOutcome> LookupAsync(DictionaryCall call, CancellationToken cancellationToken);
+}
+
 /// <summary>Ranked language candidates; null or empty when unknown (PLAN 3.2).</summary>
 public interface ILanguageDetector
 {
