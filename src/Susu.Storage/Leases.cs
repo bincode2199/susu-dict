@@ -114,9 +114,13 @@ public sealed class FileLeases : IDisposable
 /// One owner's reference on a leased audio file (F10.1): <see cref="Dispose"/> releases it exactly once, so the file
 /// goes when the last owner (player, cache) lets go (ARCHITECTURE 8.4).
 /// </summary>
-public sealed class LeasedAudioClip(FileLeases leases, FileLease lease, string mime) : Susu.Abstractions.IAudioClip
+public sealed class LeasedAudioClip(FileLeases leases, FileLease lease, string mime) : Susu.Abstractions.IShareableAudioClip
 {
     private int disposed;
+
+    /// <summary>Another owner on the same file (the TTS cache keeps one, F10.3); null once this owner released it or the file is gone.</summary>
+    public Susu.Abstractions.IAudioClip? Share()
+        => Released || leases.AddReference(Lease.Id) is not { } shared ? null : new LeasedAudioClip(leases, shared, Mime);
 
     public FileLease Lease { get; } = lease;
     public string Mime { get; } = mime;

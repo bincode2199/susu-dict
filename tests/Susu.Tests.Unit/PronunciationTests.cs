@@ -96,24 +96,27 @@ public class PronunciationFlowTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private sealed class Clip : IAudioClip
+    private sealed class Clip : IShareableAudioClip
     {
         public string Mime => "audio/wav";
         public string FilePath => "fake://clip";
         public long Bytes => 10;
         public void Dispose() { }
+        public IAudioClip? Share() => new Clip();
     }
 
-    /// <summary>Plays until <see cref="Release"/> (or instantly when <see cref="Instant"/>), or until cancelled.</summary>
+    /// <summary>Plays until <see cref="Release"/> (or instantly when <see cref="Instant"/>), or until cancelled; <see cref="LoseDevice"/> fails the next clip mid-playback.</summary>
     private sealed class Sink : IAudioSink
     {
         public bool Instant = true;
         public int Played;
+        public AudioFailure? LoseDevice;
         private TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public AudioDeviceStatus Probe() => new(true);
         public async Task PlayAsync(IAudioClip clip, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref Played);
+            if (LoseDevice is { } failure) { LoseDevice = null; await Task.Delay(20, cancellationToken); throw new AudioPlaybackException(failure, "fake device went away"); }
             if (Instant) return;
             await release.Task.WaitAsync(cancellationToken);
         }
@@ -176,7 +179,7 @@ public class PronunciationFlowTests
         private long counter;
         private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-        public Rig(ISelectionReader? reader = null, IReadOnlyList<ITranslationProvider>? providers = null, int expanded = 2, bool pronunciationReady = true)
+        public Rig(ISelectionReader? reader = null, IReadOnlyList<ITranslationProvider>? providers = null, int expanded = 2, bool pronunciationReady = true, TtsCache? cache = null)
         {
             Settings = new SettingsStore(Root.Paths, new ManualClock());
             Config = new ConfigService(Settings, new SecretStore(Root.Paths.Secrets, new XorProtector()));
@@ -187,7 +190,7 @@ public class PronunciationFlowTests
             features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Pronunciation, FeatureState.Available, null, [Capability.Tts]));
             Speech = new SpeechBackend(new SpeechPlayer(Sink),
                 (_, id) => id is "native-sapi" or "microsoft-tts" ? new Tts(id, Spoken) : null,
-                (id, _) => { AudioIds.Enqueue(id); return Task.FromResult<AudioOutcome>(new AudioOutcome.Ready(new Clip())); });
+                (id, _) => { AudioIds.Enqueue(id); return Task.FromResult<AudioOutcome>(new AudioOutcome.Ready(new Clip())); }, cache);
             var capture = new CaptureCoordinator(reader ?? new Reader(new SelectionResult(SelectionStatus.Selected, "hello world", "uia", null, 96, 1, 1)),
                 new ClipboardBorrower(new FakeClipboardPlatform()), () => false);
             var config = new ConfigSnapshot(1, 1, 1, 2, TimeSpan.FromSeconds(30));
@@ -298,6 +301,7 @@ public class PronunciationFlowTests
         Assert.True(await rig.EndedAsync(1));
         Assert.Equal(PlaybackStatus.Superseded, rig.Ended.First().Result.Status);
         Assert.Equal("microsoft-tts", rig.Shell.SpeechBar!.Active);
+        Assert.True(await Eventually.WaitAsync(() => rig.Spoken.Count == 2)); // a cloud synthesis starts off the caller's thread (F10.3)
         Assert.Equal(["native-sapi", "microsoft-tts"], rig.Spoken.Select(s => s.Instance));
         Assert.Equal("hello world", rig.Spoken.Last().Request.Text);
         Assert.True(await Eventually.WaitAsync(() => rig.Shell.SpeechState.Phase == "playing"));
@@ -312,6 +316,47 @@ public class PronunciationFlowTests
         Assert.NotEmpty(timers);
         timers[^1].Action();
         Assert.Contains("hide:Speech", rig.Platform.Calls);
+    }
+
+    [Fact] // TTS02 device lost mid-playback: the bar shows the classified device error, the player is idle again, the next request plays
+    public async Task Device_lost_mid_playback_shows_the_classified_error_and_the_player_recovers()
+    {
+        using var rig = new Rig();
+        rig.Sink.LoseDevice = AudioFailure.DeviceLost;
+        rig.Shell.OnHotkey("pronounce");
+        Assert.True(await rig.EndedAsync(1));
+        var result = rig.Ended.Single().Result;
+        Assert.Equal((PlaybackStatus.Failed, (AudioFailure?)AudioFailure.DeviceLost), (result.Status, result.Device));
+        Assert.True(await Eventually.WaitAsync(() => rig.Shell.SpeechState.Phase == "error"));
+        Assert.Equal(("bar", "device-lost"), (rig.Shell.SpeechState.Target, rig.Shell.SpeechState.Device));
+        Assert.Equal(PlayerPhase.Idle, rig.Speech.Player.State.Phase);
+        rig.Ready(WindowKind.Speech);
+        Assert.True(rig.Run(WindowKind.Speech, UiCommands.SpeechPlay, new SpeechPlayRequest("native-sapi")).Ok);
+        Assert.True(await rig.EndedAsync(2));
+        Assert.Equal(PlaybackStatus.Completed, rig.Ended.Last().Result.Status);
+        Assert.True(await Eventually.WaitAsync(() => rig.Shell.SpeechState.Phase == "stopped"));
+    }
+
+    [Fact] // TTS02 "缓存按配置区分": a bar replay reuses the cached clip; a settings change of that service drops it
+    public async Task Bar_replay_uses_the_cache_until_the_service_config_changes()
+    {
+        using var rig = new Rig(cache: new TtsCache(new ManualClock()));
+        rig.Shell.OnHotkey("pronounce");
+        Assert.True(await rig.EndedAsync(1));
+        rig.Ready(WindowKind.Speech);
+        Assert.True(rig.Run(WindowKind.Speech, UiCommands.SpeechPlay, new SpeechPlayRequest("native-sapi")).Ok);
+        Assert.True(await rig.EndedAsync(2));
+        Assert.Single(rig.Spoken); // the replay played the cached clip
+        Assert.Equal(2, rig.Sink.Played);
+
+        var s = rig.Config.State.Effective;
+        var changed = s with { Instances = [.. s.Instances.Select(i => i.Id == "native-sapi" ? i with { Config = new Dictionary<string, string>(i.Config) { ["rate"] = "1.5" }, Revision = i.Revision + 1 } : i)] };
+        Assert.Equal(SaveStatus.Saved, rig.Config.Save(changed, rig.Config.State.Revision, rig.Config.State.FileHash).Status);
+        Assert.Equal(0, rig.Speech.Cache!.Count);
+        Assert.True(rig.Run(WindowKind.Speech, UiCommands.SpeechPlay, new SpeechPlayRequest("native-sapi")).Ok);
+        Assert.True(await rig.EndedAsync(3));
+        Assert.Equal(2, rig.Spoken.Count);
+        Assert.Equal(1.5, rig.Spoken.Last().Request.Rate);
     }
 
     [Fact] // DESIGN 8: the card key reads the shown translation with the default service

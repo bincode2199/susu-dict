@@ -67,7 +67,7 @@ public sealed partial class ShellCoordinator
         speechBar = bar = bar with { Active = instance };
         if (windows.TryGetValue(WindowKind.Speech, out var session) && session.Ready)
             Send(WindowKind.Speech, session, UiMessageKind.Event, "speechbar", null, JsonSerializer.SerializeToElement(bar, ContractsJson.Default.SpeechBarView));
-        StartPlayback(speech, BarTarget, () => speech.Player.SpeakAsync(provider, SpeechBackend.RequestFor(settings, instance, said.Text, said.Lang), SpeakTimeout));
+        StartPlayback(speech, BarTarget, () => speech.SpeakAsync(settings, provider, SpeechBackend.RequestFor(settings, instance, said.Text, said.Lang), SpeakTimeout));
         return Ok();
     }
 

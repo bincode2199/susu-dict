@@ -542,6 +542,7 @@ public sealed partial class ShellCoordinator
 
     private void OnSettingsChanged(SettingsState state)
     {
+        Speech?.Cache?.Retain(state.Effective); // F10.3: a changed service config (voice, speed, account) drops its cached audio
         platform.StartTimer(TimeSpan.Zero, () =>
         {
             foreach (var slot in translations.Values) slot.Stale = true;
@@ -758,9 +759,17 @@ public sealed partial class ShellCoordinator
         return b.ToString();
     }
 
-    /// <summary>A secret was written or removed: every dynamic field of every instance using that account is stale.</summary>
+    /// <summary>
+    /// A secret was written or removed: every dynamic field of every instance using that account is stale, and so is the
+    /// cached TTS audio of those instances (F10.3).
+    /// </summary>
     private void InvalidateOptions(string accountId, string? instanceId = null)
     {
+        if (Speech?.Cache is { } cache)
+        {
+            if (instanceId is not null) cache.Invalidate(instanceId);
+            foreach (var i in config.State.Effective.Instances.Where(i => i.AccountBindings.Values.Contains(accountId))) cache.Invalidate(i.Id);
+        }
         if (backend?.Options is not { } broker) return;
         if (instanceId is not null) broker.Invalidate(instanceId);
         foreach (var i in config.State.Effective.Instances.Where(i => i.AccountBindings.Values.Contains(accountId))) broker.Invalidate(i.Id);

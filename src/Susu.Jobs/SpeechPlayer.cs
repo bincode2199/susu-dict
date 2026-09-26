@@ -23,9 +23,10 @@ public sealed record PlaybackResult(PlaybackStatus Status, ProviderError? Error 
 /// <summary>
 /// The pronunciation port F10.2 builds on (composed in Program.cs): the one <see cref="Player"/>, the TTS provider for a
 /// configured instance (native SAPI, or a speech package's <c>tts</c>; null when unknown or not ready), and F09
-/// dictionary audio by audio id (null when the plugin runtime is unavailable).
+/// dictionary audio by audio id (null when the plugin runtime is unavailable), and the F10.3 TTS audio cache (null: no cache).
 /// </summary>
-public sealed record SpeechBackend(SpeechPlayer Player, Func<AppSettings, string, ITtsProvider?> Tts, Func<string, CancellationToken, Task<AudioOutcome>>? DictionaryAudio = null)
+public sealed record SpeechBackend(SpeechPlayer Player, Func<AppSettings, string, ITtsProvider?> Tts, Func<string, CancellationToken, Task<AudioOutcome>>? DictionaryAudio = null,
+    TtsCache? Cache = null)
 {
     /// <summary>The request for <paramref name="text"/> with the instance's configured voice and speed (F07 config fields <c>voice</c>, <c>rate</c>).</summary>
     public static SpeakRequest RequestFor(AppSettings settings, string instanceId, string text, string? lang)
@@ -39,11 +40,33 @@ public sealed record SpeechBackend(SpeechPlayer Player, Func<AppSettings, string
 
     /// <summary>Speaks with the selected pronunciation service (SetSpeech), or fails with unavailable when it cannot run.</summary>
     public Task<PlaybackResult> SpeakSelectedAsync(AppSettings settings, string text, string? lang, TimeSpan timeout, CancellationToken cancellationToken = default)
+        => SpeakWithAsync(settings, settings.Speech.Tts.Instance, text, lang, timeout, cancellationToken);
+
+    /// <summary>Speaks with the configured instance <paramref name="instanceId"/>, or fails with unavailable when it cannot run.</summary>
+    public Task<PlaybackResult> SpeakWithAsync(AppSettings settings, string instanceId, string text, string? lang, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
-        string instance = settings.Speech.Tts.Instance;
-        if (Tts(settings, instance) is not { } provider)
+        if (Tts(settings, instanceId) is not { } provider)
             return Task.FromResult(new PlaybackResult(PlaybackStatus.Failed, new ProviderError(ErrorKind.Unavailable, "the pronunciation service is not available")));
-        return Player.SpeakAsync(provider, RequestFor(settings, instance, text, lang), timeout, cancellationToken);
+        return SpeakAsync(settings, provider, RequestFor(settings, instanceId, text, lang), timeout, cancellationToken);
+    }
+
+    /// <summary>
+    /// Plays <paramref name="request"/> with <paramref name="provider"/> through the one player, reusing a cached clip for the
+    /// same instance, configuration, voice, language, speed and text (F10.3), and caching a fresh one.
+    /// </summary>
+    public Task<PlaybackResult> SpeakAsync(AppSettings settings, ITtsProvider provider, SpeakRequest request, TimeSpan timeout, CancellationToken cancellationToken = default)
+        => Player.PlayAsync(token => AcquireAsync(settings, provider, request, timeout, token), cancellationToken);
+
+    private async Task<AudioOutcome> AcquireAsync(AppSettings settings, ITtsProvider provider, SpeakRequest request, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        if (Cache?.TryGet(settings, provider.InstanceId, request) is { } hit) return new AudioOutcome.Ready(hit);
+        var call = new SpeakCall(request, $"tts-{Guid.NewGuid():N}", timeout);
+        // TTS01: a cloud provider starts off the caller's thread, so a plugin host that is hung or restarting can never hold
+        // the message thread (or a native SAPI request queued behind it); the player cancels it when a newer request starts.
+        var outcome = provider.Native ? await provider.SynthesizeAsync(call, cancellationToken)
+            : await Task.Run(() => provider.SynthesizeAsync(call, cancellationToken), cancellationToken);
+        if (outcome is AudioOutcome.Ready ready) Cache?.Add(settings, provider.InstanceId, request, ready.Clip);
+        return outcome;
     }
 }
 

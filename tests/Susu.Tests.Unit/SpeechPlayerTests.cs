@@ -256,6 +256,85 @@ public class SpeechPlayerTests
         Assert.Equal(ErrorKind.Unavailable, result.Error!.Kind);
     }
 
+    [Fact] // TTS02 device lost mid-playback: classified, lease released, player idle, and the next clip plays normally
+    public async Task Device_lost_mid_playback_is_classified_and_the_player_recovers()
+    {
+        var sink = new LosingSink();
+        var player = new SpeechPlayer(sink);
+        var first = new FakeClip("first");
+        var result = await player.PlayAsync(Ready(first), Ct);
+        Assert.Equal(PlaybackStatus.Failed, result.Status);
+        Assert.Equal(AudioFailure.DeviceLost, result.Device);
+        Assert.Equal(ErrorKind.Unavailable, result.Error!.Kind);
+        Assert.Equal(1, first.Disposals);
+        Assert.Equal(PlayerPhase.Idle, player.State.Phase);
+        var second = new FakeClip("second");
+        Assert.Equal(PlaybackStatus.Completed, (await player.PlayAsync(Ready(second), Ct)).Status);
+        Assert.Equal(1, second.Disposals);
+        Assert.Equal(2, sink.Calls);
+    }
+
+    [Fact] // TTS01: a hung cloud synthesis (it even blocks its thread and ignores cancel) never blocks the caller or native SAPI
+    public async Task Hung_cloud_tts_never_blocks_the_caller_or_native_speech()
+    {
+        var sink = new FakeSink { Instant = true };
+        var cloud = new HungCloudProvider();
+        var sapi = new RecordingProvider(new FakeClip("sapi"));
+        var backend = new SpeechBackend(new SpeechPlayer(sink), (_, id) => id == "native-sapi" ? sapi : cloud);
+        var settings = Susu.Domain.BuiltInCatalog.Defaults();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var hung = backend.SpeakWithAsync(settings, "microsoft-tts", "hello", "en", TimeSpan.FromSeconds(30), Ct);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"the cloud request held the caller for {watch.Elapsed}");
+        Assert.True(cloud.Entered.Wait(TimeSpan.FromSeconds(10), Ct));
+        var local = await backend.SpeakWithAsync(settings, "native-sapi", "hello", "en", TimeSpan.FromSeconds(30), Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        Assert.Equal(PlaybackStatus.Completed, local.Status);
+        Assert.Equal(["sapi"], sink.Played);
+        cloud.Release.Set(); // the hung call finally returns a clip: it is superseded and released, never played
+        Assert.Equal(PlaybackStatus.Superseded, (await hung.WaitAsync(TimeSpan.FromSeconds(10), Ct)).Status);
+        Assert.Equal(["sapi"], sink.Played);
+        Assert.Equal(1, cloud.Clip.Disposals);
+
+        // A cloud failure (plugin host crashed or stopped) is reported with its class and SAPI still plays afterwards.
+        var failing = new SpeechBackend(new SpeechPlayer(sink), (_, id) => id == "native-sapi" ? sapi : new FailingProvider());
+        var failed = await failing.SpeakWithAsync(settings, "microsoft-tts", "hello", "en", TimeSpan.FromSeconds(30), Ct);
+        Assert.Equal((PlaybackStatus.Failed, ErrorKind.Unavailable), (failed.Status, failed.Error!.Kind));
+        Assert.Equal(PlaybackStatus.Completed, (await failing.SpeakWithAsync(settings, "native-sapi", "hello", "en", TimeSpan.FromSeconds(30), Ct)).Status);
+    }
+
+    private sealed class LosingSink : IAudioSink
+    {
+        public int Calls;
+        public AudioDeviceStatus Probe() => new(true);
+        public async Task PlayAsync(IAudioClip clip, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref Calls) > 1) return;
+            await Task.Delay(20, cancellationToken); // playing ...
+            throw new AudioPlaybackException(AudioFailure.DeviceLost, "IAudioClient.GetCurrentPadding 0x88890004");
+        }
+    }
+
+    private sealed class HungCloudProvider : ITtsProvider
+    {
+        public readonly ManualResetEventSlim Entered = new(), Release = new();
+        public readonly FakeClip Clip = new("cloud");
+        public string InstanceId => "microsoft-tts";
+        public bool Native => false;
+        public Task<AudioOutcome> SynthesizeAsync(SpeakCall call, CancellationToken cancellationToken)
+        {
+            Entered.Set();
+            Release.Wait(TimeSpan.FromSeconds(30)); // synchronous: like a blocked pipe write to a hung plugin host
+            return Task.FromResult<AudioOutcome>(new AudioOutcome.Ready(Clip));
+        }
+    }
+
+    private sealed class FailingProvider : ITtsProvider
+    {
+        public string InstanceId => "microsoft-tts";
+        public bool Native => false;
+        public Task<AudioOutcome> SynthesizeAsync(SpeakCall call, CancellationToken cancellationToken)
+            => Task.FromResult<AudioOutcome>(new AudioOutcome.Failure(new ProviderError(ErrorKind.Unavailable, "plugin host stopped after repeated crashes")));
+    }
+
     private sealed class FakeSinkAcceptingAny : IAudioSink
     {
         public AudioDeviceStatus Probe() => new(true);

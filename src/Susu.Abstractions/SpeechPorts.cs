@@ -14,6 +14,15 @@ public interface IAudioClip : IDisposable
     long Bytes { get; }
 }
 
+/// <summary>
+/// A clip whose file lease can take another owner (F10.3 TTS cache): <see cref="Share"/> returns a new, independently
+/// disposable reference on the same file, or null when the file is already gone. The file stays until every owner let go.
+/// </summary>
+public interface IShareableAudioClip : IAudioClip
+{
+    IAudioClip? Share();
+}
+
 /// <summary>Creates an empty leased file for host-side audio (SAPI synthesis writes into it).</summary>
 public interface IAudioFileFactory
 {

@@ -459,4 +459,48 @@ public class TtsPluginTests
         slow.Set();
         await rig.AssertNoFilesLeftAsync();
     }
+
+    // ---------------- TTS01: native SAPI never depends on the plugin host (F10.3) ----------------
+
+    private sealed class InstantSink : IAudioSink
+    {
+        public readonly List<string> Mimes = [];
+        public AudioDeviceStatus Probe() => new(true);
+        public Task PlayAsync(IAudioClip clip, CancellationToken cancellationToken) { lock (Mimes) Mimes.Add(clip.Mime); return Task.CompletedTask; }
+    }
+
+    [Fact] // real sandbox + real SAPI: a hung vendor call, then a killed plugin host with a call in flight, never block local SAPI
+    public async Task Hung_or_crashed_plugin_host_never_blocks_native_sapi()
+    {
+        using var hold = new ManualResetEventSlim(false);
+        using var server = new LoopbackHttpServer(_ => { hold.Wait(TimeSpan.FromSeconds(30)); return Audio(Mp3); });
+        using var rig = Build(SpeechCatalog.MicrosoftTts, server);
+        if (rig is null) return;
+        try
+        {
+            if ((await Susu.Windows.Audio.SapiTtsProvider.VoicesAsync()).Count == 0) Assert.Skip("no SAPI voice is installed on this machine");
+            var sapi = new Susu.Windows.Audio.SapiTtsProvider(new LeasedAudioFiles(rig.Leases));
+            var sink = new InstantSink();
+            var backend = new SpeechBackend(new SpeechPlayer(sink), (_, id) => id == BuiltInCatalog.NativeTts ? sapi : rig.Provider);
+
+            var hung = backend.SpeakWithAsync(rig.Settings, rig.InstanceId, "hello", "en-US", TimeSpan.FromSeconds(30), Ct);
+            Assert.True(await Eventually.WaitAsync(() => server.RequestCount >= 1));
+            var local = await backend.SpeakWithAsync(rig.Settings, BuiltInCatalog.NativeTts, "hello", "en-US", TimeSpan.FromSeconds(45), Ct).WaitAsync(TimeSpan.FromSeconds(50), Ct);
+            Assert.Equal(PlaybackStatus.Completed, local.Status);
+            Assert.Equal(PlaybackStatus.Superseded, (await hung.WaitAsync(TimeSpan.FromSeconds(10), Ct)).Status);
+
+            // The plugin host dies while a cloud call is in flight: that call fails with a class; SAPI still speaks.
+            var inflight = backend.SpeakWithAsync(rig.Settings, rig.InstanceId, "again", "en-US", TimeSpan.FromSeconds(15), Ct);
+            Assert.True(await Eventually.WaitAsync(() => server.RequestCount >= 2));
+            using (var host = System.Diagnostics.Process.GetProcessById(rig.Session!.ChildPid)) { host.Kill(); host.WaitForExit(5000); }
+            var crashed = await inflight.WaitAsync(TimeSpan.FromSeconds(20), Ct);
+            Assert.Equal(PlaybackStatus.Failed, crashed.Status);
+            Assert.Contains(crashed.Error!.Kind, new[] { ErrorKind.Unavailable, ErrorKind.Network, ErrorKind.Timeout });
+            var afterCrash = await backend.SpeakWithAsync(rig.Settings, BuiltInCatalog.NativeTts, "still here", "en-US", TimeSpan.FromSeconds(45), Ct).WaitAsync(TimeSpan.FromSeconds(50), Ct);
+            Assert.Equal(PlaybackStatus.Completed, afterCrash.Status);
+            Assert.Equal(["audio/wav", "audio/wav"], sink.Mimes); // only SAPI audio ever played
+            Assert.True(await Eventually.WaitAsync(() => rig.Leases.ActiveCount == 0));
+        }
+        finally { hold.Set(); }
+    }
 }

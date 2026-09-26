@@ -32,7 +32,7 @@ public sealed unsafe partial class WasapiAudioSink : IAudioSink
     private const uint ReaderEndOfStream = 0x2, ReaderError = 0x1;
     private const uint AutoConvertPcm = 0x80000000, SrcDefaultQuality = 0x08000000;
     private const int ENotFound = unchecked((int)0x80070490), DeviceInvalidated = unchecked((int)0x88890004), ServiceNotRunning = unchecked((int)0x88890010),
-        UnsupportedFormat = unchecked((int)0x88890008), EndpointCreateFailed = unchecked((int)0x8889000F);
+        UnsupportedFormat = unchecked((int)0x88890008), EndpointCreateFailed = unchecked((int)0x8889000F), ResourcesInvalidated = unchecked((int)0x88890026);
 
     [LibraryImport("mfreadwrite.dll", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int MFCreateSourceReaderFromURL(string url, nint attributes, out nint reader);
@@ -148,7 +148,7 @@ public sealed unsafe partial class WasapiAudioSink : IAudioSink
     public static AudioFailure Classify(int hr) => hr switch
     {
         ENotFound or ServiceNotRunning or EndpointCreateFailed => AudioFailure.NoDevice,
-        DeviceInvalidated => AudioFailure.DeviceLost,
+        DeviceInvalidated or ResourcesInvalidated => AudioFailure.DeviceLost, // unplugged/disabled/default changed; or the stream was invalidated
         UnsupportedFormat => AudioFailure.Unsupported,
         _ => AudioFailure.Failed,
     };
