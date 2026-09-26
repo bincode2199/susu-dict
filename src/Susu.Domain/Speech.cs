@@ -66,8 +66,8 @@ public sealed record SpeechModel(string Id, bool Timecodes);
 /// <summary>
 /// Catalog metadata of a planned speech service (DEV-PLAN 5: P-S01–P-S03, P-R01, P-R02, and native SAPI): what it
 /// can do, where its key goes, and whether it exists yet. Installed=false: the package ships in <see cref="Plan"/>;
-/// it can be selected and given a shared account now, but nothing is called until it is installed. No provider
-/// is registered for any of these entries.
+/// it can be selected and given a shared account now, but nothing is called until it is installed. Installed plugin
+/// entries (P-S01–P-S03, F10.1) ship under <see cref="Directory"/> and load into the plugin host.
 /// </summary>
 public sealed record SpeechPackage(string InstanceId, string PackageId, string Plan, Capability Capability, bool Native, bool Installed,
     string DefaultOrigin, IReadOnlyList<CredentialTarget> Credentials, IReadOnlyList<SpeechModel> Models) : ICredentialPackage
@@ -78,10 +78,19 @@ public sealed record SpeechPackage(string InstanceId, string PackageId, string P
     /// <summary>At least one model returns timecodes, so the package may serve video transcription.</summary>
     public bool Timecodes => Models.Any(m => m.Timecodes);
 
+    /// <summary>Where the shipped package lives under the install folder (plugin packages only).</summary>
+    public string Directory => $"plugins/{InstanceId}";
+
+    /// <summary>
+    /// The exact origin this package calls with <paramref name="config"/>: an explicit <c>baseUrl</c>, else for P-S01 the
+    /// configured Azure Speech region (<c>https://{region}.tts.speech.microsoft.com</c>), else the default.
+    /// </summary>
     public string Origin(IReadOnlyDictionary<string, string> config)
     {
         if (config.TryGetValue("baseUrl", out var baseUrl) && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
             && Domain.Origin.TryNormalize($"{uri.Scheme}://{uri.Authority}", out var custom)) return custom;
+        if (InstanceId == SpeechCatalog.MicrosoftTts && config.TryGetValue("region", out var region) && SpeechCatalog.IsAzureRegion(region))
+            return Domain.Origin.Normalize($"https://{region}.tts.speech.microsoft.com");
         return Domain.Origin.Normalize(DefaultOrigin);
     }
 
@@ -95,6 +104,13 @@ public sealed record SpeechPackage(string InstanceId, string PackageId, string P
 public static class SpeechCatalog
 {
     public const string OpenAiAsr = "openai-asr", GeminiAsr = "gemini-asr";
+    public const string MicrosoftTts = "microsoft-tts", GoogleTts = "google-tts", TencentTts = "tencent-tts";
+
+    /// <summary>An Azure region name as used in the Speech endpoint host (e.g. <c>eastus</c>, <c>westeurope</c>).</summary>
+    public static bool IsAzureRegion(string? region) => region is { Length: > 0 and <= 32 } && region.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9');
+
+    /// <summary>Installed plugin packages (not native) that ship under <c>plugins/</c> and load into the plugin host.</summary>
+    public static IEnumerable<SpeechPackage> InstalledPlugins => All.Where(p => p.Installed && !p.Native);
 
     /// <summary>Reason codes of <see cref="Check"/>; the page shows the matching explanation.</summary>
     public const string WrongCapability = "capability", NeedsTimecodes = "needs-timecodes", UnknownModel = "model";
@@ -102,11 +118,11 @@ public static class SpeechCatalog
     public static readonly IReadOnlyList<SpeechPackage> All =
     [
         new(BuiltInCatalog.NativeTts, "native.sapi", "F10.1", Capability.Tts, Native: true, Installed: true, "", [], []),
-        new("microsoft-tts", "app.susu.microsoft-tts", "F10.1 P-S01", Capability.Tts, false, false,
+        new(MicrosoftTts, "app.susu.microsoft-tts", "F10.1 P-S01", Capability.Tts, false, true,
             "https://eastus.tts.speech.microsoft.com", [new("apiKey", "header:Ocp-Apim-Subscription-Key")], []),
-        new("google-tts", "app.susu.google-tts", "F10.1 P-S02", Capability.Tts, false, false,
+        new(GoogleTts, "app.susu.google-tts", "F10.1 P-S02", Capability.Tts, false, true,
             "https://texttospeech.googleapis.com", [new("apiKey", "header:X-Goog-Api-Key")], []),
-        new("tencent-tts", "app.susu.tencent-tts", "F10.1 P-S03", Capability.Tts, false, false,
+        new(TencentTts, "app.susu.tencent-tts", "F10.1 P-S03", Capability.Tts, false, true,
             "https://tts.tencentcloudapi.com", [new("secretId", "signer:tencent-tc3"), new("secretKey", "signer:tencent-tc3")], []),
         // P-R01: whisper-1 returns segments (verbose_json); the gpt-4o transcribe models return text only.
         new(OpenAiAsr, "app.susu.openai-asr", "F12.2 P-R01", Capability.Asr, false, false,

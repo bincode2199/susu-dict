@@ -9,8 +9,23 @@ namespace Susu.Plugins;
 /// Construction is cheap and launches nothing, so the host calls this for every new translation session;
 /// enabling, disabling, reordering or binding a key needs no restart.
 /// </summary>
+/// <summary>A package the plugin host loads, with the credential/origin rules of its catalog entry.</summary>
+public sealed record WiredPackage(string InstanceId, string PackageId, string Directory, ICredentialPackage Credentials)
+{
+    public string Signer => Credentials.Signer;
+    public IReadOnlyList<string> SecretNames => Credentials.SecretNames;
+    public string Origin(IReadOnlyDictionary<string, string> config) => Credentials.Origin(config);
+}
+
 public static class PluginTranslationProviders
 {
+    /// <summary>Every package the plugin host loads: the wired translation packages and the installed speech packages (F10.1 P-S01–P-S03).</summary>
+    public static IReadOnlyList<WiredPackage> WiredPackages { get; } =
+    [
+        .. TranslationPackages.All.Select(p => new WiredPackage(p.InstanceId, p.PackageId, p.Directory, p)),
+        .. SpeechCatalog.InstalledPlugins.Select(p => new WiredPackage(p.InstanceId, p.PackageId, p.Directory, p)),
+    ];
+
     public static IReadOnlyList<ITranslationProvider> Build(AppSettings settings, Func<string, string, bool> hasSecret, Supervisor<HostSession> supervisor,
         IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? schemas = null)
         => [.. TranslationPackages.Resolve(settings, hasSecret).Select(plan => Create(plan, supervisor, settings, schemas))];
@@ -48,7 +63,7 @@ public static class PluginTranslationProviders
     public static IReadOnlyDictionary<string, IReadOnlyList<ConfigField>> LoadSchemas(string root, Action<string>? invalid = null)
     {
         var result = new Dictionary<string, IReadOnlyList<ConfigField>>(StringComparer.Ordinal);
-        foreach (var package in TranslationPackages.All)
+        foreach (var package in WiredPackages)
         {
             string path = Path.Combine(root, package.Directory, "manifest.yaml");
             PackageManifest? manifest;
@@ -69,7 +84,7 @@ public static class PluginTranslationProviders
     public static async Task<CapabilityOutcome<Susu.Contracts.OptionsResult>> LoadOptionsAsync(Supervisor<HostSession> supervisor, AppSettings settings,
         string instanceId, string method, string field, long revision, string? cursor, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        var package = TranslationPackages.Find(instanceId);
+        var package = WiredPackages.FirstOrDefault(p => p.InstanceId == instanceId);
         var instance = settings.Instances.FirstOrDefault(i => i.Id == instanceId);
         if (package is null || instance is null || instance.Package != package.PackageId) return new(false, null, Susu.Contracts.ErrorKind.Unavailable, "no such package");
         if (supervisor.Stopped) return new(false, null, Susu.Contracts.ErrorKind.Unavailable, "plugin host stopped");
@@ -105,7 +120,7 @@ public static class PluginTranslationProviders
     public static HostSession LoadAll(HostSession session, Action<string, string?>? loadFailed = null)
     {
         int loaded = 0;
-        foreach (var package in TranslationPackages.All)
+        foreach (var package in WiredPackages)
         {
             var result = session.Load(package.PackageId, package.Directory);
             if (result.Ok) loaded++;

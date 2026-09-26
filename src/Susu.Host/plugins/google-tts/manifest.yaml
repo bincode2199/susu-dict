@@ -1,0 +1,32 @@
+id: app.susu.google-tts
+name: Google Cloud Text-to-Speech
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - tts
+hosts:
+  - texttospeech.googleapis.com
+credentialUse:
+  - apiKey
+config:
+  type: object
+  properties:
+    voice:
+      type: string
+      title: Voice
+      x-susu:
+        placeholder: en-US-Standard-C
+        help: Leave empty to let Google choose a voice for the text's language.
+        optionsSource:
+          method: voices
+          dependsOn: [apiKey]
+    rate:
+      type: number
+      title: Speed
+      minimum: 0.5
+      maximum: 2
+      default: 1
+      x-susu:
+        placeholder: "1"
+        help: Speech speed from 0.5 to 2; 1 is normal.

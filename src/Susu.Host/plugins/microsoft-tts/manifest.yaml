@@ -1,0 +1,39 @@
+id: app.susu.microsoft-tts
+name: Microsoft Azure Speech
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - tts
+hosts:
+  - eastus.tts.speech.microsoft.com
+credentialUse:
+  - apiKey
+config:
+  type: object
+  properties:
+    region:
+      type: string
+      title: Region
+      default: eastus
+      x-susu:
+        placeholder: eastus
+        help: The Azure region of your Speech resource, for example eastus or westeurope.
+    voice:
+      type: string
+      title: Voice
+      x-susu:
+        placeholder: en-US-JennyNeural
+        help: Leave empty to use a default voice for the text's language.
+        optionsSource:
+          method: voices
+          dependsOn: [region, apiKey]
+    rate:
+      type: number
+      title: Speed
+      minimum: 0.5
+      maximum: 2
+      default: 1
+      x-susu:
+        placeholder: "1"
+        help: Speech speed from 0.5 to 2; 1 is normal.

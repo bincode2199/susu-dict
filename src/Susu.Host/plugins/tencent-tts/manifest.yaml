@@ -1,0 +1,40 @@
+id: app.susu.tencent-tts
+name: Tencent Cloud TTS
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - tts
+hosts:
+  - tts.tencentcloudapi.com
+credentialUse:
+  - secretId
+  - secretKey
+config:
+  type: object
+  properties:
+    voice:
+      type: string
+      title: Voice
+      x-susu:
+        placeholder: "101001"
+        help: Leave empty to use a default voice for the text's language.
+        optionsSource:
+          method: voices
+          dependsOn: []
+    rate:
+      type: number
+      title: Speed
+      minimum: 0.6
+      maximum: 2
+      default: 1
+      x-susu:
+        placeholder: "1"
+        help: Speech speed from 0.6 to 2; 1 is normal.
+    region:
+      type: string
+      title: Region
+      x-susu:
+        group: advanced
+        placeholder: ap-guangzhou
+        help: Optional; Tencent Cloud TTS does not require a region.

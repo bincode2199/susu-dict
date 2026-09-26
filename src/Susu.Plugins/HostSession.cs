@@ -226,12 +226,16 @@ public sealed class HostSession : IHostSessionHandle
     private void AdoptResultFiles(IpcEnvelope envelope, string grant)
     {
         string requestId = envelope.RequestId!;
-        lock (adoptGate) if (!adoptPending.Remove(requestId)) return;
         var ids = new List<string>();
         if (envelope.Type == IpcMessageType.Completed && envelope.Payload is { ValueKind: JsonValueKind.Object } payload
             && payload.TryGetProperty("result", out var result)) CollectStrings(result, ids, 0);
-        var files = ids.Count == 0 ? [] : Broker.Adopt(grant, ids);
-        if (files.Count > 0) lock (adoptGate) adopted[requestId] = files;
+        // One lock for the pending check and the store, so a concurrent Abandon either prevents the adoption or sees it.
+        lock (adoptGate)
+        {
+            if (!adoptPending.Remove(requestId)) return;
+            var files = ids.Count == 0 ? [] : Broker.Adopt(grant, ids);
+            if (files.Count > 0) adopted[requestId] = files;
+        }
     }
 
     private static void CollectStrings(JsonElement element, List<string> into, int depth)
