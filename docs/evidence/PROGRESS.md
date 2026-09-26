@@ -32,7 +32,14 @@ Environment notes for building and running (PowerShell setup, non-interactive RD
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
 3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24)** at the product owner's request, to be resumed manually. A master agent coordinates, writes the docs and watches the usage limits; a fresh coding agent handles each sub-item and an independent testing agent verifies each module. Modules run one at a time.
 4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window because one sub-agent ran 370 turns in a single uncompacted context. The rules that prevent a repeat are in [CLAUDE.md](../../CLAUDE.md).
-5. **Active (2026-09-26):** F06–F09 are pending integration acceptance. **Next action:** F10 (pronunciation). The plan is in `docs/evidence/F10/F10.md`. Start a fresh coding agent for F10.1: native SAPI, P-S01–P-S03 cloud TTS packages, voices and rate, and the single player with stop and leases. Consume the F09 `IDictionaryAudioSource` port.
+5. **Active (2026-09-26, paused at 88 % of the 5-hour window; resets 12:00 UTC; weekly 47 %):** F06–F09 are pending integration acceptance. F10.1 and F10.2 are done (1065 tests, 2 skip; UI 116). **Next action:** start a fresh coding agent for F10.3 (see [F10 § Plan of work](F10/F10.md#plan-of-work)):
+   - a TTS cache keyed by service, voice, rate and text, invalidated on service or voice change;
+   - playback device errors (lost or no device) with a classified message;
+   - cloud errors never affect local SAPI;
+   - pre-warm or measure the ~20 s first SAPI synthesis;
+   - the dark-theme border token for the speech bar's default square.
+   
+   Then run the F10 testing agent.
 6. **Input needed from the product owner (not blocking the next module):** an attended interactive desktop with a foreground window. It is needed to walk the F06 G1 and F07 demos in the real `susu.exe` window, and to run the F08 checks that need input focus (SEL01 matrix, SendInput, Notepad end to end, C07). The RDP session shows Active, but `GetForegroundWindow` returns 0, so agents can't activate windows. Unless you say otherwise, these are grouped with the F19 physical-machine checks (D-67).
    - Also noted: the CLAUDE.md temp-folder cleanup rule (a working-tree edit, not made by an agent) is followed. The leak's root cause is fixed in `2e6004b`.
 7. **Original resume plan:** follow [F06 § Handoff](F06/F06.md#handoff): F06.2b (Tencent, DeepL), then F06.3 (UI and dynamic providers), then the F06 testing agent. After F06 (G1), per DEV-PLAN: F07, then F08–F18 (after F07, OCR, recording and vocab do not depend on each other), then F19 on a physical machine. Before starting a sub-agent, check the 5-hour and weekly usage windows. At about 90 %, have agents commit and stop, and pause until the reset.
