@@ -130,7 +130,9 @@ internal static class MainMode
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Clipboard, FeatureState.Available, null, [Capability.Translate]));
         // F10.2: pronunciation (hotkey, bar, card read-aloud) is available once the selected pronunciation service can run.
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Pronunciation, FeatureState.Available, null, [Capability.Tts]));
-        foreach (var id in new[] { FeatureRegistry.Ids.Ocr,
+        // F11.3: screenshot OCR is available once an OCR service can run (enabled, credentials saved and granted).
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Ocr, FeatureState.Available, null, [Capability.Ocr]));
+        foreach (var id in new[] {
                      FeatureRegistry.Ids.Voice, FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, "update" })
             features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 
@@ -204,21 +206,22 @@ internal static class MainMode
                 serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)),
                 schemas, optionsBroker, (network, targets, cancel) => NetworkProbe.RunAsync(network, secrets, targets, cancel), speech), capture);
         shell = coordinator;
-        // F11.1: screenshot capture port for OCR (the feature stays InDevelopment until F11.3 marks it Available). Kept copies
-        // are written only when "keep screenshots" is on (no setting yet, so off: OCR03); indexed copies older than 7 days go at startup.
-        var keptScreenshots = KeptScreenshots.For(paths);
+        // F11.1/F11.3: screenshot capture port for OCR. Kept copies are written only when SetOcr "keep screenshots" is on (off by
+        // default: OCR03); indexed copies older than the SetOcr retention (7 days by default) go at startup.
+        var keptScreenshots = KeptScreenshots.For(paths, () => config.State.Effective.Ocr.RetentionDays);
         try { keptScreenshots.Cleanup(clock.UtcNow); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log.Event("capture.retention", ("code", e.GetType().Name)); }
         coordinator.ScreenCapture = new ScreenCaptureCoordinator(new GdiScreenGrabber(), new RegionOverlay(), platform, new LeasedFiles(leases), clock, keptScreenshots,
-            keepScreenshots: () => false,
+            keepScreenshots: () => config.State.Effective.Ocr.KeepScreenshots,
             overlay: () => new RegionSelectOptions(config.State.Effective.General.UiLanguage == "en" ? ScreenCaptureCoordinator.HintEn : ScreenCaptureCoordinator.HintZh,
                 config.State.Effective.General.Theme == "dark"));
         // F11.2: a captured image goes to the selected OCR service by handle; recognized text enters the OCR window's translation
-        // session (T02). Auto-translate has no setting yet (F11.3), so it is on, as in DESIGN SetOcr. Only status is logged, never text.
+        // session (T02) when SetOcr "translate after recognition" is on. F11.3: the shell owns each captured image, opens the OCR
+        // window and runs this job; closing the window cancels it. Only status is logged, never text.
         var ocr = new OcrJob(() => translation.Supervisor is { } ocrSupervisor ? PluginOcrProviders.Resolve(config.State.Effective, secrets.Has, ocrSupervisor, schemas) : null,
-            async text => await coordinator.SubmitRecognizedTextAsync(text), autoTranslate: () => true);
+            async text => await coordinator.SubmitRecognizedTextAsync(text), autoTranslate: () => config.State.Effective.Ocr.AutoTranslate);
         ocr.StateChanged += state => log.Event("ocr", ("phase", state.Phase.ToString()), ("service", state.ServiceId ?? ""), ("kind", state.Error?.Kind.ToString() ?? ""));
-        coordinator.ScreenCaptured += result => { if (result.Image is { } image) _ = ocr.RecognizeAsync(image); };
+        coordinator.Ocr = ocr;
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;

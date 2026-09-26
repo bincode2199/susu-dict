@@ -22,6 +22,7 @@ export const UI_COMMANDS = {
   PreviewPrompt: 'Settings.PreviewPrompt',
   TestNetwork: 'Settings.TestNetwork',
   SelectSpeech: 'Settings.SelectSpeech',
+  SaveOcr: 'Settings.SaveOcr',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -226,6 +227,58 @@ export interface NetworkView {
   aiTimeoutSeconds: number;
 }
 
+export interface OcrBlockView {
+  text: string;
+  kind: string;
+}
+
+export interface OcrChoiceView {
+  instanceId: string;
+  serviceId: string;
+  enabled: boolean;
+  availability: string;
+  usable: boolean;
+}
+
+export interface OcrSaveRequest {
+  expectedRevision: number;
+  expectedFileHash: string;
+  service: string;
+  autoTranslate: boolean;
+  keepScreenshots: boolean;
+  retentionDays: number;
+}
+
+export interface OcrSettingsView {
+  service: string;
+  autoTranslate: boolean;
+  keepScreenshots: boolean;
+  retentionDays: number;
+  minRetentionDays: number;
+  maxRetentionDays: number;
+  choices: OcrChoiceView[];
+  ready: boolean;
+  hotkey: string;
+  reasonKey?: string;
+}
+
+export interface OcrView {
+  id: number;
+  phase: string;
+  serviceId?: string;
+  text?: string;
+  blocks: OcrBlockView[];
+  errorKind?: ErrorKind;
+  preview?: string;
+  width: number;
+  height: number;
+  translated: boolean;
+  autoTranslate: boolean;
+  hotkey: string;
+  notice?: string;
+  elapsedMs?: number;
+}
+
 export interface OptionItem {
   value: string;
   label: string;
@@ -373,6 +426,7 @@ export interface SettingsView {
   accounts: AccountView[];
   prompt?: PromptView;
   speech?: SpeechView;
+  ocr?: OcrSettingsView;
 }
 
 export interface SpeakCardRequest {
@@ -499,6 +553,7 @@ export interface UiSnapshot {
   errorBar?: ErrorBarView;
   speech?: SpeechStateView;
   speechBar?: SpeechBarView;
+  ocr?: OcrView;
 }
 
 export interface ValidateProviderRequest {

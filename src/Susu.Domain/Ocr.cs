@@ -60,9 +60,15 @@ public static class OcrCatalog
     }
 }
 
-/// <summary>SetOcr (F11.2 minimal field; F11.3 builds the page): the OCR service used by default.</summary>
-public sealed record OcrSettings(string Service)
+/// <summary>
+/// SetOcr (F11.2 service; F11.3 the page): the OCR service used by default; whether recognized text is translated at once
+/// (DESIGN "识别完成后自动翻译", on); whether a copy of each screenshot is kept in Pictures/Su-Su (off unless the user turns it on,
+/// OCR03) and for how many days the startup cleanup keeps indexed copies (DESIGN "保留 7 天", ARCHITECTURE 8.4).
+/// </summary>
+public sealed record OcrSettings(string Service, bool AutoTranslate = true, bool KeepScreenshots = false, int RetentionDays = OcrSettings.DefaultRetentionDays)
 {
+    public const int DefaultRetentionDays = 7, MinRetentionDays = 1, MaxRetentionDays = 365;
+
     /// <summary>DESIGN SetOcr: Tencent OCR is the default service.</summary>
     public static OcrSettings Default => new(OcrCatalog.TencentOcr);
 }

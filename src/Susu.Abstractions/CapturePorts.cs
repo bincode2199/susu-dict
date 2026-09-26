@@ -76,6 +76,12 @@ public sealed class ScreenshotImage(ILeasedFile file, PixelRect region, int widt
     /// <summary>DPI of the monitor holding most of the selection (96 = 100 %); OCR boxes are normalized with it.</summary>
     public int Dpi { get; } = dpi;
     public int MonitorCount { get; } = monitorCount;
+    /// <summary>
+    /// F11.3: a small PNG thumbnail of the selection for the OCR window (made from the pixels at capture time, at most
+    /// <see cref="Susu.Contracts.OcrView.PreviewMaxBytes"/>), or null. It stays usable after the lease is released, so the page
+    /// never needs the file path.
+    /// </summary>
+    public byte[]? Preview { get; init; }
     public void Dispose() => File.Dispose();
 }
 

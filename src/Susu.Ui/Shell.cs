@@ -189,6 +189,7 @@ public sealed partial class ShellCoordinator
                 return;
             case WindowOutcome.HideCancelTask:
                 if (translations.Remove(kind, out var slot)) _ = slot.Session.CloseAsync(TimeSpan.FromSeconds(3));
+                if (kind == WindowKind.Ocr) Ocr?.Cancel(); // Esc/close stops the recognition too; its image lease goes as it unwinds
                 break;
         }
         HideWindow(kind);
@@ -224,7 +225,14 @@ public sealed partial class ShellCoordinator
 
     public void OnHotkey(string action)
     {
-        if (!hotkeyFeatures.TryGetValue(action, out var feature) || Resolve(feature).State != FeatureState.Available) return; // unavailable: no action (PLAN 1.2)
+        if (!hotkeyFeatures.TryGetValue(action, out var feature)) return;
+        var (featureState, reasonKey) = Resolve(feature);
+        if (featureState != FeatureState.Available)
+        {
+            // Unavailable: no action (PLAN 1.2). A registered OCR chord whose service became unusable says why (DESIGN 9).
+            if (feature == FeatureRegistry.Ids.Ocr && featureState == FeatureState.Unavailable && Ocr is not null) ReportOcrUnavailable(reasonKey);
+            return;
+        }
         hotkeyAt = System.Diagnostics.Stopwatch.GetTimestamp();
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
         // F08.2: selection/clipboard capture. The foreground snapshot is taken synchronously here, before any Su-Su
@@ -255,7 +263,13 @@ public sealed partial class ShellCoordinator
         try { result = await screen.CaptureRegionAsync(); }
         catch (Exception e) { Diagnostic?.Invoke($"capture.screen.exception {e.GetType().Name}"); return; }
         Diagnostic?.Invoke($"capture.screen {result.Status} {result.ErrorCode ?? result.CopyErrorCode ?? ""}".TrimEnd());
-        if (ScreenCaptured is { } handler) handler(result);
+        if (Ocr is { } job)
+        {
+            // F11.3: the shell owns the image and presents it on the message thread (window, then recognition).
+            ScreenCaptured?.Invoke(result);
+            platform.StartTimer(TimeSpan.Zero, () => _ = PresentScreenCaptureAsync(job, result));
+        }
+        else if (ScreenCaptured is { } handler) handler(result);
         else result.Image?.Dispose();
     }
 
@@ -371,7 +385,8 @@ public sealed partial class ShellCoordinator
             kind == WindowKind.Selection ? captureView : null,
             kind == WindowKind.Error ? errorBar : null,
             kind == WindowKind.Speech || UiCommands.IsAllowed(kind, UiCommands.SpeakCard) ? speechState : null,
-            kind == WindowKind.Speech ? speechBar : null);
+            kind == WindowKind.Speech ? speechBar : null,
+            kind == WindowKind.Ocr ? ocrView : null);
         session.Ready = true;
         session.PendingCards.Clear();
         Send(kind, session, UiMessageKind.Snapshot, null, null, JsonSerializer.SerializeToElement(payload, ContractsJson.Default.UiSnapshot));
@@ -451,6 +466,8 @@ public sealed partial class ShellCoordinator
             case UiCommands.PreviewPrompt: return PreviewPrompt(Read(payload, ContractsJson.Default.PromptPreviewRequest));
             case UiCommands.TestNetwork: return await TestNetworkAsync(Read(payload, ContractsJson.Default.NetworkTestRequest));
             case UiCommands.SelectSpeech: return SelectSpeech(Read(payload, ContractsJson.Default.SpeechSelectRequest));
+            case UiCommands.SaveOcr: return SaveOcr(Read(payload, ContractsJson.Default.OcrSaveRequest));
+            case UiCommands.BeginCapture: return Recapture();
             case UiCommands.SpeakCard: return await SpeakCardAsync(kind, Read(payload, ContractsJson.Default.SpeakCardRequest));
             case UiCommands.SpeechPlay: return PlayBarService(Read(payload, ContractsJson.Default.SpeechPlayRequest).Instance);
             case UiCommands.SpeechStop: Speech?.Player.Stop(); return Ok();
@@ -1026,6 +1043,15 @@ public sealed partial class ShellCoordinator
                 if (x.Enabled) availability = (states.All(t => t.Saved && t.Granted) ? Availability.Ready : Availability.MissingCredential).ToString();
                 implemented = false;
             }
+            else if (x.Capability == Capability.Ocr && OcrCatalog.Find(x.Instance) is { } ocrPackage && instance.Package == ocrPackage.PackageId)
+            {
+                // F11.3 SetOcr: an OCR package's grants are confirmed per package, origin and use, like a translation package's, so
+                // the shared Tencent Cloud account needs its own grant for ocr.tencentcloudapi.com (PLAN 1.3/4.5.3).
+                var states = CredentialPackages.States(s, ocrPackage, instance, config.Secrets.Has);
+                targets = [.. states.Select(t => new CredentialTargetView(t.Secret, t.Origin, t.Use, t.Saved, t.Granted))];
+                if (x.Enabled) availability = (states.All(t => t.Saved && t.Granted) ? Availability.Ready : Availability.MissingCredential).ToString();
+                if (backend is not null) implemented = backend.RuntimeAvailable && x.Enabled;
+            }
             else if (backend is not null) implemented = false;
             int order = x.Capability == Capability.Translate ? translationOrder.IndexOf(x.ServiceId) : -1;
             long? usage = targets is not null && backend?.MonthlyUsage is { } monthly ? monthly(x.ServiceId) : null;
@@ -1045,7 +1071,8 @@ public sealed partial class ShellCoordinator
             services, accounts,
             new PromptView(s.Prompt.Level, s.Prompt.Profile, [.. s.Prompt.Scope], [.. PromptCatalog.Levels.Select(l => l.Id)], [.. PromptCatalog.AiInstances],
                 [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]),
-            new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr)));
+            new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr)),
+            OcrSettingsOf(s));
     }
 
     private static readonly Dictionary<SpeechSlot, string> speechSlotNames = new() { [SpeechSlot.Tts] = "tts", [SpeechSlot.Asr] = "asr", [SpeechSlot.VideoAsr] = "videoAsr" };

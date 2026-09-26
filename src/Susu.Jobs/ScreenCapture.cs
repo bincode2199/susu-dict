@@ -77,7 +77,13 @@ public sealed class ScreenCaptureCoordinator(
     private ScreenCaptureResult Store(IScreenFrame frame, PixelRect region)
     {
         byte[] png;
-        try { png = Png.EncodeBgra(frame.CopyBgra(region), region.Width, region.Height); }
+        byte[]? preview;
+        try
+        {
+            var pixels = frame.CopyBgra(region);
+            png = Png.EncodeBgra(pixels, region.Width, region.Height);
+            preview = Png.Thumbnail(pixels, region.Width, region.Height, png);
+        }
         catch (Exception e) when (e is not OutOfMemoryException) { return ScreenCaptureResult.Failed("capture.failed"); }
         ILeasedFile file = files.Create("ocr", "image/png", "png");
         try { writeFile(file.FilePath, png); }
@@ -87,7 +93,7 @@ public sealed class ScreenCaptureCoordinator(
             return ScreenCaptureResult.Failed(IsDiskFull(e) ? "capture.diskFull" : "capture.writeFailed");
         }
         var monitor = CaptureGeometry.DominantMonitor(region, frame.Monitors);
-        var image = new ScreenshotImage(file, region, region.Width, region.Height, monitor?.Dpi ?? 96, CaptureGeometry.MonitorsUnder(region, frame.Monitors).Count);
+        var image = new ScreenshotImage(file, region, region.Width, region.Height, monitor?.Dpi ?? 96, CaptureGeometry.MonitorsUnder(region, frame.Monitors).Count) { Preview = preview };
         if (!keepScreenshots() || archive is null) return new ScreenCaptureResult(ScreenCaptureStatus.Captured, image);
         KeepResult kept;
         try { kept = archive.Keep(png, clock.UtcNow); }
@@ -145,6 +151,51 @@ public static class Png
         }
         Chunk(output, "IEND"u8, []);
         return output.ToArray();
+    }
+
+    /// <summary>Largest thumbnail edge, in pixels (the OCR window is 420 DIP wide; 2× for high-DPI screens).</summary>
+    public const int ThumbnailMaxWidth = 760, ThumbnailMaxHeight = 360;
+
+    /// <summary>
+    /// F11.3: the OCR window's preview. The full PNG when it already fits <see cref="ThumbnailMaxWidth"/>×<see cref="ThumbnailMaxHeight"/>
+    /// and <see cref="Susu.Contracts.OcrView.PreviewMaxBytes"/>; otherwise a box-filtered copy shrunk by a whole factor until it
+    /// fits both limits; null when even a small copy is too large.
+    /// </summary>
+    public static byte[]? Thumbnail(ReadOnlySpan<byte> bgra, int width, int height, byte[]? full = null)
+    {
+        int factor = Math.Max(1, Math.Max((width + ThumbnailMaxWidth - 1) / ThumbnailMaxWidth, (height + ThumbnailMaxHeight - 1) / ThumbnailMaxHeight));
+        for (int attempt = 0; attempt < 4; attempt++, factor *= 2)
+        {
+            byte[] png = factor == 1 && full is not null ? full : factor == 1 ? EncodeBgra(bgra, width, height) : EncodeBgra(Shrink(bgra, width, height, factor, out int w, out int h), w, h);
+            if (png.Length <= Susu.Contracts.OcrView.PreviewMaxBytes) return png;
+        }
+        return null;
+    }
+
+    /// <summary>Averages each <paramref name="factor"/>×<paramref name="factor"/> block (edge blocks may be smaller).</summary>
+    public static byte[] Shrink(ReadOnlySpan<byte> bgra, int width, int height, int factor, out int targetWidth, out int targetHeight)
+    {
+        targetWidth = Math.Max(1, (width + factor - 1) / factor);
+        targetHeight = Math.Max(1, (height + factor - 1) / factor);
+        var output = new byte[targetWidth * targetHeight * 4];
+        for (int ty = 0; ty < targetHeight; ty++)
+        {
+            int y0 = ty * factor, y1 = Math.Min(height, y0 + factor);
+            for (int tx = 0; tx < targetWidth; tx++)
+            {
+                int x0 = tx * factor, x1 = Math.Min(width, x0 + factor);
+                int b = 0, g = 0, r = 0, n = 0;
+                for (int y = y0; y < y1; y++)
+                    for (int x = x0; x < x1; x++)
+                    {
+                        int o = (y * width + x) * 4;
+                        b += bgra[o]; g += bgra[o + 1]; r += bgra[o + 2]; n++;
+                    }
+                int t = (ty * targetWidth + tx) * 4;
+                output[t] = (byte)(b / n); output[t + 1] = (byte)(g / n); output[t + 2] = (byte)(r / n); output[t + 3] = 255;
+            }
+        }
+        return output;
     }
 
     /// <summary>Reads width/height from a PNG header (tests and diagnostics).</summary>

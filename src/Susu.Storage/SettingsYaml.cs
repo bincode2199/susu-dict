@@ -233,10 +233,12 @@ public static partial class SettingsYaml
             if (node is null) return d;
             const string p = "ocr";
             if (node is not YMap map) { Issue(p, "type", "expected a mapping", node); return d; }
-            Keys(map, p, "service");
+            Keys(map, p, "service", "autoTranslate", "keepScreenshots", "retentionDays");
             string service = Str(map, p, "service", d.Service);
-            if (OcrCatalog.Find(service) is null) { Issue($"{p}.service", "range", $"'{service}' is not an OCR service", map.Get("service") ?? node); return d; }
-            return new OcrSettings(service);
+            if (OcrCatalog.Find(service) is null) { Issue($"{p}.service", "range", $"'{service}' is not an OCR service", map.Get("service") ?? node); service = d.Service; }
+            // F11.3: each field falls back on its own, so a bad retention value never turns "keep screenshots" on or off.
+            return new OcrSettings(service, Bool(map, p, "autoTranslate", d.AutoTranslate), Bool(map, p, "keepScreenshots", d.KeepScreenshots),
+                (int)Long(map, p, "retentionDays", d.RetentionDays, OcrSettings.MinRetentionDays, OcrSettings.MaxRetentionDays));
         }
 
         private void CrossCheck(AppSettings s)
@@ -441,6 +443,9 @@ public static partial class SettingsYaml
         }
         Section(w, c, "ocr");
         Pair(w, 1, "service", Q(s.Ocr.Service));
+        Pair(w, 1, "autoTranslate", B(s.Ocr.AutoTranslate));
+        Pair(w, 1, "keepScreenshots", B(s.Ocr.KeepScreenshots));
+        Pair(w, 1, "retentionDays", s.Ocr.RetentionDays.ToString(CultureInfo.InvariantCulture));
         return w.ToString();
     }
 
@@ -482,6 +487,7 @@ public static partial class SettingsYaml
         ["prompts"] = "提示语：自定义模板；{{text}} {{from}} {{to}} {{level}} 只替换一次",
         ["prompt"] = "当前提示语：内置水平、自定义模板与应用范围",
         ["speech"] = "发音与语音：发音服务、语音／音频转写与视频转写各选各的；视频转写只接受带时间码的模型",
+        ["ocr"] = "OCR：默认服务、识别后自动翻译、是否保留截图（默认不保留）及保留天数 1-365",
     };
 
     private static readonly IReadOnlyDictionary<string, string> CommentsEn = new Dictionary<string, string>
@@ -497,5 +503,6 @@ public static partial class SettingsYaml
         ["prompts"] = "Prompts: custom templates; {{text}} {{from}} {{to}} {{level}} are replaced once, other text stays as written",
         ["prompt"] = "Prompt in use: built-in level (empty = none), custom template id (empty = built-in default) and the AI services it applies to",
         ["speech"] = "Speech: pronunciation service, recording/audio transcription and video transcription, each chosen separately; video needs a model with timecodes",
+        ["ocr"] = "OCR: default service, translate after recognition, keep screenshots (off by default) and days to keep them, 1-365",
     };
 }
