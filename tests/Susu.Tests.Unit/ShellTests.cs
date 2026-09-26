@@ -230,7 +230,7 @@ public class ShellCoordinatorTests
 
         public CommandResult Result(string correlationId)
         {
-            for (int i = 0; i < 500; i++)
+            for (var poll = System.Diagnostics.Stopwatch.StartNew(); poll.Elapsed < Eventually.DefaultTimeout;)
             {
                 var hit = Platform.Posted.FirstOrDefault(p => p.Envelope.CorrelationId == correlationId);
                 if (hit.Envelope is not null) return hit.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.CommandResult)!;
@@ -241,7 +241,7 @@ public class ShellCoordinatorTests
 
         public UiSnapshot LastSnapshot(WindowKind kind)
         {
-            for (int i = 0; i < 500; i++)
+            for (var poll = System.Diagnostics.Stopwatch.StartNew(); poll.Elapsed < Eventually.DefaultTimeout;)
             {
                 var hit = Platform.Posted.LastOrDefault(p => p.Kind == kind && p.Envelope.Kind == UiMessageKind.Snapshot);
                 if (hit.Envelope is not null) return hit.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.UiSnapshot)!;
@@ -425,7 +425,7 @@ public class ShellCoordinatorTests
         rig.LastSnapshot(WindowKind.Main);
         Assert.True(rig.Result(rig.Command(WindowKind.Main, UiCommands.SubmitText, new { text = "hello" })).Ok);
         Assert.Contains(rig.Platform.Posted, p => p.Envelope.Name == "translation");
-        for (int i = 0; i < 200 && !rig.Platform.Posted.Any(p => p.Envelope.Kind == UiMessageKind.Patch && p.Envelope.Payload!.Value.GetProperty("card").GetProperty("text").GetString() == "T:hello"); i++) await Task.Delay(10, TestContext.Current.CancellationToken);
+        await Eventually.WaitAsync(() => rig.Platform.Posted.Any(p => p.Envelope.Kind == UiMessageKind.Patch && p.Envelope.Payload!.Value.GetProperty("card").GetProperty("text").GetString() == "T:hello"));
         Assert.Contains(rig.Platform.Posted, p => p.Envelope.Kind == UiMessageKind.Patch && p.Envelope.Payload!.Value.GetProperty("card").GetProperty("text").GetString() == "T:hello");
         Assert.True(rig.Result(rig.Command(WindowKind.Main, UiCommands.CopyText, new { text = "T:hello" })).Ok);
         Assert.Equal("T:hello", rig.Platform.Clipboard);
@@ -453,7 +453,7 @@ public class ShellCoordinatorTests
         Assert.False(rig.Shell.HotkeyResults.ContainsKey("clipboardTranslate")); // shared chord: one registration
         rig.Shell.OnHotkey("selectionTranslate");
         Assert.Equal(1, reader.Snapshots);
-        var outcome = await captured.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var outcome = await captured.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         Assert.Equal((CaptureTrigger.Shared, CaptureStatus.Text, "picked"), (outcome.Trigger, outcome.Status, outcome.Text));
     }
 

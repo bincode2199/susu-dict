@@ -258,7 +258,7 @@ public class TranslationSettingsCommandTests
         {
             string id = $"c{++counter}";
             Shell.OnPageMessage(kind, JsonSerializer.Serialize(new { uiVersion = 1, kind = "Command", windowSessionId = Platform.Session(kind), name, correlationId = id, payload }, Web));
-            for (int i = 0; i < 1000; i++)
+            for (var poll = System.Diagnostics.Stopwatch.StartNew(); poll.Elapsed < Eventually.DefaultTimeout;)
             {
                 var hit = Platform.Posted.FirstOrDefault(p => p.Envelope.CorrelationId == id);
                 if (hit.Envelope is not null) return hit.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.CommandResult)!;

@@ -38,8 +38,7 @@ public class PluginHostIntegrationTests
     {
         string? output = FindHostBuildOutput();
         if (output is null) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-plugin-it-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-plugin-it");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));
@@ -68,7 +67,7 @@ public class PluginHostIntegrationTests
             Assert.True(loaded.Ok, loaded.Error);
 
             var (_, _, task) = session.Invoke("echo", "translate", "{\"text\":\"hi\"}", jobId: "job-1", origins: []);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, envelope.Type);
         }
         finally
@@ -91,12 +90,12 @@ public class PluginHostIntegrationTests
             Assert.True(loaded.Ok, loaded.Error);
 
             var (_, _, task) = session.Invoke("echo", "spin", "{}", jobId: "job-2", origins: []);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Failed, envelope.Type);
 
             // The runtime is rebuilt in place; a fresh call on the same plugin still works.
             var (_, _, retry) = session.Invoke("echo", "translate", "{\"text\":\"again\"}", jobId: "job-3", origins: []);
-            var retryEnvelope = await retry.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var retryEnvelope = await retry.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, retryEnvelope.Type);
         }
         finally
@@ -127,15 +126,15 @@ public class PluginHostIntegrationTests
             var (_, _, spinTask) = session.Invoke("echo", "spinMicrotask", "{}", jobId: "job-spin-mt", origins: []);
             var (_, _, secondTask) = session.Invoke("second", "translate", "{\"text\":\"still-alive\"}", jobId: "job-second-mt", origins: []);
 
-            var spinResult = await spinTask.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var spinResult = await spinTask.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Failed, spinResult.Type); // interrupted despite never running a synchronous loop
 
-            var secondResult = await secondTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var secondResult = await secondTask.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, secondResult.Type); // unrelated package unaffected
 
             // The rebuilt "echo" runtime still works for a fresh call afterwards.
             var (_, _, retry) = session.Invoke("echo", "translate", "{\"text\":\"again\"}", jobId: "job-retry-mt", origins: []);
-            var retryEnvelope = await retry.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var retryEnvelope = await retry.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, retryEnvelope.Type);
         }
         finally { session.Shutdown(2000); }
@@ -154,7 +153,7 @@ public class PluginHostIntegrationTests
         {
             Assert.True(session.Load("echo", "plugins/echo").Ok);
             var (_, _, task) = session.Invoke("echo", "restricted", "{}", jobId: "job-r", origins: []);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, envelope.Type);
             var completed = envelope.Payload!.Value.Deserialize(Susu.Contracts.ContractsJson.Default.CompletedPayload)!;
             var checks = completed.Result!.Value;
@@ -187,18 +186,18 @@ public class PluginHostIntegrationTests
             var (_, _, taskB) = session.Invoke("echo", "slowB", "{}", jobId: "job-b", origins: []);
             session.Cancel("echo", requestIdA, "job-a", callIdA);
 
-            var envelopeB = await taskB.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var envelopeB = await taskB.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, envelopeB.Type);
             var resultB = envelopeB.Payload!.Value.Deserialize(Susu.Contracts.ContractsJson.Default.CompletedPayload)!;
             Assert.Equal("B-done", resultB.Result!.Value.GetProperty("text").GetString());
 
             // A resolves one way or the other (cancelled, or it beat the Cancel message) but never hangs.
-            var envelopeA = await taskA.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var envelopeA = await taskA.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.True(envelopeA.Type is Susu.Contracts.IpcMessageType.Completed or Susu.Contracts.IpcMessageType.Failed);
 
             // The runtime is still healthy for further calls on either capability.
             var (_, _, taskAfter) = session.Invoke("echo", "translate", "{\"text\":\"z\"}", jobId: "job-after", origins: []);
-            var envelopeAfter = await taskAfter.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var envelopeAfter = await taskAfter.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, envelopeAfter.Type);
         }
         finally { session.Shutdown(2000); }
@@ -212,24 +211,37 @@ public class PluginHostIntegrationTests
         if (staged is null) return;
         string host = Path.Combine(staged, "susu.exe");
 
+        // The two occupying calls must still be in flight when the third arrives. slowA/slowB finish after
+        // one $store round trip, which on a loaded machine can complete before the third call is even
+        // read; instead each occupying call waits on an HTTP response the test holds until it has seen
+        // the third call's answer.
+        using var release = new ManualResetEventSlim();
+        using var server = new Susu.Testing.LoopbackHttpServer(_ =>
+        {
+            release.Wait(TimeSpan.FromSeconds(60));
+            return Susu.Testing.LoopbackHttpResponse.Json(200, "{}");
+        });
         using var session = HostSession.Start(new HostSession.Options(host, staged, "quickjs", KeepProfile: false));
         try
         {
+            session.Broker.ApproveLocalOrigin(server.Origin);
             Assert.True(session.Load("echo", "plugins/echo").Ok);
-            var (_, _, taskA) = session.Invoke("echo", "slowA", "{}", jobId: "job-a", origins: []);
-            var (_, _, taskB) = session.Invoke("echo", "slowB", "{}", jobId: "job-b", origins: []);
+            string args = $$"""{"url":"{{server.Origin}}/hold"}""";
+            var (_, _, taskA) = session.Invoke("echo", "httpGet", args, jobId: "job-a", origins: [server.Origin]);
+            var (_, _, taskB) = session.Invoke("echo", "httpGet", args, jobId: "job-b", origins: [server.Origin]);
             // The runtime already has 2 in-flight calls (PLAN 4.5.4's per-runtime cap); a third is
             // refused immediately with an explicit Failed("busy"), not queued silently.
             var (_, _, taskC) = session.Invoke("echo", "translate", "{\"text\":\"c\"}", jobId: "job-c", origins: []);
-            var envelopeC = await taskC.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var envelopeC = await taskC.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Failed, envelopeC.Type);
             var resultC = envelopeC.Payload!.Value.Deserialize(Susu.Contracts.ContractsJson.Default.CompletedPayload)!;
             Assert.Equal("busy", resultC.Error!.Kind);
 
-            await taskA.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-            await taskB.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            release.Set();
+            Assert.Equal(Susu.Contracts.IpcMessageType.Completed, (await taskA.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken)).Type);
+            Assert.Equal(Susu.Contracts.IpcMessageType.Completed, (await taskB.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken)).Type);
         }
-        finally { session.Shutdown(2000); }
+        finally { release.Set(); session.Shutdown(2000); }
     }
 
     /// <summary>F04.2/J06: one package's execution-budget rebuild does not affect another package's runtime.</summary>
@@ -249,10 +261,10 @@ public class PluginHostIntegrationTests
             var (_, _, spinTask) = session.Invoke("echo", "spin", "{}", jobId: "job-spin", origins: []);
             var (_, _, secondTask) = session.Invoke("second", "translate", "{\"text\":\"still-alive\"}", jobId: "job-second", origins: []);
 
-            var spinResult = await spinTask.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var spinResult = await spinTask.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Failed, spinResult.Type); // "echo" rebuilt after its budget was exceeded
 
-            var secondResult = await secondTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var secondResult = await secondTask.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, secondResult.Type); // "second" was never touched
             var payload = secondResult.Payload!.Value.Deserialize(Susu.Contracts.ContractsJson.Default.CompletedPayload)!;
             Assert.Equal("second:still-alive", payload.Result!.Value.GetProperty("text").GetString());
@@ -293,7 +305,7 @@ public class PluginHostIntegrationTests
             }
 
             // Not a hang and not a silent success replayed from nowhere: the pending call faults.
-            await Assert.ThrowsAsync<IOException>(async () => await inFlight.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<IOException>(async () => await inFlight.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
             Assert.True(disconnected);
 
             // No orphan left behind under the process's own PID.
@@ -304,7 +316,7 @@ public class PluginHostIntegrationTests
             using var next = HostSession.Start(new HostSession.Options(host, staged, "quickjs", KeepProfile: false));
             Assert.True(next.Load("echo", "plugins/echo").Ok);
             var (_, _, freshCall) = next.Invoke("echo", "translate", "{\"text\":\"after-kill\"}", jobId: "job-after-kill", origins: []);
-            var freshResult = await freshCall.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var freshResult = await freshCall.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, freshResult.Type);
             next.Shutdown(2000);
         }
@@ -333,7 +345,7 @@ public class PluginHostIntegrationTests
             // Grant only allows https://allowed.example; the plugin asks for a different origin.
             var (_, _, task) = session.Invoke("echo", "maliciousFetch", "{\"url\":\"https://attacker.example/steal\"}", jobId: "job-x07",
                 origins: ["https://allowed.example"]);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(Susu.Contracts.IpcMessageType.Completed, envelope.Type); // the plugin call itself completes...
             var completed = envelope.Payload!.Value.Deserialize(Susu.Contracts.ContractsJson.Default.CompletedPayload)!;
             // ...but the nested $http op inside it was refused by the host broker, not answered.

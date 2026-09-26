@@ -102,7 +102,7 @@ public class F08ClipboardRaceVerificationTests
         }) { IsBackground = true, Name = "f08-verify-clipboard-host" };
         thread.Start();
         var connection = new ClipboardHelperConnection(new StreamWriter(toHost, new UTF8Encoding(false)) { NewLine = "\n" }, new StreamReader(fromHost, Encoding.UTF8), () => { });
-        await connection.Ready.WaitAsync(TimeSpan.FromSeconds(5), cancel);
+        await connection.Ready.WaitAsync(TimeSpan.FromSeconds(30), cancel);
         return connection;
     }
 
@@ -468,12 +468,12 @@ public class F08CaptureSupersedeVerificationTests
         Task Submit(string text) { lock (submitted) submitted.Add(text); return Task.CompletedTask; }
 
         var first = capture.TranslateAsync(CaptureTrigger.Selection, Submit, ct);
-        for (int i = 0; i < 200 && platform.Copies == 0; i++) await Task.Delay(5, ct);
+        await Eventually.WaitAsync(() => platform.Copies != 0);
         Assert.Equal(1, platform.Copies);
         var second = capture.TranslateAsync(CaptureTrigger.Selection, Submit, ct);
         var supersededAt = Stopwatch.StartNew();
-        var old = await first.WaitAsync(TimeSpan.FromSeconds(5), ct);
-        var current = await second.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        var old = await first.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        var current = await second.WaitAsync(TimeSpan.FromSeconds(30), ct);
         Assert.True(supersededAt.ElapsedMilliseconds < 1500, $"newer capture took {supersededAt.ElapsedMilliseconds} ms");
 
         Assert.Equal((CaptureStatus.Superseded, ""), (old.Status, old.Text));

@@ -374,26 +374,32 @@ public class StreamChunkLimiterTests
     public async Task Pieces_separated_by_a_real_pause_beyond_the_coalesce_window_stay_separate()
     {
         // Two independent small payloads, back to back through the same stream but with a pause between
-        // them well over NetworkBroker.CoalesceWindow: proves the coalescing loop does not merge
+        // them longer than NetworkBroker.CoalesceWindow: proves the coalescing loop does not merge
         // everything into one giant piece regardless of pacing - only genuine bursts coalesce.
+        // The pause is not a fixed sleep: the second payload is written only after the first piece has
+        // been yielded, i.e. after the window has provably expired with nothing new. A wall-clock pause
+        // (even 250 ms) could still merge on a loaded machine, where a starved thread pool can fire the
+        // 4 ms window timer and the pause timer in the same batch.
         byte[] first = System.Text.Encoding.UTF8.GetBytes("event-one");
         byte[] second = System.Text.Encoding.UTF8.GetBytes("event-two");
         var channel = System.Threading.Channels.Channel.CreateUnbounded<byte[]>();
-        var ct = TestContext.Current.CancellationToken;
-        var pump = Task.Run(async () =>
-        {
-            await channel.Writer.WriteAsync(first, ct);
-            // Far beyond the window, not a small multiple: Windows timers tick every ~15.6 ms, so a 4 ms
-            // window and a 20 ms pause could fire on the same tick under load and merge the two pieces.
-            await Task.Delay(TimeSpan.FromMilliseconds(250), ct);
-            await channel.Writer.WriteAsync(second, ct);
-            channel.Writer.Complete();
-        }, ct);
+        // A loop that never flushed until end of stream would wait forever here: fail instead of hanging.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        var ct = timeout.Token;
+        await channel.Writer.WriteAsync(first, ct);
         await using var stream = new ChannelReadStream(channel.Reader);
 
         var pieces = new List<string>();
-        await foreach (var piece in NetworkBroker.DecodeTextFromStream(stream, TestContext.Current.CancellationToken)) pieces.Add(piece);
-        await pump;
+        await foreach (var piece in NetworkBroker.DecodeTextFromStream(stream, ct))
+        {
+            pieces.Add(piece);
+            if (pieces.Count == 1)
+            {
+                await channel.Writer.WriteAsync(second, ct);
+                channel.Writer.Complete();
+            }
+        }
 
         Assert.Equal(["event-one", "event-two"], pieces);
     }

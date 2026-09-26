@@ -41,8 +41,7 @@ public class F06VerificationTests
         if (output is null) return null;
         string sourcePlugin = Path.Combine(output, "plugins", plugin);
         if (!File.Exists(Path.Combine(sourcePlugin, "main.js"))) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-f06-verify-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-f06-verify");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));
@@ -317,7 +316,7 @@ public class F06VerificationTests
                 configJson: System.Text.Json.JsonSerializer.Serialize(new { baseUrl = server.Origin }), instanceId: OpenAIPluginTests.InstanceId, signer: OpenAIPluginTests.Signer,
                 onChunk: _ => { session.Cancel(OpenAIPluginTests.PackageId, ids.RequestId!, "job-f06-cancel", ids.CallId); return ValueTask.CompletedTask; });
             ids = (requestId, callId);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(IpcMessageType.Failed, envelope.Type);
             Assert.True(await clientGone.Task.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken), "the vendor connection stayed open after the cancel");
             Assert.Equal(0, session.Broker.ActiveStreams);

@@ -27,7 +27,7 @@ public class F07VerificationTests
 
     private static void WaitForLoad(ServiceConfigTests.Rig rig, int count)
     {
-        for (int i = 0; i < 400; i++) { lock (rig.Loads) if (rig.Loads.Count >= count) return; Thread.Sleep(5); }
+        for (var poll = System.Diagnostics.Stopwatch.StartNew(); poll.Elapsed < Eventually.DefaultTimeout;) { lock (rig.Loads) if (rig.Loads.Count >= count) return; Thread.Sleep(5); }
         throw new TimeoutException("the options loader was never called");
     }
 

@@ -40,7 +40,7 @@ public class ClipboardIntegrationTests
         }) { IsBackground = true, Name = "test-clipboard-host" };
         thread.Start();
         var connection = new ClipboardHelperConnection(new StreamWriter(toHost, new UTF8Encoding(false)) { NewLine = "\n" }, new StreamReader(fromHost, Encoding.UTF8), () => { });
-        await connection.Ready.WaitAsync(TimeSpan.FromSeconds(5), cancel);
+        await connection.Ready.WaitAsync(TimeSpan.FromSeconds(30), cancel);
         return connection;
     }
 
@@ -288,7 +288,7 @@ public class ClipboardIntegrationTests
         long startMs = timer.ElapsedMilliseconds;
         Assert.Equal(ClipboardSnapshotStatus.Ok, (await helper.SnapshotAsync(Ct)).Status);
         Put((CF_UNICODETEXT, Utf16("process candidate")));
-        await helper.WaitForUpdateAsync(0, Ct).WaitAsync(TimeSpan.FromSeconds(2), Ct); // WM_CLIPBOARDUPDATE reached the parent
+        await helper.WaitForUpdateAsync(0, Ct).WaitAsync(TimeSpan.FromSeconds(15), Ct); // WM_CLIPBOARDUPDATE reached the parent
         Assert.Equal("process candidate", (await helper.ReadTextAsync(Ct)).Text);
         var restore = await helper.RestoreAsync(GetClipboardSequenceNumber(), 0, TimeSpan.FromMilliseconds(250), Ct);
         Assert.Equal(ClipboardRestoreStatus.Restored, restore.Status);

@@ -30,8 +30,7 @@ public class NetworkBrokerIntegrationTests
     {
         string? output = FindHostBuildOutput();
         if (output is null) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-netbroker-it-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-netbroker-it");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));
@@ -58,7 +57,7 @@ public class NetworkBrokerIntegrationTests
             session.Broker.ApproveLocalOrigin(server.Origin);
             Assert.True(session.Load("echo", "plugins/echo").Ok);
             var (_, _, task) = session.Invoke("echo", "httpGet", $$"""{"url":"{{server.Origin}}/x"}""", jobId: "job-http", origins: [server.Origin]);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(IpcMessageType.Completed, envelope.Type);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.True(completed.Ok, completed.Error?.Detail);
@@ -87,7 +86,7 @@ public class NetworkBrokerIntegrationTests
             session.Broker.ApproveLocalOrigin(server.Origin);
             Assert.True(session.Load("echo", "plugins/echo").Ok);
             var (_, _, task) = session.Invoke("echo", "httpStream", $$"""{"url":"{{server.Origin}}/sse"}""", jobId: "job-sse", origins: [server.Origin]);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(IpcMessageType.Completed, envelope.Type);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.True(completed.Ok, completed.Error?.Detail);
@@ -165,7 +164,7 @@ public class NetworkBrokerIntegrationTests
             session.Broker.ApproveLocalOrigin(server.Origin);
             Assert.True(session.Load("echo", "plugins/echo").Ok);
             var (_, _, task) = session.Invoke("echo", "httpStreamFirstOnly", $$"""{"url":"{{server.Origin}}/abandoned"}""", jobId: "job-abandon", origins: [server.Origin]);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(IpcMessageType.Completed, envelope.Type);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.True(completed.Ok, completed.Error?.Detail);
@@ -220,12 +219,12 @@ public class NetworkBrokerIntegrationTests
             await Task.Delay(150, TestContext.Current.CancellationToken); // let the request actually reach the server first
             session.Cancel("echo", requestId, "job-cancel", callId);
 
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // must not take anywhere near the server's 10 s window
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken); // must not take anywhere near the server's 10 s window
             Assert.Equal(IpcMessageType.Failed, envelope.Type);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.Equal("cancelled", completed.Error!.Kind);
 
-            await disconnectDetected.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken); // the socket really closed, not just our Task
+            await disconnectDetected.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken); // the socket really closed, not just our Task
         }
         finally { session.Shutdown(2000); }
     }

@@ -25,8 +25,7 @@ public class TranslationRuntimeIntegrationTests
             if (File.Exists(Path.Combine(candidate, "susu.exe"))) { output = candidate; break; }
         }
         if (output is null || TranslationPackages.All.Any(p => !File.Exists(Path.Combine(output, p.Directory, "main.js")))) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-runtime-it-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-runtime-it");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));

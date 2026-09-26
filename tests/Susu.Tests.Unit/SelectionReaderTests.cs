@@ -248,7 +248,7 @@ public class SelectionReaderTests
         platform.Class = "MozillaWindowClass";
         reader.Prime(10);
         reader.Prime(10);
-        for (int i = 0; i < 100 && (platform.Starts == 0 || !platform.Helpers[0].Killed); i++) await Task.Delay(10, TestContext.Current.CancellationToken);
+        await Eventually.WaitAsync(() => platform.Starts != 0 && platform.Helpers[0].Killed);
         Assert.Equal(1, platform.Starts);
         Assert.True(platform.Helpers[0].Killed);
         platform.NextHelper = () => { var h = new FakeHelper(); h.Reply.SetResult(Reply("empty")); return h; };

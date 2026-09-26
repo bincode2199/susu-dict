@@ -64,7 +64,7 @@ public class ServiceConfigTests
 
         public CommandResult Wait(string id)
         {
-            for (int i = 0; i < 1000; i++)
+            for (var poll = System.Diagnostics.Stopwatch.StartNew(); poll.Elapsed < Eventually.DefaultTimeout;)
             {
                 var hit = Platform.Posted.FirstOrDefault(p => p.Envelope.CorrelationId == id);
                 if (hit.Envelope is not null) return hit.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.CommandResult)!;
@@ -195,7 +195,7 @@ public class ServiceConfigTests
         var gate = new TaskCompletionSource<OptionsLoad>(TaskCreationOptions.RunContinuationsAsynchronously);
         rig.Answer = _ => gate.Task;
         string pending = rig.Send(UiCommands.LoadOptions, new LoadOptionsRequest("openai", "model", revision));
-        for (int i = 0; i < 400 && rig.Loads.Count == 0; i++) Thread.Sleep(5);
+        Eventually.Wait(() => rig.Loads.Count != 0);
         rig.GrantKey("sk-account-B"); // switched account while the list was loading
         gate.SetResult(new OptionsLoad([new OptionItem("model-of-A", "model-of-A")]));
         var view = rig.Wait(pending).Value!.Value.Deserialize(ContractsJson.Default.OptionsView)!;

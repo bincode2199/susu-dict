@@ -34,8 +34,7 @@ public class MyMemoryPluginTests
         if (output is null) return null;
         string sourcePlugin = Path.Combine(output, "plugins", "mymemory");
         if (!File.Exists(Path.Combine(sourcePlugin, "main.js"))) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-mymemory-it-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-mymemory-it");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));
@@ -67,7 +66,7 @@ public class MyMemoryPluginTests
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hello", "en", "zh-Hans"), ContractsJson.Default.TranslateRequest);
             string configJson = JsonSerializer.Serialize(new { baseUrl = server.Origin });
             var (_, _, task) = session.Invoke("app.susu.mymemory", "translate", requestJson, jobId: "job-mm-1", origins: [server.Origin], configJson: configJson);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             Assert.Equal(IpcMessageType.Completed, envelope.Type);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.True(completed.Ok, completed.Error?.Detail);
@@ -95,7 +94,7 @@ public class MyMemoryPluginTests
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hello", "en", "zh-Hans"), ContractsJson.Default.TranslateRequest);
             string configJson = JsonSerializer.Serialize(new { baseUrl = server.Origin });
             var (_, _, task) = session.Invoke("app.susu.mymemory", "translate", requestJson, jobId: "job-mm-2", origins: [server.Origin], configJson: configJson);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.False(completed.Ok);
             Assert.Equal(ErrorKind.Quota, ErrorKinds.FromPlugin(completed.Error?.Kind));

@@ -30,8 +30,7 @@ public class RealVendorCallTests
     {
         string? output = FindHostBuildOutput();
         if (output is null) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-real-vendor-it-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-real-vendor-it");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));

@@ -44,8 +44,7 @@ public class TencentPluginTests
         if (output is null) return null;
         string sourcePlugin = Path.Combine(output, "plugins", "tencent-translate");
         if (!File.Exists(Path.Combine(sourcePlugin, "main.js"))) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-tencent-it-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-tencent-it");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));
@@ -106,7 +105,7 @@ public class TencentPluginTests
             string configJson = JsonSerializer.Serialize(config ?? new { baseUrl = origin });
             var (_, _, task) = session.Invoke(PackageId, "translate", requestJson, jobId: $"job-tc-{Interlocked.Increment(ref jobCounter)}", origins: [origin],
                 secrets: ["secretId", "secretKey"], configJson: configJson, instanceId: InstanceId, signer: Signer);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             return envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
         }
         finally { session.Shutdown(2000); }

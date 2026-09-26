@@ -211,7 +211,7 @@ public class SettingsStoreTests
         await Task.Delay(50, TestContext.Current.CancellationToken);
         Assert.Equal(0, changes);
         clock.Advance(TimeSpan.FromMilliseconds(300));
-        for (int i = 0; i < 100 && Volatile.Read(ref changes) == 0; i++) await Task.Delay(10, TestContext.Current.CancellationToken);
+        await Eventually.WaitAsync(() => Volatile.Read(ref changes) != 0);
         Assert.Equal(1, changes);
         Assert.True(store.State.Effective.General.LaunchAtStartup);
         Assert.Equal(2, store.State.Revision); // content changed without a revision bump: effective revision still advances

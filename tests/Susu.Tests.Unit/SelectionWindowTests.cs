@@ -170,7 +170,7 @@ public sealed class SelectionWindowTests
             Action<CaptureOutcome>? handler = null;
             handler = o => { Shell.CapturePresented -= handler; done.TrySetResult(o); };
             Shell.CapturePresented += handler;
-            return done.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            return done.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         }
 
         public void Ready(WindowKind kind) => Shell.OnPageMessage(kind, JsonSerializer.Serialize(new { uiVersion = 1, kind = "Ready", windowSessionId = Platform.Session(kind) }));
@@ -184,7 +184,7 @@ public sealed class SelectionWindowTests
 
         public CommandResult Result(string correlationId)
         {
-            for (int i = 0; i < 500; i++)
+            for (var poll = System.Diagnostics.Stopwatch.StartNew(); poll.Elapsed < Eventually.DefaultTimeout;)
             {
                 var hit = Platform.Posted.FirstOrDefault(p => p.Envelope.CorrelationId == correlationId);
                 if (hit.Envelope is not null) return hit.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.CommandResult)!;
@@ -195,7 +195,7 @@ public sealed class SelectionWindowTests
 
         public UiSnapshot Snapshot(WindowKind kind)
         {
-            for (int i = 0; i < 500; i++)
+            for (var poll = System.Diagnostics.Stopwatch.StartNew(); poll.Elapsed < Eventually.DefaultTimeout;)
             {
                 var hit = Platform.Posted.LastOrDefault(p => p.Kind == kind && p.Envelope.Kind == UiMessageKind.Snapshot);
                 if (hit.Envelope is not null) return hit.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.UiSnapshot)!;
@@ -240,7 +240,7 @@ public sealed class SelectionWindowTests
         // The result reaches the float either in its snapshot (fast provider) or as a card patch afterwards.
         bool Translated() => rig.Snapshot(WindowKind.Selection).Translation!.Cards.Any(c => c.Text == "T:hello")
             || rig.Platform.Posted.Any(p => p.Kind == WindowKind.Selection && p.Envelope.Kind == UiMessageKind.Patch && p.Envelope.Payload!.Value.GetProperty("card").GetProperty("text").GetString() == "T:hello");
-        for (int i = 0; i < 200 && !Translated(); i++) await Task.Delay(10, TestContext.Current.CancellationToken);
+        await Eventually.WaitAsync(Translated);
         Assert.True(Translated());
         Assert.DoesNotContain(rig.Platform.Posted, p => p.Kind == WindowKind.Main);
     }

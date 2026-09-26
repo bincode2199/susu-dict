@@ -42,8 +42,7 @@ public class OpenAIPluginTests
         if (output is null) return null;
         string sourcePlugin = Path.Combine(output, "plugins", "openai");
         if (!File.Exists(Path.Combine(sourcePlugin, "main.js"))) return null;
-        string staged = Path.Combine(Path.GetTempPath(), "susu-openai-it-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staged);
+        string staged = TestTemp.NewDir("susu-openai-it");
         foreach (string file in Directory.EnumerateFiles(output))
             if (file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 File.Copy(file, Path.Combine(staged, Path.GetFileName(file)));
@@ -116,7 +115,7 @@ public class OpenAIPluginTests
             var (_, _, task) = session.Invoke(PackageId, "translate", requestJson, jobId: "job-oa-1", origins: [server.Origin],
                 secrets: ["apiKey"], configJson: ConfigJson(server.Origin), instanceId: InstanceId, signer: Signer,
                 onChunk: text => { pieces.Add(text); return ValueTask.CompletedTask; });
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.True(completed.Ok, completed.Error?.Detail);
             var result = completed.Result!.Value.Deserialize(ContractsJson.Default.TranslateResult)!;
@@ -148,7 +147,7 @@ public class OpenAIPluginTests
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hi", "en", "fr"), ContractsJson.Default.TranslateRequest);
             var (_, _, task) = session.Invoke(PackageId, "translate", requestJson, jobId: "job-oa-2", origins: [server.Origin],
                 secrets: ["apiKey"], configJson: ConfigJson(server.Origin), instanceId: InstanceId, signer: Signer);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.True(completed.Ok, completed.Error?.Detail);
             var result = completed.Result!.Value.Deserialize(ContractsJson.Default.TranslateResult)!;
@@ -170,7 +169,7 @@ public class OpenAIPluginTests
             Assert.True(session.Load(PackageId, "plugins/openai").Ok);
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hi", "en", "fr"), ContractsJson.Default.TranslateRequest);
             var (_, _, task) = session.Invoke(PackageId, "translate", requestJson, jobId: "job-oa-3", origins: [server.Origin], secrets: ["apiKey"], configJson: ConfigJson(server.Origin), instanceId: InstanceId, signer: Signer);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.False(completed.Ok);
             Assert.Equal(ErrorKind.Quota, ErrorKinds.FromPlugin(completed.Error?.Kind));
@@ -195,7 +194,7 @@ public class OpenAIPluginTests
             Assert.True(session.Load(PackageId, "plugins/openai").Ok);
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hi", "en", "fr"), ContractsJson.Default.TranslateRequest);
             var (_, _, task) = session.Invoke(PackageId, "translate", requestJson, jobId: "job-oa-4", origins: [server.Origin], secrets: ["apiKey"], configJson: ConfigJson(server.Origin), instanceId: InstanceId, signer: Signer);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.False(completed.Ok);
             Assert.Equal(ErrorKind.RateLimited, ErrorKinds.FromPlugin(completed.Error?.Kind));
@@ -219,7 +218,7 @@ public class OpenAIPluginTests
             Assert.True(session.Load(PackageId, "plugins/openai").Ok);
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hi", "en", "fr"), ContractsJson.Default.TranslateRequest);
             var (_, _, task) = session.Invoke(PackageId, "translate", requestJson, jobId: "job-oa-5", origins: [server.Origin], secrets: ["apiKey"], configJson: ConfigJson(server.Origin), instanceId: InstanceId, signer: Signer);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.False(completed.Ok);
             Assert.Equal(ErrorKind.Auth, ErrorKinds.FromPlugin(completed.Error?.Kind));
@@ -240,7 +239,7 @@ public class OpenAIPluginTests
             Assert.True(session.Load(PackageId, "plugins/openai").Ok);
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hi", "en", "fr"), ContractsJson.Default.TranslateRequest);
             var (_, _, task) = session.Invoke(PackageId, "translate", requestJson, jobId: "job-oa-6", origins: [server.Origin], secrets: ["apiKey"], configJson: ConfigJson(server.Origin), instanceId: InstanceId, signer: Signer);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.False(completed.Ok);
             Assert.Equal(ErrorKind.Network, ErrorKinds.FromPlugin(completed.Error?.Kind));
@@ -268,9 +267,9 @@ public class OpenAIPluginTests
             Assert.True(session.Load(PackageId, "plugins/openai").Ok);
             string requestJson = JsonSerializer.Serialize(new TranslateRequest("hi", "en", "fr"), ContractsJson.Default.TranslateRequest);
             var (requestId, callId, task) = session.Invoke(PackageId, "translate", requestJson, jobId: "job-oa-7", origins: [server.Origin], secrets: ["apiKey"], configJson: ConfigJson(server.Origin), instanceId: InstanceId, signer: Signer);
-            await gate.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken); // at least one piece arrived: the call is genuinely mid-stream
+            await gate.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken); // at least one piece arrived: the call is genuinely mid-stream
             session.Cancel(PackageId, requestId, "job-oa-7", callId);
-            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             var completed = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!;
             Assert.False(completed.Ok);
             Assert.Equal("cancelled", completed.Error?.Kind);
