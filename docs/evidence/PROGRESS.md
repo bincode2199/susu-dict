@@ -4,7 +4,7 @@
 
 Where the project stands, what to do next, and how it got here. This is the one place that records project status; specs and plans link here.
 
-**Summary (2026-09-25):** F00–F04 are complete. F05 and F06 are pending integration acceptance: vendor accounts are missing, and so is an interactive run of the G1 demo. F06, the first product loop, is built and independently verified. F07 is next; the plan for F06–F19 is in [Execution plan](#execution-plan-goal-set-2026-09-25).
+**Summary (2026-09-26):** F00–F04 are complete. F05–F11 are built and independently verified, and are pending integration acceptance: vendor accounts are missing, plus a few interactive-desktop checks. Work stopped after F11 at the product owner's request; F12 is next. The plan for F12–F19 is in [Execution plan](#execution-plan-goal-set-2026-09-25).
 
 Ground rules: work started 2026-09-22 in the Windows development VM on branch `work/f00-f03-foundation`. Local commits only; **no remote push** is authorized. Dependencies may be fetched from official sources. No rate-limit reset credits are to be used.
 
@@ -23,7 +23,8 @@ Ground rules: work started 2026-09-22 in the Windows development VM on branch `w
 | F08 | Pending integration acceptance (2026-09-26). Production selection helper (`Susu.Windows.Selection`, UIA/IA2, deadlines, failure cache), clipboard-borrow transaction, Selection window, failure bar and SetHotkeys. C01–C06, SEL02, SEL03 (except elevated), UI01 (math), UI03 and J01 pass. Missing: the SEL01 matrix on the production helper, SendInput, the Notepad end-to-end run and C07 (need a foreground window). 748 tests (2 skip) + 87 UI; the suite was hardened to 8/8 clean runs. | [F08](F08/F08.md) |
 | F09 | Pending integration acceptance (2026-09-26); only the real Youdao query is missing (no account). Youdao package (translate + dictionary, broker digest signing), word classification, lookup only when a card is expanded with empty-entry fallback, safe card rendering, copy and vocab projections, the audio-authorization port for F10. DICT01–DICT03, S06 and S08 pass. Verification found and the team fixed: plugin redirects not limited to granted origins, and IPC payloads over 1 MiB hanging (now split into parts per PLAN 4.5). 986 tests (2 skip) + 104 UI. | [F09](F09/F09.md) |
 | F10 | Pending integration acceptance (2026-09-26). Native SAPI and Microsoft/Google/Tencent TTS packages (audio reaches plugins only as file handles), a single player with stop and supersede, the pronounce hotkey and bar, dictionary audio from existing results, a session-scoped TTS cache, and device-loss handling. TTS01–TTS03, B03/B04/B07 and SEL03 pass, with real SAPI and WASAPI playback; no production bugs in verification. Missing: real vendor TTS calls and the hotkey demo. 1103 tests (2 skip) + 117 UI. | [F10](F10/F10.md) |
-| F11 | In progress (2026-09-26). Plan: 11.1 overlay and capture → 11.2 OCR packages → 11.3 UI → testing. | [F11](F11/F11.md) |
+| F11 | Pending integration acceptance (2026-09-26). Covers: GDI capture with a native multi-monitor overlay; Tencent OCR and SimpleTex packages (the host encodes and signs the image, and plugins see only handles); an OCR job feeding the shared translation pipeline; the Ocr window and SetOcr; kept-screenshot retention. The broker was hardened (handles checked before lease lookup; leases released on malformed requests). OCR01–OCR03, B01, B05–B08, UI01 and DATA08 pass, including a real-desktop capture → OCR → translation demo. Missing: real vendor OCR calls. 1231 tests (0 skip) + 133 UI. | [F11](F11/F11.md) |
+| F12 | Not started. Next when the work resumes. | |
 
 Environment notes for building and running (PowerShell setup, non-interactive RDP sessions, data roots) are in [BUILD § Environment notes](../development/BUILD.md#environment-notes).
 
@@ -33,14 +34,13 @@ Environment notes for building and running (PowerShell setup, non-interactive RD
 2. **Resolved (2026-09-24), D-67:** checks that need real hardware move to the F19 final acceptance: a second monitor with a different DPI, a real IME session, screen reader, high contrast, and PER03 on the real shell (`tools/measure-hotkey.ps1`). All F19 final checks run on a physical Windows 11 machine, not a VM.
 3. **F04 complete; F05 pending integration acceptance (vendor accounts needed); F06 paused (2026-09-24)** at the product owner's request, to be resumed manually. A master agent coordinates, writes the docs and watches the usage limits; a fresh coding agent handles each sub-item and an independent testing agent verifies each module. Modules run one at a time.
 4. **Usage rules (2026-09-24):** F05's coding pass used more than one 5-hour window because one sub-agent ran 370 turns in a single uncompacted context. The rules that prevent a repeat are in [CLAUDE.md](../../CLAUDE.md).
-5. **Active (2026-09-26, paused at 91 % of the 5-hour window; resets 17:00 UTC; weekly 59 %):** F06–F10 are pending integration acceptance. F11.1–F11.3 are done (1226 tests, 3 skip; UI 133). **Next action:** run the F11 testing agent. It covers:
-   - OCR01–OCR03, B01, B05–B08, UI01 and DATA08;
-   - `susu-plugin check/test` on tencent-ocr and simple-latex;
-   - the real GDI capture, if the desktop is interactive.
-   
-   Then close F11 and start F12 (ASR and microphone).
+5. **Stopped (2026-09-26) at the product owner's request after F11.** F06–F11 are pending integration acceptance; F12–F19 are not started. The weekly usage window was at about 62 % and resets 2026-10-02 03:00 UTC. **Next action when resumed:** start F12 (ASR and microphone recording).
+   - Read DEV-PLAN § F12 and TEST-PLAN A01–A06/A08, REC01–REC03, B02 and B07.
+   - Write the sub-item plan in `docs/evidence/F12/F12.md` from MODULE-TEMPLATE, and list it in `docs/evidence/README.md` and the root README.
+   - Run a fresh coding agent for F12.1: IAudioCapture/WASAPI, permissions and devices, a level meter, the 10-minute limit, stop/cancel, and keeping segments across device removal and sleep.
+   - The VM's audio input is unconfirmed; the "Remote Audio" output exists.
+   - Keep following the per-sub-item agent pattern and the [execution plan](#execution-plan-goal-set-2026-09-25).
 6. **Input needed from the product owner (not blocking the next module):** an attended interactive desktop with a foreground window. The desktop was interactive for a few minutes on 2026-09-26 (09:36–09:43), long enough to pass the F08 SEL01 matrix, the SendInput tests and the Notepad end-to-end run. Still waiting for the next interactive window, in this order (helper `tools/interactive.ps1`):
-   - the F11 real GDI capture;
    - the F06 G1 walk-through;
    - the F10 pronounce hotkey (bind a hotkey first);
    - the F07 reorder demo.
@@ -101,3 +101,12 @@ Unresolved questions (assumptions recorded, not blocking): vendor accounts are n
   - a `susu-plugin test` crash.
   
   Testing also fixed the flaky timing tests. F06 is pending integration acceptance at 493 + 37 tests.
+- 2026-09-26: F07–F11 built and independently verified; each is pending integration acceptance, mostly for missing vendor accounts.
+  - **Production bugs found and fixed:**
+    - plugin redirects weren't limited to granted origins;
+    - IPC payloads over 1 MiB hung (now split into parts per PLAN 4.5);
+    - broker leases leaked on malformed requests.
+  - **Test health:** the suite was hardened against load-sensitive timing, and the test temp-folder leak (~35 GB) was fixed.
+  - **Interactive checks:** in the brief interactive windows, the F08 SEL01 matrix on the production helper (10/10), the SendInput tests, Notepad end to end and the F11 real capture → OCR demo all passed.
+  - **Totals:** 1231 C# + 133 UI tests.
+  - Stopped after F11 at the product owner's request.

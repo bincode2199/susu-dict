@@ -28,7 +28,7 @@
 | F08 | 划词与剪贴板翻译 | F06 | 待集成验收（见 [F08 证据](../evidence/F08/F08.md)；SEL01 生产助手矩阵、SendInput、记事本端到端与 C07 需有前台窗口的交互桌面） | L |
 | F09 | 词典卡片与有道服务 | F06 | 待集成验收（见 [F09 证据](../evidence/F09/F09.md)；缺有道账户，真实查询未执行） | M |
 | F10 | 发音、音色与播放 | F07、F08 | 待集成验收（见 [F10 证据](../evidence/F10/F10.md)；缺三云 TTS 账户，热键演示需有前台窗口的交互桌面） | M |
-| F11 | 截图 OCR 与识别翻译 | F07 | 进行中（见 [F11 证据](../evidence/F11/F11.md)） | L |
+| F11 | 截图 OCR 与识别翻译 | F07 | 待集成验收（见 [F11 证据](../evidence/F11/F11.md)；缺腾讯 OCR/SimpleTex 账户，真实混合 DPI 截图移到 F19） | L |
 | F12 | ASR 公共管线与麦克风语音翻译 | F07 | 待开始 | L |
 | F13 | 系统音频录制翻译 | F12 | 待开始 | M |
 | F14 | 视频转写、字幕翻译与导出 | F12 | 待开始 | L |
@@ -271,8 +271,8 @@ flowchart LR
 | P-A03 | Gemini | translate；独立 API 解析 | F07 后可独立接入 | 待开始 |
 | P-A04 | Claude | translate；消息/流协议 | F07 后可独立接入 | 待开始 |
 | P-A05 | Ollama | translate；明确本地 origin、无服务提示 | F07 后可独立接入 | 待开始 |
-| P-O01 | 腾讯 OCR | ocr；Base64/TC3 | F11 | 待开始 |
-| P-O02 | Simple LaTeX | ocr；文本/公式结果 | F11 | 待开始 |
+| P-O01 | 腾讯 OCR | ocr；Base64/TC3 | F11 | 待集成验收（缺账户） |
+| P-O02 | Simple LaTeX | ocr；文本/公式结果 | F11 | 待集成验收（缺账户） |
 | P-S01 | Microsoft TTS | tts、voices；原始音频 | F10 | 待集成验收（缺账户） |
 | P-S02 | Google TTS | tts、voices；JSON Base64 | F10 | 待集成验收（缺账户） |
 | P-S03 | 腾讯 TTS | tts、voices；JSON Base64/签名 | F10 | 待集成验收（缺账户） |
