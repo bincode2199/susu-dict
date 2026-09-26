@@ -18,7 +18,7 @@ internal sealed record StartupMode(string Kind, string? DataRoot, bool Autostart
 {
     public static StartupMode Parse(string[] args)
     {
-        if (args.Length > 0 && args[0] is "--plugin-host" or "--selection-host") return new(args[0][2..], null, false, false, null, 0);
+        if (args.Length > 0 && args[0] is "--plugin-host" or "--selection-host" or "--clipboard-host") return new(args[0][2..], null, false, false, null, 0);
         string? dataRoot = null, smoke = null, measure = null;
         bool autostart = false, devTools = false;
         int cycles = 3;
@@ -64,6 +64,9 @@ internal static class Program
                 // F08.1: the temporary selection helper (ARCHITECTURE 4.1). Dispatched before anything else so no
                 // main-mode service (settings, secrets, plugins, network, WebView) is initialized in the helper.
                 return Susu.Windows.Selection.SelectionHost.Run(args.AsSpan(1), Console.Out, Console.Error);
+            case "clipboard-host":
+                // F08.2: the clipboard-borrow helper (PLAN 3.1 level 3); same early dispatch as the selection helper.
+                return Susu.Windows.Clipboard.ClipboardHost.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
             default:
                 Console.Error.WriteLine("usage: susu [--data-root <dir>] [--autostart]");
                 return 2;
