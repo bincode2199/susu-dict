@@ -257,15 +257,21 @@ public sealed class TranslationSession
     /// The audio link behind <paramref name="audioId"/>, only while a card of the current generation still shows the
     /// entry that carries it (F09.3 authorizes and plays it); null for an unknown, stale or foreign id.
     /// </summary>
-    public Task<string?> ResolveAudioAsync(string audioId)
+    public async Task<string?> ResolveAudioAsync(string audioId) => (await ResolveAudioLinkAsync(audioId))?.Url;
+
+    /// <summary>
+    /// Like <see cref="ResolveAudioAsync"/>, plus the card's service id, so the host can authorize the download
+    /// against that provider's declared origins only (F09.3, S06; see <c>DictionaryAudioFetcher</c>).
+    /// </summary>
+    public Task<DictionaryAudioLink?> ResolveAudioLinkAsync(string audioId)
     {
-        var result = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var result = new TaskCompletionSource<DictionaryAudioLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
         mailbox.Post(() =>
         {
-            string? url = null;
+            DictionaryAudioLink? resolved = null;
             if (audio.TryGetValue(audioId, out var link) && link.Generation == generation && cards.TryGetValue(link.ServiceId, out var card)
-                && card.Entry is { } entry && entry.Phonetics.Any(p => p.AudioId == audioId)) url = link.Url;
-            result.SetResult(url);
+                && card.Entry is { } entry && entry.Phonetics.Any(p => p.AudioId == audioId)) resolved = new DictionaryAudioLink(link.ServiceId, link.Url);
+            result.SetResult(resolved);
         });
         return result.Task;
     }

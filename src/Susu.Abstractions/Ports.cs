@@ -62,6 +62,9 @@ public interface IDictionaryProvider
     Task<DictionaryOutcome> LookupAsync(DictionaryCall call, CancellationToken cancellationToken);
 }
 
+/// <summary>An audio link of a shown dictionary entry and the service whose card shows it (F09.3). Host-only: the UI sees only the opaque audio id.</summary>
+public sealed record DictionaryAudioLink(string ServiceId, string Url);
+
 /// <summary>Ranked language candidates; null or empty when unknown (PLAN 3.2).</summary>
 public interface ILanguageDetector
 {

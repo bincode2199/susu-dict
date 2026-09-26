@@ -137,11 +137,13 @@ public class DictionarySessionTests
         Assert.DoesNotContain("example", id);
         Assert.Null(phonetics[1].AudioId); // http link dropped
         Assert.Equal("https://dict.example/good-us.mp3", await session.ResolveAudioAsync(id));
+        Assert.Equal(new DictionaryAudioLink((await CardOf(session)).ServiceId, "https://dict.example/good-us.mp3"), await session.ResolveAudioLinkAsync(id)); // F09.3: the source service travels with the link
         Assert.Null(await session.ResolveAudioAsync("https://dict.example/good-us.mp3"));
         Assert.Null(await session.ResolveAudioAsync("audio-unknown"));
         await session.SubmitAsync("hello there.", "en", "zh-Hans");
         await session.IdleAsync();
         Assert.Null(await session.ResolveAudioAsync(id));
+        Assert.Null(await session.ResolveAudioLinkAsync(id));
     }
 
     [Theory] // non-word forms translate directly: phrase, sentence, punctuation, digits, mixed scripts, long Han run

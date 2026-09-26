@@ -33,6 +33,12 @@ public sealed record NamedSign(string Scheme, string Service, string? Region, st
 
 public sealed record SignSpec(PrimitiveSign? Primitive, NamedSign? Named);
 
+/// <summary>
+/// <paramref name="AllowedOrigins"/> (F09.3, S06): when set, every hop, the first and each followed redirect, must
+/// land on one of these exact origins (<see cref="NetworkBroker.Origin"/> form); otherwise the request ends with a
+/// <c>forbidden</c> failure before any byte is sent to that origin. Used by host-initiated downloads such as
+/// dictionary audio, which may only fetch within the source provider's declared origins (PLAN 4.5.4 item 3).
+/// </summary>
 public sealed record BrokerHttpRequest(
     string Method,
     Uri Uri,
@@ -45,7 +51,8 @@ public sealed record BrokerHttpRequest(
     ResponseKind ResponseType,
     IReadOnlyList<ResponseFileSpec> ResponseFiles,
     string? ErrorPointer,
-    bool LocalOriginApproved);
+    bool LocalOriginApproved,
+    IReadOnlySet<string>? AllowedOrigins = null);
 
 public sealed record BrokerFile(string Name, byte[] Bytes, string Mime);
 
@@ -242,6 +249,8 @@ public sealed class NetworkBroker : IDisposable
         string method = request.Method;
         for (int hop = 0; ; hop++)
         {
+            if (request.AllowedOrigins is { } allowed && !allowed.Contains(Origin(uri)))
+                return new BrokerFailure("forbidden", hop == 0 ? $"origin {Origin(uri)} not allowed for this request" : $"redirect to origin {Origin(uri)} not allowed for this request");
             if (!IsAllowedForRequest(request, uri)) return new BrokerFailure("network", $"origin {Origin(uri)} not allowed");
 
             using var httpRequest = new HttpRequestMessage(new HttpMethod(method), uri);
@@ -278,6 +287,7 @@ public sealed class NetworkBroker : IDisposable
     private async Task<BrokerStreamOutcome> SendStreamingAsync(BrokerHttpRequest request, Uri uri, List<KeyValuePair<string, string>> headers, byte[] body, bool authorized, CancellationToken cancellationToken)
     {
         _ = authorized;
+        if (request.AllowedOrigins is { } allowed && !allowed.Contains(Origin(uri))) return new BrokerStreamFailure("forbidden", $"origin {Origin(uri)} not allowed for this request");
         if (!IsAllowedForRequest(request, uri)) return new BrokerStreamFailure("network", $"origin {Origin(uri)} not allowed");
 
         var httpRequest = new HttpRequestMessage(new HttpMethod(request.Method), uri);

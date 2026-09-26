@@ -36,6 +36,8 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
 
     public string ServiceId { get; } = serviceId;
     public string DisplayName { get; } = displayName;
+    /// <summary>The origins this instance's calls are granted; dictionary audio may be fetched only within them (F09.3, S06).</summary>
+    public IReadOnlyList<string> HostOrigins { get; } = hostOrigins;
     // Same account/origin limiter identity as any other provider on this package (ARCHITECTURE 5.1).
     public string LimiterKey { get; } = $"plugin:{pluginId}";
     public TranslationLimits Limits { get; } = limits;
@@ -89,7 +91,7 @@ public sealed class PluginProvider(string pluginId, string serviceId, string dis
         try
         {
             (string RequestId, int CallId, Task<IpcEnvelope> Result) invocation;
-            try { invocation = host.Invoke(pluginId, capability, requestJson, attemptId, hostOrigins, secrets: secrets, configJson: configJson, instanceId: instanceId, signer: signer, onChunk: onChunk); }
+            try { invocation = host.Invoke(pluginId, capability, requestJson, attemptId, HostOrigins, secrets: secrets, configJson: configJson, instanceId: instanceId, signer: signer, onChunk: onChunk); }
             catch (IOException) { return (null, new ProviderError(ErrorKind.Unavailable, "plugin host disconnected")); }
             var (requestId, callId, task) = invocation;
             // Cancel is sent explicitly in the OperationCanceledException path, not from a
