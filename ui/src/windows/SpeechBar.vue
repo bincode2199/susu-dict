@@ -8,7 +8,7 @@ import { serviceName, t } from '../locales/i18n';
 
 // Pronunciation bar (DESIGN 9 "发音浮条", PLAN 6.5): height 34, radius 6, padding 0 5. Left the "reading" status key
 // (ink), a 1 px divider, then one 26×26 square per pronunciation service (radius 5, 10.5 px abbreviation). The first
-// square is the default service (border #C9CDD3, ink text); the others use the hairline border and secondary text.
+// square is the default service (border #C9CDD3 = --line-accent, which follows the theme; ink text); the others use the hairline border and secondary text.
 // The host places it next to the selection without taking focus; the status key stops playback while it runs and reads
 // again afterwards; a square reads the same text with that service. Nothing here holds the text.
 const props = defineProps<{ bridge: Bridge; state: UiState }>();
@@ -61,7 +61,7 @@ function play(instance: string): void {
 .status.error { color: var(--error); }
 .divider { width: 1px; height: 18px; background: var(--line); flex: none; }
 .service { border: 1px solid var(--line); border-radius: 5px; font-size: 10.5px; line-height: 1; color: var(--ink-secondary); }
-.service.default { border-color: #c9cdd3; color: var(--ink); }
+.service.default { border-color: var(--line-accent); color: var(--ink); }
 .service.active { color: var(--ink); border-color: var(--ink-secondary); }
 .service:hover { color: var(--ink); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

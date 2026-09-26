@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { flushPromises, mount } from '@vue/test-utils';
 import type { CardSnapshot, CommandResult, DictionaryEntryView, SpeechBarView, SpeechStateView, TranslationSnapshot, WindowView } from '@protocol/ui';
 import SpeechBar from '../src/windows/SpeechBar.vue';
@@ -39,6 +41,13 @@ describe('F10.2 pronunciation bar (DESIGN 9 "发音浮条")', () => {
     expect(squares[1].classes()).not.toContain('default');
     expect(wrapper.find('.divider').exists()).toBe(true);
     expect(wrapper.find('[role="toolbar"]').attributes('aria-label')).toBe(t('speech.bar'));
+  });
+
+  it('takes every colour from theme tokens, so the dark theme applies (F10.3)', () => {
+    const source = readFileSync(join(__dirname, '../src/windows/SpeechBar.vue'), 'utf8');
+    const style = source.slice(source.indexOf('<style'));
+    expect(style).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(style).toContain('.service.default { border-color: var(--line-accent);');
   });
 
   it('loading and playing: the status key stops; the active square is pressed', async () => {
