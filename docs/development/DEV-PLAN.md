@@ -26,8 +26,8 @@
 | F06 | 输入翻译最小完整产品 | F03、F05 | 待集成验收（见 [F06 证据](../evidence/F06/F06.md)；缺腾讯/DeepL/OpenAI 账户，G1 交互演示未在桌面执行） | L |
 | F07 | 完整服务设置、提示语、动态选项 | F06 | 待集成验收（见 [F07 证据](../evidence/F07/F07.md)；真实窗口交互演示未执行） | M |
 | F08 | 划词与剪贴板翻译 | F06 | 待集成验收（见 [F08 证据](../evidence/F08/F08.md)；SEL01 生产助手矩阵、SendInput、记事本端到端与 C07 需有前台窗口的交互桌面） | L |
-| F09 | 词典卡片与有道服务 | F06 | 进行中（见 [F09 证据](../evidence/F09/F09.md)） | M |
-| F10 | 发音、音色与播放 | F07、F08 | 待开始 | M |
+| F09 | 词典卡片与有道服务 | F06 | 待集成验收（见 [F09 证据](../evidence/F09/F09.md)；缺有道账户，真实查询未执行） | M |
+| F10 | 发音、音色与播放 | F07、F08 | 进行中（见 [F10 证据](../evidence/F10/F10.md)） | M |
 | F11 | 截图 OCR 与识别翻译 | F07 | 待开始 | L |
 | F12 | ASR 公共管线与麦克风语音翻译 | F07 | 待开始 | L |
 | F13 | 系统音频录制翻译 | F12 | 待开始 | M |
@@ -265,7 +265,7 @@ flowchart LR
 | P-T04 | Google 翻译 | translate；官方 API/配置授权 | F07 后可独立接入 | 待开始 |
 | P-T05 | Microsoft 翻译 | translate；区域/账户配置 | F07 后可独立接入 | 待开始 |
 | P-T06 | Amazon 翻译 | translate；AWS SigV4 | F07 后可独立接入 | 待开始 |
-| P-T07 | 有道 | translate、dictionary；digest 签名 | F09 | 待开始 |
+| P-T07 | 有道 | translate、dictionary；digest 签名 | F09 | 待集成验收（缺账户） |
 | P-A01 | OpenAI | translate；流式/取消/提示 | F06 | 待集成验收（缺账户） |
 | P-A02 | GLM | translate；模型选择与流式 | F07 后可独立接入 | 待开始 |
 | P-A03 | Gemini | translate；独立 API 解析 | F07 后可独立接入 | 待开始 |
