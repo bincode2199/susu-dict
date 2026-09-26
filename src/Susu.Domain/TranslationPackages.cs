@@ -56,14 +56,14 @@ public sealed record CredentialTargetState(string Secret, string Origin, string 
 public sealed record TranslationServicePlan(TranslationPackage Package, InstanceSettings Instance, ServiceSettings Service);
 
 /// <summary>
-/// The wired built-in translation packages (P-T01 MyMemory, P-T02 Tencent, P-T03 DeepL, P-A01 OpenAI) and
+/// The wired built-in translation packages (P-T01 MyMemory, P-T02 Tencent, P-T03 DeepL, P-T07 Youdao, P-A01 OpenAI) and
 /// the resolution from settings to the ordered list of services a translation session uses (F06.3a).
 /// Resolution runs on every new session, so enabling, disabling, reordering or binding a key takes
 /// effect without a restart.
 /// </summary>
 public static class TranslationPackages
 {
-    public const string MyMemory = "mymemory", Tencent = "tencent-translate", DeepL = "deepl", OpenAI = "openai";
+    public const string MyMemory = "mymemory", Tencent = "tencent-translate", DeepL = "deepl", OpenAI = "openai", Youdao = "youdao";
     public const string DeepLFreeOrigin = "https://api-free.deepl.com", DeepLProOrigin = "https://api.deepl.com";
 
     public static readonly IReadOnlyList<TranslationPackage> All =
@@ -77,6 +77,10 @@ public static class TranslationPackages
         // The plugin refuses JSON bodies over ~127 KiB; 120000 bytes of text leaves room for escapes.
         new(DeepL, "app.susu.deepl", "plugins/deepl", "DeepL", new TranslationLimits(InputUnit.Utf8Bytes, 120_000, BatchMode.Single, 1, 120_000),
             DeepLFreeOrigin, [new("apiKey", "header:Authorization")]),
+        // Youdao text translation (P-T07): 5000 characters per query. appKey is injected into the reserved query
+        // field and, with appSecret, is a secret part of the digest the host writes into the `sign` query field.
+        new(Youdao, "app.susu.youdao", "plugins/youdao", "Youdao", new TranslationLimits(InputUnit.UnicodeScalars, 5000, BatchMode.Single, 1, 5000),
+            "https://openapi.youdao.com", [new("appKey", "query:appKey"), new("appKey", "query:sign"), new("appSecret", "query:sign")]),
         // One chat completion per chunk; 6000 characters keeps the reply well inside a small model's output budget.
         new(OpenAI, "app.susu.openai", "plugins/openai", "OpenAI", new TranslationLimits(InputUnit.UnicodeScalars, 6000, BatchMode.Single, 1, 6000),
             "https://api.openai.com", [new("apiKey", "header:Authorization")]),

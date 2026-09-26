@@ -1,0 +1,13 @@
+id: app.susu.youdao
+name: Youdao
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - translate
+  - dictionary
+hosts:
+  - openapi.youdao.com
+credentialUse:
+  - appKey
+  - appSecret
