@@ -98,7 +98,7 @@ public class TtsPluginTests
         public void Dispose() { Supervisor.Dispose(); Leases.Dispose(); }
     }
 
-    private static Rig? Build(string instanceId, LoopbackHttpServer server, Dictionary<string, string>? config = null)
+    private static Rig? Build(string instanceId, LoopbackHttpServer server, Dictionary<string, string>? config = null, string? directory = null)
     {
         if (staged.Value is not { } dir) return null;
         var package = PluginTranslationProviders.WiredPackages.Single(p => p.InstanceId == instanceId);
@@ -125,7 +125,7 @@ public class TtsPluginTests
         {
             var session = HostSession.Start(options);
             session.Broker.ApproveLocalOrigin(server.Origin);
-            var loaded = session.Load(package.PackageId, package.Directory);
+            var loaded = session.Load(package.PackageId, directory ?? package.Directory);
             if (!loaded.Ok) { session.Shutdown(2000); throw new InvalidOperationException($"{package.PackageId} failed to load: {loaded.Error}"); }
             rig!.Session = session;
             return session;
@@ -193,6 +193,7 @@ public class TtsPluginTests
     [InlineData(403, "Forbidden", "text/plain", ErrorKind.Auth)]
     [InlineData(429, "{\"error\":\"too many\"}", "application/json", ErrorKind.RateLimited)]
     [InlineData(503, "busy", "text/plain", ErrorKind.Network)]
+    [InlineData(500, "<html>oops</html>", "text/html", ErrorKind.Network)] // F10 test
     [InlineData(400, "{\"error\":\"bad ssml\"}", "application/json", ErrorKind.BadResponse)]
     public async Task Microsoft_http_errors_are_classified(int status, string body, string contentType, ErrorKind expected)
     {
@@ -210,6 +211,7 @@ public class TtsPluginTests
     [InlineData("application/json", "{\"error\":{\"code\":\"InvalidVoice\"}}")]
     [InlineData("text/html", "<html>proxy login</html>")]
     [InlineData("application/octet-stream", "{\"error\":\"not audio\"}")]
+    [InlineData("audio/mpeg", "{\"error\":{\"code\":\"Throttled\"}}")] // F10 test: a declared audio MIME over a JSON error body
     public async Task Microsoft_non_audio_success_body_is_refused(string contentType, string body)
     {
         using var server = new LoopbackHttpServer(_ => new LoopbackHttpResponse(200, Encoding.UTF8.GetBytes(body), ContentType: contentType));
@@ -292,6 +294,7 @@ public class TtsPluginTests
     }
 
     [Theory] // B04: Google error bodies classified; Retry-After kept for 429
+    [InlineData(401, "UNAUTHENTICATED", "Request had invalid authentication credentials", ErrorKind.Auth)] // F10 test
     [InlineData(403, "PERMISSION_DENIED", "API key not valid", ErrorKind.Auth)]
     [InlineData(403, "PERMISSION_DENIED", "Quota exceeded / billing not enabled", ErrorKind.Quota)]
     [InlineData(429, "RESOURCE_EXHAUSTED", "Too many requests", ErrorKind.RateLimited)]
@@ -382,6 +385,8 @@ public class TtsPluginTests
     [InlineData(200, "LimitExceeded.AccessLimit", ErrorKind.RateLimited)]
     [InlineData(200, "InternalError.ErrorGetRoute", ErrorKind.Network)]
     [InlineData(200, "InvalidParameterValue.VoiceType", ErrorKind.BadResponse)]
+    [InlineData(401, "", ErrorKind.Auth)] // F10 test: HTTP-level auth failures
+    [InlineData(403, "", ErrorKind.Auth)]
     [InlineData(429, "", ErrorKind.RateLimited)]
     [InlineData(502, "", ErrorKind.Network)]
     public async Task Tencent_errors_are_classified(int status, string code, ErrorKind expected)
@@ -502,5 +507,146 @@ public class TtsPluginTests
             Assert.True(await Eventually.WaitAsync(() => rig.Leases.ActiveCount == 0));
         }
         finally { hold.Set(); }
+    }
+
+    // ---------------- F10 independent verification ----------------
+
+    /// <summary>Records every clip that reaches the output (its bytes, read while "playing").</summary>
+    private sealed class RecordingSink : IAudioSink
+    {
+        public readonly List<byte[]> Played = [];
+        public AudioDeviceStatus Probe() => new(true);
+        public async Task PlayAsync(IAudioClip clip, CancellationToken cancellationToken)
+        {
+            byte[] bytes = await File.ReadAllBytesAsync(clip.FilePath, cancellationToken);
+            lock (Played) Played.Add(bytes);
+        }
+    }
+
+    /// <summary>
+    /// A copy of a shipped package whose tts method, instead of returning the audio handle, throws a PluginError carrying
+    /// exactly what its <c>$http</c> call handed the plugin (the JSON of <c>r</c>) and whether any of the audio's Base64 is in it.
+    /// </summary>
+    private static string ProbeCopy(string packageDir)
+    {
+        string source = Path.Combine(staged.Value!, packageDir);
+        string relative = packageDir + "-probe-" + Guid.NewGuid().ToString("N")[..8];
+        string target = Path.Combine(staged.Value!, relative);
+        Directory.CreateDirectory(target);
+        foreach (string file in Directory.EnumerateFiles(source)) File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
+        string main = File.ReadAllText(Path.Combine(target, "main.js"));
+        int at = main.IndexOf("return { audio };", StringComparison.Ordinal);
+        Assert.True(at > 0, "probe anchor not found");
+        const string Probe = "{ const seen = JSON.stringify(r); throw new PluginError('bad_response', 'B64=' + /SUQzAwAAAAAA|VVVVVVVVVVVV/.test(seen) + ' PROBE ' + seen.slice(0, 1200)); }";
+        File.WriteAllText(Path.Combine(target, "main.js"), main[..at] + Probe + main[at..]);
+        return relative;
+    }
+
+    [Theory] // B03 (plugin side): what the plugin's $http call receives is a handle plus metadata; no Base64 or raw audio ever reaches the plugin
+    [InlineData("app.susu.google-tts")]
+    [InlineData("app.susu.tencent-tts")]
+    [InlineData("app.susu.microsoft-tts")]
+    public async Task Plugin_http_result_carries_only_the_handle_never_the_audio(string packageId)
+    {
+        var package = PluginTranslationProviders.WiredPackages.Single(p => p.PackageId == packageId);
+        string base64 = Convert.ToBase64String(Mp3);
+        using var server = new LoopbackHttpServer(_ => package.InstanceId switch
+        {
+            SpeechCatalog.GoogleTts => LoopbackHttpResponse.Json(200, JsonSerializer.Serialize(new { audioContent = base64 })),
+            SpeechCatalog.TencentTts => LoopbackHttpResponse.Json(200, JsonSerializer.Serialize(new { Response = new { Audio = base64, RequestId = "r" } })),
+            _ => Audio(Mp3),
+        });
+        if (staged.Value is null) return;
+        using var rig = Build(package.InstanceId, server, directory: ProbeCopy(package.Directory));
+        if (rig is null) return;
+        var error = Failure(await rig.SpeakAsync(new SpeakRequest("hello", "en")));
+        string detail = error.Detail ?? "";
+        TestContext.Current.TestOutputHelper?.WriteLine(detail);
+        Assert.Contains("PROBE", detail); // the probe ran: this is the plugin-visible $http result
+        Assert.Contains("B64=false", detail);
+        Assert.DoesNotContain(base64[..24], detail);
+        Assert.Contains("\"id\":", detail); // a handle
+        Assert.Contains("audio/mpeg", detail);
+        Assert.Contains(Mp3.Length.ToString(), detail); // byte count metadata
+        if (package.InstanceId == SpeechCatalog.GoogleTts) Assert.Contains("\"audioContent\":null", detail);
+        if (package.InstanceId == SpeechCatalog.TencentTts) Assert.Contains("\"Audio\":null", detail);
+        await rig.AssertNoFilesLeftAsync(); // the result file nobody adopted is released with the call
+    }
+
+    [Fact] // TTS01: the vendor is unreachable (connection refused): the cloud call fails as network, SAPI still speaks through the same player
+    public async Task Unreachable_vendor_is_a_network_error_and_native_sapi_still_speaks()
+    {
+        var server = new LoopbackHttpServer(_ => Audio(Mp3));
+        server.Dispose(); // nothing listens on this origin any more
+        using var rig = Build(SpeechCatalog.MicrosoftTts, server);
+        if (rig is null) return;
+        if ((await Susu.Windows.Audio.SapiTtsProvider.VoicesAsync()).Count == 0) Assert.Skip("no SAPI voice is installed on this machine");
+        var sapi = new Susu.Windows.Audio.SapiTtsProvider(new LeasedAudioFiles(rig.Leases));
+        var sink = new InstantSink();
+        var backend = new SpeechBackend(new SpeechPlayer(sink), (_, id) => id == BuiltInCatalog.NativeTts ? sapi : rig.Provider);
+
+        var cloud = await backend.SpeakWithAsync(rig.Settings, rig.InstanceId, "hello", "en-US", TimeSpan.FromSeconds(20), Ct).WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        Assert.Equal(PlaybackStatus.Failed, cloud.Status);
+        Assert.Equal(ErrorKind.Network, cloud.Error!.Kind);
+        var local = await backend.SpeakWithAsync(rig.Settings, BuiltInCatalog.NativeTts, "offline", "en-US", TimeSpan.FromSeconds(45), Ct).WaitAsync(TimeSpan.FromSeconds(50), Ct);
+        Assert.Equal(PlaybackStatus.Completed, local.Status);
+        Assert.Equal(["audio/wav"], sink.Mimes);
+        Assert.True(await Eventually.WaitAsync(() => rig.Leases.ActiveCount == 0));
+    }
+
+    [Fact] // TTS02: switching the voice while the first download is in flight supersedes it; the late first audio never plays; everything is released
+    public async Task Voice_switch_mid_download_supersedes_and_the_late_audio_never_plays()
+    {
+        using var gate = new ManualResetEventSlim(false);
+        byte[] first = [.. Mp3[..^1], 0x11], second = [.. Mp3[..^1], 0x22];
+        using var server = new LoopbackHttpServer(req =>
+        {
+            bool slowVoice = Encoding.UTF8.GetString(req.Body).Contains("en-US-Neural2-A");
+            if (slowVoice) gate.Wait(TimeSpan.FromSeconds(15));
+            return LoopbackHttpResponse.Json(200, JsonSerializer.Serialize(new { audioContent = Convert.ToBase64String(slowVoice ? first : second) }));
+        });
+        using var rig = Build(SpeechCatalog.GoogleTts, server);
+        if (rig is null) return;
+        var sink = new RecordingSink();
+        var player = new SpeechPlayer(sink);
+        try
+        {
+            var old = player.SpeakAsync(rig.Provider, new SpeakRequest("hello", "en", Voice: "en-US-Neural2-A"), TimeSpan.FromSeconds(30), Ct);
+            Assert.True(await Eventually.WaitAsync(() => server.RequestCount >= 1));
+            var next = await player.SpeakAsync(rig.Provider, new SpeakRequest("hello", "en", Voice: "en-US-Neural2-C"), TimeSpan.FromSeconds(30), Ct).WaitAsync(TimeSpan.FromSeconds(30), Ct);
+            Assert.Equal(PlaybackStatus.Completed, next.Status);
+            Assert.Equal(PlaybackStatus.Superseded, (await old.WaitAsync(TimeSpan.FromSeconds(10), Ct)).Status);
+        }
+        finally { gate.Set(); }
+        await Task.Delay(500, Ct); // the vendor answers the old request now: that audio must not play or linger
+        await player.IdleAsync();
+        Assert.Equal([second], sink.Played);
+        await rig.AssertNoFilesLeftAsync();
+    }
+
+    [Fact] // B07: two calls in flight on one plugin host; cancelling one mid-download leaves the other's result intact; nothing is left afterwards
+    public async Task Concurrent_calls_cancel_one_mid_download_and_the_other_completes()
+    {
+        using var gate = new ManualResetEventSlim(false);
+        using var server = new LoopbackHttpServer(_ =>
+        {
+            gate.Wait(TimeSpan.FromSeconds(15));
+            return LoopbackHttpResponse.Json(200, JsonSerializer.Serialize(new { Response = new { Audio = Convert.ToBase64String(Mp3), RequestId = "r" } }));
+        });
+        using var rig = Build(SpeechCatalog.TencentTts, server);
+        if (rig is null) return;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        Task<AudioOutcome> cancelled, kept;
+        try
+        {
+            cancelled = rig.SpeakAsync(new SpeakRequest("first", "en"), cts.Token);
+            kept = rig.SpeakAsync(new SpeakRequest("second", "en"));
+            Assert.True(await Eventually.WaitAsync(() => server.RequestCount >= 2));
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled.WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        }
+        finally { gate.Set(); }
+        Assert.Equal(Mp3, await ReadAndRelease(await kept.WaitAsync(TimeSpan.FromSeconds(30), Ct)));
+        await rig.AssertNoFilesLeftAsync();
     }
 }

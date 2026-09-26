@@ -211,4 +211,31 @@ public class NativeSpeechTests
         await player.IdleAsync();
         Assert.Equal(0, leases.ActiveCount);
     }
+
+    [Fact] // F10 test, TTS02 on the real device: a new SAPI playback interrupts the one playing; the old ends Superseded, both leases go
+    public async Task Real_output_new_playback_interrupts_the_old_one()
+    {
+        var voices = await VoicesOrSkip();
+        var sink = new WasapiAudioSink();
+        var device = sink.Probe();
+        TestContext.Current.TestOutputHelper?.WriteLine($"audio output: available={device.Available} failure={device.Failure} detail={device.Detail}");
+        if (!device.Available) Assert.Skip($"no audio output device ({device.Failure})");
+        using var leases = new FileLeases(TestTemp.NewDir("susu-sapi"));
+        var sapi = new SapiTtsProvider(new LeasedAudioFiles(leases));
+        var player = new SpeechPlayer(sink);
+
+        string text = string.Join(" ", Enumerable.Repeat("This first sentence keeps playing until it is interrupted.", 8));
+        var first = player.SpeakAsync(sapi, new SpeakRequest(text, voices[0].Lang), TimeSpan.FromSeconds(45), Ct);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (player.State.Phase != PlayerPhase.Playing && !first.IsCompleted && DateTime.UtcNow < deadline) await Task.Delay(20, Ct);
+        Assert.Equal(PlayerPhase.Playing, player.State.Phase);
+        await Task.Delay(300, Ct);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var second = player.SpeakAsync(sapi, new SpeakRequest("Second.", voices[0].Lang, Rate: 2.0), TimeSpan.FromSeconds(45), Ct);
+        Assert.Equal(PlaybackStatus.Superseded, (await first.WaitAsync(TimeSpan.FromSeconds(5), Ct)).Status);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), $"interrupt took {watch.Elapsed}");
+        Assert.Equal(PlaybackStatus.Completed, (await second.WaitAsync(TimeSpan.FromSeconds(45), Ct)).Status);
+        await player.IdleAsync();
+        Assert.Equal(0, leases.ActiveCount);
+    }
 }
