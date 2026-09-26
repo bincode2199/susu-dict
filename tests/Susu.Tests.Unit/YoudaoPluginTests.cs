@@ -20,10 +20,10 @@ namespace Susu.Tests.Unit;
 /// </summary>
 public class YoudaoPluginTests
 {
-    private const string PackageId = "app.susu.youdao";
-    private const string InstanceId = "youdao";
-    private const string PackageDir = "plugins/youdao";
-    private const string Signer = "unsigned:app.susu.youdao";
+    internal const string PackageId = "app.susu.youdao";
+    internal const string InstanceId = "youdao";
+    internal const string PackageDir = "plugins/youdao";
+    internal const string Signer = "unsigned:app.susu.youdao";
     private const string AppKey = "0123456789abcdefTESTAPPKEY";
     private const string AppSecret = "testAppSecretZYXWVUT9876543210";
 
@@ -38,7 +38,7 @@ public class YoudaoPluginTests
         return null;
     }
 
-    private static string? StageHost()
+    internal static string? StageHost()
     {
         string? output = FindHostBuildOutput();
         if (output is null) return null;
@@ -69,7 +69,7 @@ public class YoudaoPluginTests
     /// <summary>The grants the shipped package declares (TranslationPackages): appKey for its query field and
     /// the digest target, appSecret for the digest target only. <paramref name="omitSecretDigestGrant"/> drops
     /// the appSecret grant to prove the digest primitive enforces it.</summary>
-    private static HostSession.Options Options(string staged, string origin, bool omitSecretDigestGrant = false)
+    internal static HostSession.Options Options(string staged, string origin, bool omitSecretDigestGrant = false)
     {
         var secrets = new FakeSecretStore();
         secrets.Set("account-youdao", "appKey", AppKey);
@@ -328,7 +328,7 @@ public class YoudaoPluginTests
 
     // ---- dictionary ----
 
-    private static object FullEntry(string usAudio = "https://openapi.youdao.com/ttsapi?q=good&langType=en-USA") => new
+    internal static object FullEntry(string usAudio = "https://openapi.youdao.com/ttsapi?q=good&langType=en-USA") => new
     {
         errorCode = "0",
         result = new object[]

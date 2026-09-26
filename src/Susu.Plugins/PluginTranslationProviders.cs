@@ -37,7 +37,7 @@ public static class PluginTranslationProviders
         IReadOnlyList<ConfigField>? schema = schemas is not null && schemas.TryGetValue(plan.Instance.Id, out var fields) ? fields : null;
         return new PluginProvider(package.PackageId, plan.Service.ServiceId, package.DisplayName, package.Limits, supervisor, [package.Origin(plan.Instance.Config)],
             plan.Instance.Id, package.Signer, package.SecretNames, ConfigSchema.ForPlugin(plan.Instance.Config, schema),
-            settings is null ? null : PromptCatalog.SnapshotFor(settings, plan.Instance.Id));
+            settings is null ? null : PromptCatalog.SnapshotFor(settings, plan.Instance.Id), plan.Dictionary);
     }
 
     /// <summary>

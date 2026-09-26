@@ -14,13 +14,13 @@ namespace Susu.Tests.Unit;
 /// <summary>F06.3a: translation services built from instance settings and account bindings.</summary>
 public class TranslationServicesTests
 {
-    private static readonly Func<string, string, bool> NoSecrets = (_, _) => false;
+    internal static readonly Func<string, string, bool> NoSecrets = (_, _) => false;
 
-    private static AppSettings Enable(AppSettings s, string serviceId, bool enabled = true)
+    internal static AppSettings Enable(AppSettings s, string serviceId, bool enabled = true)
         => s with { Services = [.. s.Services.Select(x => x.ServiceId == serviceId ? x with { Enabled = enabled } : x)] };
 
     /// <summary>Binds and grants every credential target of <paramref name="instanceId"/> to an account of the same id.</summary>
-    private static AppSettings WithGrantedKey(AppSettings s, string instanceId, IReadOnlyDictionary<string, string>? config = null)
+    internal static AppSettings WithGrantedKey(AppSettings s, string instanceId, IReadOnlyDictionary<string, string>? config = null)
     {
         var package = TranslationPackages.Find(instanceId)!;
         var instance = s.Instances.Single(i => i.Id == instanceId);
@@ -29,7 +29,7 @@ public class TranslationServicesTests
         return s with { Accounts = [.. s.Accounts, account], Instances = [.. s.Instances.Select(i => i.Id == instanceId ? instance : i)] };
     }
 
-    private static Supervisor<HostSession> NeverLaunched() => new(() => throw new InvalidOperationException("launched"), new ManualClock(), TimeSpan.FromMinutes(10));
+    internal static Supervisor<HostSession> NeverLaunched() => new(() => throw new InvalidOperationException("launched"), new ManualClock(), TimeSpan.FromMinutes(10));
 
     [Fact] // fresh config works with no key: MyMemory only; OpenAI is not enabled by default
     public void Fresh_settings_resolve_to_mymemory_only()
@@ -458,6 +458,56 @@ public class TranslationSettingsCommandTests
         Assert.True(rig.Run(WindowKind.Settings, UiCommands.ReorderService, new ReorderServiceRequest("openai/translate", 0, Merged: true)).Ok);
         // TranslationSession expands the first DefaultExpanded providers of this list.
         Assert.Equal(["openai/translate", "mymemory/translate"], TranslationPackages.Resolve(rig.Settings.State.Effective, rig.Secrets.Has).Select(p => p.Service.ServiceId));
+    }
+
+    [Fact] // F09.2: Youdao translate and dictionary are off by default and share one set of digest credential targets
+    public void Youdao_is_off_by_default_and_its_dictionary_shares_the_credential_targets()
+    {
+        var defaults = BuiltInCatalog.Defaults();
+        Assert.False(defaults.Services.Single(x => x.ServiceId == "youdao/translate").Enabled);
+        Assert.False(defaults.Services.Single(x => x.ServiceId == "youdao/dictionary").Enabled);
+        var package = TranslationPackages.Find(TranslationPackages.Youdao)!;
+        Assert.Equal([("appKey", "query:appKey"), ("appKey", "query:sign"), ("appSecret", "query:sign")], package.Credentials.Select(c => (c.Secret, c.Use)));
+        Assert.True(TranslationPackages.SupportsDictionary("youdao"));
+        Assert.False(TranslationPackages.SupportsDictionary("deepl"));
+        Assert.False(TranslationPackages.SupportsDictionary("google-translate")); // not a wired package
+
+        var s = TranslationServicesTests.WithGrantedKey(TranslationServicesTests.Enable(defaults, "youdao/dictionary"), "youdao");
+        Assert.Equal(Availability.Ready, TranslationPackages.AvailabilityOf(s, s.Services.Single(x => x.ServiceId == "youdao/dictionary"), (_, _) => true));
+        Assert.Equal(Availability.MissingCredential, TranslationPackages.AvailabilityOf(TranslationServicesTests.Enable(defaults, "youdao/dictionary"), defaults.Services.Single(x => x.ServiceId == "youdao/dictionary") with { Enabled = true }, TranslationServicesTests.NoSecrets));
+        // The dictionary alone makes no card: cards are translation services.
+        Assert.DoesNotContain(TranslationPackages.Resolve(s, (_, _) => true), p => p.Package.InstanceId == "youdao");
+    }
+
+    [Theory] // F09.2: the Youdao card is a dictionary source only while its dictionary service is enabled and ready
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void Youdao_card_uses_the_dictionary_only_when_its_dictionary_service_is_enabled(bool dictionaryEnabled, bool expected)
+    {
+        var s = TranslationServicesTests.Enable(TranslationServicesTests.WithGrantedKey(BuiltInCatalog.Defaults(), "youdao"), "youdao/translate");
+        if (dictionaryEnabled) s = TranslationServicesTests.Enable(s, "youdao/dictionary");
+        var plan = TranslationPackages.Resolve(s, (_, _) => true).Single(p => p.Package.InstanceId == "youdao");
+        Assert.Equal(expected, plan.Dictionary);
+        Assert.All(TranslationPackages.Resolve(s, (_, _) => true).Where(p => p.Package.InstanceId != "youdao"), p => Assert.False(p.Dictionary));
+        var provider = (PluginProvider)PluginTranslationProviders.Build(s, (_, _) => true, TranslationServicesTests.NeverLaunched()).Single(p => p.ServiceId == "youdao/translate");
+        Assert.Equal(expected, provider.DictionaryEnabled);
+        Assert.False(((PluginProvider)PluginTranslationProviders.Build(s, (_, _) => true, TranslationServicesTests.NeverLaunched()).Single(p => p.ServiceId == "mymemory/translate")).DictionaryEnabled);
+    }
+
+    [Fact] // F09.2: key entry through the settings flow enables the Youdao card with its dictionary; the view shows the same targets
+    public void Youdao_keys_entered_in_settings_enable_the_dictionary_card()
+    {
+        using var rig = new Rig();
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("youdao", "appKey", "ak-test", true)).Ok);
+        Assert.True(rig.Run(WindowKind.Settings, UiCommands.SecretWriteNew, new SecretWriteRequest("youdao", "appSecret", "as-test", true)).Ok);
+        rig.Enable("youdao/translate");
+        rig.Enable("youdao/dictionary");
+        var plan = TranslationPackages.Resolve(rig.Settings.State.Effective, rig.Secrets.Has).Single(p => p.Package.InstanceId == "youdao");
+        Assert.True(plan.Dictionary);
+        var view = rig.Service("youdao/dictionary");
+        Assert.Equal(nameof(Availability.Ready), view.Availability);
+        Assert.Equal([("appKey", "query:appKey", true), ("appKey", "query:sign", true), ("appSecret", "query:sign", true)],
+            view.CredentialTargets!.Select(t => (t.Secret, t.Use, t.Granted)));
     }
 
     [Fact] // CFG01: a shared Tencent account is bound, but not usable until the binding's grants are confirmed

@@ -929,7 +929,9 @@ public sealed partial class ShellCoordinator
             string? plan = null;
             // A wired built-in translation package (F06.3a): availability also needs the grants, and the
             // page gets the exact targets to show with the key field.
-            if (x.Capability == Capability.Translate && TranslationPackages.Find(x.Instance) is { } wired && instance.Package == wired.PackageId)
+            // F09.2: a wired package's dictionary service (Youdao) shares the package's credentials and grants.
+            if ((x.Capability == Capability.Translate || (x.Capability == Capability.Dictionary && TranslationPackages.SupportsDictionary(x.Instance)))
+                && TranslationPackages.Find(x.Instance) is { } wired && instance.Package == wired.PackageId)
             {
                 availability = TranslationPackages.AvailabilityOf(s, x, config.Secrets.Has).ToString();
                 targets = [.. TranslationPackages.CredentialStates(s, wired, instance, config.Secrets.Has).Select(t => new CredentialTargetView(t.Secret, t.Origin, t.Use, t.Saved, t.Granted))];

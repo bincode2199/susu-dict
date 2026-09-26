@@ -52,8 +52,9 @@ public sealed record TranslationPackage(string InstanceId, string PackageId, str
 /// <summary>The state of one credential target of a configured instance, for the settings view.</summary>
 public sealed record CredentialTargetState(string Secret, string Origin, string Use, bool Saved, bool Granted);
 
-/// <summary>An enabled, credential-complete translation service, in the user's order.</summary>
-public sealed record TranslationServicePlan(TranslationPackage Package, InstanceSettings Instance, ServiceSettings Service);
+/// <summary>An enabled, credential-complete translation service, in the user's order. <c>Dictionary</c> (F09.2, PLAN 6.1):
+/// the same instance's <c>dictionary</c> service is enabled and ready too, so its card looks word forms up first.</summary>
+public sealed record TranslationServicePlan(TranslationPackage Package, InstanceSettings Instance, ServiceSettings Service, bool Dictionary = false);
 
 /// <summary>
 /// The wired built-in translation packages (P-T01 MyMemory, P-T02 Tencent, P-T03 DeepL, P-T07 Youdao, P-A01 OpenAI) and
@@ -88,6 +89,11 @@ public static class TranslationPackages
 
     public static TranslationPackage? Find(string instanceId) => All.FirstOrDefault(p => p.InstanceId == instanceId);
 
+    /// <summary>Whether a wired package also offers the <c>dictionary</c> capability (only Youdao, PLAN 6.1). Its dictionary
+    /// service uses the package's own credentials and grants, so it is ready exactly when they are.</summary>
+    public static bool SupportsDictionary(string instanceId)
+        => Find(instanceId) is not null && BuiltInCatalog.Find(instanceId) is { } catalog && catalog.Capabilities.Contains(Capability.Dictionary);
+
     public static string DeepLPlanFor(string key) => key.Trim().EndsWith(":fx", StringComparison.Ordinal) ? "free" : "pro";
 
     /// <summary>Saved/granted state of each credential target of <paramref name="instance"/> under its current config.</summary>
@@ -98,7 +104,7 @@ public static class TranslationPackages
     public static Availability AvailabilityOf(AppSettings settings, ServiceSettings service, Func<string, string, bool> hasSecret)
     {
         if (!service.Enabled) return Availability.Disabled;
-        if (service.Capability != Capability.Translate) return Availability.UnsupportedCapability;
+        if (service.Capability != Capability.Translate && !(service.Capability == Capability.Dictionary && SupportsDictionary(service.Instance))) return Availability.UnsupportedCapability;
         var package = Find(service.Instance);
         var instance = settings.Instances.FirstOrDefault(i => i.Id == service.Instance);
         if (package is null || instance is null || instance.Package != package.PackageId) return Availability.UnsupportedCapability;
@@ -119,7 +125,9 @@ public static class TranslationPackages
         foreach (var service in ordered)
         {
             if (AvailabilityOf(settings, service, hasSecret) != Availability.Ready) continue;
-            result.Add(new TranslationServicePlan(Find(service.Instance)!, settings.Instances.First(i => i.Id == service.Instance), service));
+            var dictionary = settings.Services.FirstOrDefault(s => s.Instance == service.Instance && s.Capability == Capability.Dictionary);
+            bool lookup = dictionary is not null && AvailabilityOf(settings, dictionary, hasSecret) == Availability.Ready;
+            result.Add(new TranslationServicePlan(Find(service.Instance)!, settings.Instances.First(i => i.Id == service.Instance), service, lookup));
         }
         return result;
     }
