@@ -18,7 +18,8 @@ public sealed record AppSettings(
     IReadOnlyList<string> TranslationOrder,
     IReadOnlyList<PromptProfile> Prompts,
     PromptSettings Prompt,
-    SpeechSettings Speech)
+    SpeechSettings Speech,
+    OcrSettings Ocr)
 {
     public const int CurrentSchemaVersion = 1;
 
@@ -101,7 +102,8 @@ public static class SettingsText
         }
         b.Append('|').AppendJoin(';', s.Services).Append('|').AppendJoin(';', s.TranslationOrder).Append('|').AppendJoin(';', s.Prompts)
             .Append('|').Append(s.Prompt.Level).Append(',').Append(s.Prompt.Profile).Append(',').AppendJoin(';', s.Prompt.Scope)
-            .Append('|').Append(s.Speech.Tts).Append(',').Append(s.Speech.Asr).Append(',').Append(s.Speech.VideoAsr);
+            .Append('|').Append(s.Speech.Tts).Append(',').Append(s.Speech.Asr).Append(',').Append(s.Speech.VideoAsr)
+            .Append('|').Append(s.Ocr.Service);
         return b.ToString();
     }
 }
@@ -167,7 +169,7 @@ public static class BuiltInCatalog
             new GeneralSettings("zh-Hans", "en", "zh-Hans", $"{NativeDetect}/detect", 2, false, CloseAction.Hide, false, "light"),
             new HotkeySettings(hotkeys),
             new NetworkSettings(ProxyMode.System, "", 0, "", 30),
-            [], instances, services, order, [], PromptSettings.Default, SpeechSettings.Default);
+            [], instances, services, order, [], PromptSettings.Default, SpeechSettings.Default, OcrSettings.Default);
     }
 
     private static readonly IReadOnlyDictionary<string, string> Empty = new Dictionary<string, string>();

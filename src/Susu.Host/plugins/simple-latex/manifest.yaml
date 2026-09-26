@@ -1,0 +1,22 @@
+id: app.susu.simple-latex
+name: Simple LaTeX (SimpleTex)
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - ocr
+hosts:
+  - server.simpletex.cn
+credentialUse:
+  - apiKey
+config:
+  type: object
+  properties:
+    mode:
+      type: string
+      title: Recognition model
+      default: simpletex_ocr
+      enum: [simpletex_ocr, latex_ocr, latex_ocr_turbo]
+      x-susu:
+        placeholder: simpletex_ocr
+        help: simpletex_ocr reads text and formulas; latex_ocr and latex_ocr_turbo read a single formula as LaTeX.

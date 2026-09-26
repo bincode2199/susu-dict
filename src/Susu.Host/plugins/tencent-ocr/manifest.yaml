@@ -1,0 +1,30 @@
+id: app.susu.tencent-ocr
+name: Tencent Cloud OCR
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - ocr
+hosts:
+  - ocr.tencentcloudapi.com
+credentialUse:
+  - secretId
+  - secretKey
+config:
+  type: object
+  properties:
+    lang:
+      type: string
+      title: Recognition language
+      default: auto
+      enum: [auto, zh, jap, kor, spa, fre, ger, por, vie, may, rus, ita, hol, swe, fin, dan, nor, hun, tha, ara]
+      x-susu:
+        placeholder: auto
+        help: With "auto" the service decides; "zh" reads mixed Chinese and English.
+    region:
+      type: string
+      title: Region
+      x-susu:
+        group: advanced
+        placeholder: ap-guangzhou
+        help: Optional; the Tencent Cloud region that serves the request.

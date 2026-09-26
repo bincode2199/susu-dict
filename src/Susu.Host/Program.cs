@@ -157,6 +157,7 @@ internal static class MainMode
         {
             Capability.Translate => translation.Providers(config.State.Effective).Count > 0,
             Capability.Tts => speechPort is { } port && port.Tts(config.State.Effective, config.State.Effective.Speech.Tts.Instance) is not null,
+            Capability.Ocr => translation.Supervisor is { } ocrHost && PluginOcrProviders.Resolve(config.State.Effective, secrets.Has, ocrHost, schemas) is not null,
             _ => false,
         };
         // F10.1 native SAPI (no plugin host). F10.3: its phase timings are logged (no text), and the engine is warmed once, off the
@@ -212,6 +213,12 @@ internal static class MainMode
             keepScreenshots: () => false,
             overlay: () => new RegionSelectOptions(config.State.Effective.General.UiLanguage == "en" ? ScreenCaptureCoordinator.HintEn : ScreenCaptureCoordinator.HintZh,
                 config.State.Effective.General.Theme == "dark"));
+        // F11.2: a captured image goes to the selected OCR service by handle; recognized text enters the OCR window's translation
+        // session (T02). Auto-translate has no setting yet (F11.3), so it is on, as in DESIGN SetOcr. Only status is logged, never text.
+        var ocr = new OcrJob(() => translation.Supervisor is { } ocrSupervisor ? PluginOcrProviders.Resolve(config.State.Effective, secrets.Has, ocrSupervisor, schemas) : null,
+            async text => await coordinator.SubmitRecognizedTextAsync(text), autoTranslate: () => true);
+        ocr.StateChanged += state => log.Event("ocr", ("phase", state.Phase.ToString()), ("service", state.ServiceId ?? ""), ("kind", state.Error?.Kind.ToString() ?? ""));
+        coordinator.ScreenCaptured += result => { if (result.Image is { } image) _ = ocr.RecognizeAsync(image); };
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;

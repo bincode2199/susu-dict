@@ -295,6 +295,10 @@ public sealed class Broker : IDisposable
         var resolvedSecrets = new List<string>();
         try { request = BuildRequest(grant, call.Args, takenLeases, resolvedSecrets); }
         catch (BrokerDenyException deny) { ReleaseAll(takenLeases); return Deny(call.ApiId, deny.Message, deny.Kind); }
+        // A malformed request shape (a missing or mistyped control field) is the plugin's error: denied, and every lease it
+        // already took is released (B05/B06: nothing leaks).
+        catch (Exception malformed) when (malformed is KeyNotFoundException or InvalidOperationException or FormatException or JsonException)
+        { ReleaseAll(takenLeases); return Deny(call.ApiId, "malformed request: " + malformed.GetType().Name, "bad_response"); }
         var cts = BeginHttpCall(grant.Grant);
         try
         {
@@ -538,7 +542,7 @@ public sealed class Broker : IDisposable
             uri = builder.Uri;
         }
 
-        var (body, bodyHandles) = ParseBody(args, takenLeases);
+        var (body, bodyHandles) = ParseBody(args, grant, takenLeases);
         var bodyFiles = ParseBodyFiles(args, grant, takenLeases);
         var credentials = ParseCredentials(args, grant);
         var sign = ParseSign(args, grant);
@@ -572,7 +576,7 @@ public sealed class Broker : IDisposable
         return value;
     }
 
-    private (RequestBody Body, IReadOnlyList<string> Handles) ParseBody(JsonElement args, List<(string Handle, FileLease Lease)> takenLeases)
+    private (RequestBody Body, IReadOnlyList<string> Handles) ParseBody(JsonElement args, GrantInfo grant, List<(string Handle, FileLease Lease)> takenLeases)
     {
         if (!args.TryGetProperty("body", out var body) || body.ValueKind != JsonValueKind.Object) return (RequestBody.None, []);
         string kind = body.TryGetProperty("kind", out var k) ? k.GetString() ?? "" : "";
@@ -586,7 +590,7 @@ public sealed class Broker : IDisposable
             case "file":
             {
                 string handle = body.TryGetProperty("file", out var f) ? f.GetString() ?? "" : throw new BrokerDenyException("file body requires a handle");
-                byte[] bytes = ReadHandle(handle, takenLeases, out string mime);
+                byte[] bytes = ReadHandle(grant, handle, takenLeases, out string mime);
                 return (new RequestBody(BodyKind.File, FileBytes: bytes, FileContentType: mime), [handle]);
             }
             case "multipart":
@@ -602,7 +606,7 @@ public sealed class Broker : IDisposable
                     if (field.TryGetProperty("file", out var fileHandleEl) && fileHandleEl.ValueKind == JsonValueKind.String)
                     {
                         string handle = fileHandleEl.GetString()!;
-                        byte[] bytes = ReadHandle(handle, takenLeases, out string mime);
+                        byte[] bytes = ReadHandle(grant, handle, takenLeases, out string mime);
                         specs.Add(new MultipartFieldSpec(name, filename, contentType ?? mime, null, bytes));
                         handles.Add(handle);
                     }
@@ -620,22 +624,29 @@ public sealed class Broker : IDisposable
 
     private IReadOnlyList<BodyFileInsertion> ParseBodyFiles(JsonElement args, GrantInfo grant, List<(string Handle, FileLease Lease)> takenLeases)
     {
-        if (!args.TryGetProperty("bodyFiles", out var files) || files.ValueKind != JsonValueKind.Array) return [];
+        if (!args.TryGetProperty("bodyFiles", out var files) || files.ValueKind == JsonValueKind.Null) return [];
+        if (files.ValueKind != JsonValueKind.Array) throw new BrokerDenyException("bodyFiles must be an array");
         var result = new List<BodyFileInsertion>();
         foreach (var file in files.EnumerateArray())
         {
-            string pointer = file.GetProperty("pointer").GetString() ?? throw new BrokerDenyException("bodyFiles pointer required");
-            string handle = file.GetProperty("file").GetString() ?? throw new BrokerDenyException("bodyFiles handle required");
+            if (file.ValueKind != JsonValueKind.Object) throw new BrokerDenyException("bodyFiles entries must be objects");
+            string pointer = file.TryGetProperty("pointer", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()! : throw new BrokerDenyException("bodyFiles pointer required");
+            string handle = file.TryGetProperty("file", out var h) && h.ValueKind == JsonValueKind.String ? h.GetString()! : throw new BrokerDenyException("bodyFiles handle required");
+            // PLAN 4.5.1: the only request-side encoding is standard Base64 (absent means Base64).
+            if (file.TryGetProperty("encoding", out var e) && (e.ValueKind != JsonValueKind.String || e.GetString() != "base64"))
+                throw new BrokerDenyException("bodyFiles encoding must be 'base64'");
             if (!grant.Handles.Contains(handle)) throw new BrokerDenyException("file handle not granted to this call");
-            byte[] bytes = ReadHandle(handle, takenLeases, out _);
+            byte[] bytes = ReadHandle(grant, handle, takenLeases, out _);
             result.Add(new BodyFileInsertion(pointer, bytes));
         }
         return result;
     }
 
-    private byte[] ReadHandle(string handleId, List<(string Handle, FileLease Lease)> takenLeases, out string mime)
+    private byte[] ReadHandle(GrantInfo grant, string handleId, List<(string Handle, FileLease Lease)> takenLeases, out string mime)
     {
         if (leases is null) throw new BrokerDenyException("no file lease store is configured for this host");
+        // B06: a handle outside this call's grant is refused before its lease is even looked up, in every body form.
+        if (!grant.Handles.Contains(handleId)) throw new BrokerDenyException("file handle not granted to this call");
         var lease = leases.AddReference(handleId) ?? throw new BrokerDenyException("unknown or expired file handle");
         takenLeases.Add((handleId, lease));
         string path = leases.PathOf(lease);

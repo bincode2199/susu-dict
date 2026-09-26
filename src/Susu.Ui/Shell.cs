@@ -259,6 +259,24 @@ public sealed partial class ShellCoordinator
         else result.Image?.Dispose();
     }
 
+    /// <summary>
+    /// F11.2: recognized OCR text enters the common translation pipeline (T02): the OCR result window's own session, with the
+    /// same services, chunking and cards as typed input. Marshalled to the UI thread; F11.3 shows the window and its cards.
+    /// </summary>
+    public Task<CommandResult> SubmitRecognizedTextAsync(string text)
+    {
+        var done = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        platform.StartTimer(TimeSpan.Zero, async () =>
+        {
+            try { done.SetResult(await SubmitAsync(WindowKind.Ocr, text)); }
+            catch (Exception error) { done.SetException(error); }
+        });
+        return done.Task;
+    }
+
+    /// <summary>F11.2: the OCR result window's translation session (null before any OCR text was submitted); for F11.3 and tests.</summary>
+    public TranslationSession? OcrTranslation => TranslationOf(WindowKind.Ocr);
+
     /// <summary>A capture (hotkey or tray) finished and is still the current one (J01); superseded ones are never raised.</summary>
     public event Action<CaptureOutcome>? Captured;
 

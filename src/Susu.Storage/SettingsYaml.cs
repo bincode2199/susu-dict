@@ -53,7 +53,7 @@ public static partial class SettingsYaml
 
         public AppSettings Bind(YMap root)
         {
-            Keys(root, "", "schemaVersion", "revision", "general", "hotkeys", "network", "accounts", "instances", "services", "translationOrder", "prompts", "prompt", "speech");
+            Keys(root, "", "schemaVersion", "revision", "general", "hotkeys", "network", "accounts", "instances", "services", "translationOrder", "prompts", "prompt", "speech", "ocr");
             long revision = Long(root, "", "revision", 0, 0, long.MaxValue);
             var general = General(root.Get("general") as YMap ?? Expect<YMap>(root, "general"));
             var hotkeys = Hotkeys(root.Get("hotkeys"));
@@ -65,11 +65,12 @@ public static partial class SettingsYaml
             var prompts = List(root, "prompts", Prompt);
             var prompt = PromptSelection(root.Get("prompt"), prompts);
             var speech = Speech(root.Get("speech"));
+            var ocr = Ocr(root.Get("ocr"));
             var settings = new AppSettings(AppSettings.CurrentSchemaVersion, revision, general, hotkeys, network,
                 root.Get("accounts") is null ? defaults.Accounts : accounts,
                 root.Get("instances") is null ? defaults.Instances : instances,
                 root.Get("services") is null ? defaults.Services : services,
-                root.Get("translationOrder") is null ? defaults.TranslationOrder : order, prompts, prompt, speech);
+                root.Get("translationOrder") is null ? defaults.TranslationOrder : order, prompts, prompt, speech, ocr);
             CrossCheck(settings);
             return settings;
         }
@@ -223,6 +224,19 @@ public static partial class SettingsYaml
                 return selection;
             }
             return new SpeechSettings(One("tts", SpeechSlot.Tts), One("asr", SpeechSlot.Asr), One("videoAsr", SpeechSlot.VideoAsr));
+        }
+
+        /// <summary>SetOcr default service (F11.2); an id outside the OCR catalog is an issue and falls back to the default.</summary>
+        private OcrSettings Ocr(YNode? node)
+        {
+            var d = defaults.Ocr;
+            if (node is null) return d;
+            const string p = "ocr";
+            if (node is not YMap map) { Issue(p, "type", "expected a mapping", node); return d; }
+            Keys(map, p, "service");
+            string service = Str(map, p, "service", d.Service);
+            if (OcrCatalog.Find(service) is null) { Issue($"{p}.service", "range", $"'{service}' is not an OCR service", map.Get("service") ?? node); return d; }
+            return new OcrSettings(service);
         }
 
         private void CrossCheck(AppSettings s)
@@ -425,6 +439,8 @@ public static partial class SettingsYaml
             w.Append("  ").Append(key).Append(":\n");
             Pair(w, 2, "instance", Q(selection.Instance)); Pair(w, 2, "model", Q(selection.Model));
         }
+        Section(w, c, "ocr");
+        Pair(w, 1, "service", Q(s.Ocr.Service));
         return w.ToString();
     }
 

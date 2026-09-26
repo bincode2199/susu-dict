@@ -65,11 +65,20 @@ export interface FileHandleInfo {
   mime: string;
   bytes: number;
   durationMs?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface OcrBlock {
   text: string;
   box?: number[];
+  kind?: string;
+  confidence?: number;
+}
+
+export interface OcrRequest {
+  image: FileHandleInfo;
+  lang?: string;
 }
 
 export interface OcrResult {

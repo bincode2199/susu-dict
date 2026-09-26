@@ -178,6 +178,8 @@ public sealed class NetworkBroker : IDisposable
         // ---- Build the final body: bodyFiles insertion -> credential injection -> digest/hmac -> named signer. ----
         var pointers = request.BodyFiles.Select(f => f.Pointer).ToList();
         if (request.Sign?.Primitive is { IntoArea: CredentialArea.Json } primitiveJson) pointers.Add(primitiveJson.IntoTarget);
+        // PLAN 4.5.1: a file field may not share or overlap a credential's JSON target either (B05).
+        if (request.BodyFiles.Count > 0) pointers.AddRange(request.Credentials.Where(c => c.Area == CredentialArea.Json).Select(c => c.Target));
         if (JsonPointerOps.AnyDuplicateOrOverlap(pointers)) throw new FileTransformException("duplicate or overlapping bodyFiles/credential JSON pointers");
 
         JsonNode? json = request.Body.Kind == BodyKind.Json ? request.Body.Json?.DeepClone() : null;
@@ -215,6 +217,9 @@ public sealed class NetworkBroker : IDisposable
             BodyKind.Multipart or BodyKind.None => [],
             _ => [],
         };
+        // B08 / PLAN 4.5.1: a JSON body carrying Base64 files is at most 48 MiB as sent, encoding overhead included.
+        if (request.BodyFiles.Count > 0 && finalBody.Length > ProtocolLimits.MaxBase64JsonBytes)
+            throw new FileTransformException($"request body with Base64 files exceeds {ProtocolLimits.MaxBase64JsonBytes} bytes");
 
         if (request.Sign?.Named is { } named)
         {
