@@ -27,7 +27,7 @@ describe('F06.3b result cards', () => {
     expect(wrapper.find('.text').text()).toBe('你好，世界');
     await wrapper.setProps({ card: card('openai/translate', 'Ready', '你好，世界。') });
     expect(wrapper.find('.status').text()).toBe('');
-    await wrapper.find('.actions button').trigger('click');
+    await wrapper.find('[data-action="copy"]').trigger('click');
     expect(wrapper.emitted('copy')).toHaveLength(1);
     expect(wrapper.find('.status').text()).toBe(t('card.copied'));
   });
@@ -74,7 +74,7 @@ describe('F06.3b main window', () => {
     const cards = wrapper.findAllComponents(ResultCard);
     await cards[2].find('button.toggle').trigger('click');
     await cards[1].find('a.retry').trigger('click');
-    await cards[0].find('.actions button').trigger('click');
+    await cards[0].find('[data-action="copy"]').trigger('click');
     expect(bridge.calls).toEqual(expect.arrayContaining([
       { name: 'Translation.ToggleCard', payload: { serviceId: 'openai/translate' } },
       { name: 'Translation.RetryCard', payload: { serviceId: 'deepl/translate' } },

@@ -66,7 +66,7 @@ describe('F09 verification: dictionary card under hostile data', () => {
     expect(w.find('.entry').exists()).toBe(false);
     expect(w.find('p.text').text()).toBe('<script>window.__f09=1</script>未知词');
     expect(w.findAll('script').length).toBe(0);
-    expect(w.findAll('.actions button').map((b) => b.attributes('data-action'))).toEqual(['copy']);
+    expect(w.findAll('.actions button').map((b) => b.attributes('data-action'))).toEqual(['pronounce', 'copy']); // F10.2 read-aloud key
     expect((window as unknown as { __f09?: number }).__f09).toBeUndefined();
     w.unmount();
   });

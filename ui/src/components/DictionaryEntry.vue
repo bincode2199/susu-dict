@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DictionaryEntryView } from '@protocol/ui';
+import type { DictionaryEntryView, SpeechStateView } from '@protocol/ui';
 import Icon from './Icon.vue';
 import { t } from '../locales/i18n';
 import { accentLabel } from './dictionary';
@@ -7,9 +7,18 @@ import { accentLabel } from './dictionary';
 // DESIGN 8 "译文 · 词条": phonetic row (UK/US + a read-aloud key each), then part-of-speech abbreviation
 // (30 px fixed, italic) + meanings; word forms and examples follow. Every value is service data and is rendered
 // as text (mustache) only, never as HTML, never as a link or image source (PLAN 4.5.5, S08, DICT03).
-// The phonetic read-aloud keys need F10 and stay unavailable until then; the audio id is never used by the UI
-// to load anything (PLAN 4.5.3: audioUrl is fetched by the host only).
-defineProps<{ entry: DictionaryEntryView }>();
+// F10.2: a phonetic key plays the entry's own audio when the service returned one (the host fetches it; the audio id is
+// never used by the UI to load anything, PLAN 4.5.3), else the default pronunciation service reads the word; it stops
+// its own playback when pressed again. Without audio and without a pronunciation service the key is unavailable.
+const props = defineProps<{ entry: DictionaryEntryView; target?: string; speech?: SpeechStateView | null; canSpeak?: boolean }>();
+const emit = defineEmits<{ speak: [index: number]; stopSpeech: [] }>();
+const reading = (index: number) => !!props.target && props.speech?.target === `${props.target}:${index}`
+  && (props.speech.phase === 'loading' || props.speech.phase === 'playing');
+const playable = (index: number) => !!props.entry.phonetics[index]?.audioId || !!props.canSpeak;
+function press(index: number): void {
+  if (reading(index)) emit('stopSpeech');
+  else emit('speak', index);
+}
 </script>
 
 <template>
@@ -19,9 +28,10 @@ defineProps<{ entry: DictionaryEntryView }>();
       <span v-for="(p, i) in entry.phonetics" :key="i" class="phonetic">
         <span class="accent">{{ accentLabel(p.accent) }}</span>
         <span class="ipa">/{{ p.ipa }}/</span>
-        <button type="button" class="icon-btn speak" disabled
-          :aria-label="t('dict.pronounceAccent', { accent: accentLabel(p.accent) })" :title="t('card.needsSpeech')">
-          <Icon name="audio" :size="14" />
+        <button type="button" class="icon-btn speak" :class="{ reading: reading(i) }" :disabled="!playable(i)" :aria-pressed="reading(i)"
+          :aria-label="t('dict.pronounceAccent', { accent: accentLabel(p.accent) })"
+          :title="playable(i) ? t('dict.pronounceAccent', { accent: accentLabel(p.accent) }) : t('card.needsSpeech')" @click="press(i)">
+          <Icon :name="reading(i) ? 'stop' : 'audio'" :size="14" />
         </button>
       </span>
     </div>

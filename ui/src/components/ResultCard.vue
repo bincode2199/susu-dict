@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { CardSnapshot } from '@protocol/ui';
+import type { CardSnapshot, SpeechStateView } from '@protocol/ui';
 import Icon from './Icon.vue';
 import { t } from '../locales/i18n';
 import DictionaryEntry from './DictionaryEntry.vue';
@@ -8,9 +8,11 @@ import { entryPlainText } from './dictionary';
 
 // DESIGN 8: 1 px line, 8 px radius; 38 px header (26 px toggle · name · right status · icon buttons);
 // body indented 38 px. Service text is always rendered as text (mustache), never as HTML (PLAN 4.5.5, S08).
-const props = defineProps<{ card: CardSnapshot; from: string; to: string }>();
+// F10.2: speech is the one player's state; canSpeak says a pronunciation service can run (the pronunciation feature).
+const props = defineProps<{ card: CardSnapshot; from: string; to: string; speech?: SpeechStateView | null; canSpeak?: boolean }>();
 // `copy` carries the text to copy: the card text, or the entry's plain-text projection on a dictionary card (DICT03).
-const emit = defineEmits<{ toggle: []; retry: []; copy: [text: string]; settings: [] }>();
+// `speak` reads the card (no index) or one dictionary phonetic (its index); `stopSpeech` stops what this card is playing.
+const emit = defineEmits<{ toggle: []; retry: []; copy: [text: string]; settings: []; speak: [phonetic?: number]; stopSpeech: [] }>();
 
 // DESIGN 8 "译文 · 失败": one action per error kind. Retryable kinds (the host already retried once
 // automatically) offer a manual retry; quota/auth lead to settings; bad_response has no action yet (the log
@@ -33,9 +35,16 @@ const errorKind = computed(() => (props.card.state === 'Cancelled' ? 'cancelled'
 // Streaming text keeps appending in place; the copy button appears once the result is complete.
 watch(() => [props.card.text, props.card.entry], () => { copied.value = false; });
 
-// F09.3: a dictionary card shows the structured entry; read-aloud (F10) and favorite (F15) are shown but
-// unavailable until those modules exist.
+// F09.3: a dictionary card shows the structured entry; favorite (F15) is shown but unavailable until that module exists.
 const entry = computed(() => (props.card.state === 'Ready' ? props.card.entry : undefined));
+// F10.2 (DESIGN 8 key order [regenerate] · read aloud · copy · favorite): every finished card can be read aloud with the
+// default service; the key shows the playback it started and stops it when pressed again.
+const target = computed(() => `card:${props.card.serviceId}`);
+const reading = computed(() => props.speech?.target === target.value && (props.speech.phase === 'loading' || props.speech.phase === 'playing'));
+function readAloud(): void {
+  if (reading.value) emit('stopSpeech');
+  else emit('speak');
+}
 
 function copy(): void {
   emit('copy', entry.value ? entryPlainText(entry.value) : props.card.text);
@@ -55,7 +64,10 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
       <h2 class="name">{{ card.displayName }}</h2>
       <span class="status" aria-live="polite">{{ status }}</span>
       <div v-if="!collapsed && card.state === 'Ready'" class="actions">
-        <button v-if="entry" type="button" class="icon-btn unavailable" data-action="pronounce" disabled :aria-label="t('card.pronounce')" :title="t('card.needsSpeech')"><Icon name="audio" /></button>
+        <button type="button" class="icon-btn" :class="{ unavailable: !canSpeak, reading }" data-action="pronounce" :disabled="!canSpeak" :aria-pressed="reading"
+          :aria-label="reading ? t('speech.stop') : t('card.pronounce')" :title="canSpeak ? (reading ? t('speech.stop') : t('card.pronounce')) : t('card.needsSpeech')" @click="readAloud">
+          <Icon :name="reading ? 'stop' : 'audio'" />
+        </button>
         <button type="button" class="icon-btn" data-action="copy" :aria-label="t('card.copy')" :title="t('card.copy')" @click="copy"><Icon name="copy" /></button>
         <button v-if="entry" type="button" class="icon-btn unavailable" data-action="favorite" disabled :aria-label="t('card.favorite')" :title="t('card.needsVocab')"><Icon name="star" /></button>
       </div>
@@ -67,7 +79,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         <a v-if="errorKind && retryable.has(errorKind)" href="#" class="retry" @click.prevent="emit('retry')">{{ t('card.retry') }}</a>
         <a v-else-if="errorKind === 'quota' || errorKind === 'auth'" href="#" @click.prevent="emit('settings')">{{ t('card.goSettings') }}</a>
       </p>
-      <DictionaryEntry v-else-if="entry" :entry="entry" />
+      <DictionaryEntry v-else-if="entry" :entry="entry" :target="target" :speech="speech" :can-speak="canSpeak"
+        @speak="(index: number) => emit('speak', index)" @stop-speech="emit('stopSpeech')" />
       <p v-else class="text selectable" :class="{ streaming: card.state === 'Streaming' }">{{ card.text }}</p>
     </div>
   </section>
@@ -82,6 +95,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .status { margin-left: auto; font-size: 11px; color: var(--hint); white-space: nowrap; padding-right: 8px; }
 .actions { display: flex; gap: 2px; }
 .unavailable:disabled { opacity: 0.45; cursor: default; }
+.reading { color: var(--ink); }
 .body { padding: 0 14px 12px 38px; }
 .text { margin: 0; font-size: 14.5px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
 .error { margin: 0; font-size: 12px; color: var(--error); display: flex; gap: 10px; align-items: baseline; }

@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { CaptureView, CardPatch, ErrorBarView, SettingsView, TranslationSnapshot, TrayView, UiSnapshot, WindowView } from '@protocol/ui';
+import type { CaptureView, CardPatch, ErrorBarView, SettingsView, SpeechBarView, SpeechStateView, TranslationSnapshot, TrayView, UiSnapshot, WindowView } from '@protocol/ui';
 import type { Inbound } from './bridge';
 
 /**
@@ -15,11 +15,15 @@ export interface UiState {
   capture: CaptureView | null;
   /** Failure bar: the lines to show. */
   errorBar: ErrorBarView | null;
+  /** F10.2: the one player's state (result windows and the pronunciation bar). */
+  speech: SpeechStateView | null;
+  /** Pronunciation bar: its service squares (default first) and the active one. */
+  speechBar: SpeechBarView | null;
   hiddenCount: number;
 }
 
 export function createStore(onWindow?: (view: WindowView) => void): { state: UiState; inbound: Inbound } {
-  const state = reactive<UiState>({ window: null, translation: null, settings: null, tray: null, capture: null, errorBar: null, hiddenCount: 0 });
+  const state = reactive<UiState>({ window: null, translation: null, settings: null, tray: null, capture: null, errorBar: null, speech: null, speechBar: null, hiddenCount: 0 });
   const cardRevision = new Map<string, number>();
   let latestRevision = 0;
   let early: CardPatch[] = []; // patches of a newer generation that arrived before its snapshot event
@@ -59,6 +63,8 @@ export function createStore(onWindow?: (view: WindowView) => void): { state: UiS
       state.tray = snapshot.tray ?? null;
       state.capture = snapshot.capture ?? null;
       state.errorBar = snapshot.errorBar ?? null;
+      state.speech = snapshot.speech ?? null;
+      state.speechBar = snapshot.speechBar ?? null;
       early = [];
       adoptTranslation(snapshot.translation ?? null);
       onWindow?.(snapshot.window);
@@ -71,6 +77,10 @@ export function createStore(onWindow?: (view: WindowView) => void): { state: UiS
       else if (name === 'translation') adoptTranslation(payload as TranslationSnapshot);
       else if (name === 'capture') state.capture = payload as CaptureView;
       else if (name === 'errorbar') state.errorBar = payload as ErrorBarView;
+      else if (name === 'speech') {
+        const next = payload as SpeechStateView;
+        if (!state.speech || next.generation >= state.speech.generation) state.speech = next; // never step back to an older request
+      } else if (name === 'speechbar') state.speechBar = payload as SpeechBarView;
       else if (name === 'window') {
         state.window = payload as WindowView;
         onWindow?.(state.window);

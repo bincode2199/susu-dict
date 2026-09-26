@@ -12,7 +12,7 @@ export interface Inbound {
   onEvent(name: string, payload: unknown): void;
 }
 
-const kinds: Record<string, WindowKind> = { main: 'Main', settings: 'Settings', tray: 'Tray', selection: 'Selection', clipboard: 'Clipboard', ocr: 'Ocr', voice: 'Voice', transcribe: 'Transcribe', error: 'Error' };
+const kinds: Record<string, WindowKind> = { main: 'Main', settings: 'Settings', tray: 'Tray', selection: 'Selection', clipboard: 'Clipboard', ocr: 'Ocr', voice: 'Voice', transcribe: 'Transcribe', error: 'Error', speech: 'Speech' };
 
 export function windowFromQuery(search: string): { kind: WindowKind; session: string; language: string } {
   const params = new URLSearchParams(search);

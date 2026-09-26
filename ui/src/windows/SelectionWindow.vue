@@ -12,6 +12,11 @@ import { t } from '../locales/i18n';
 // language row with pin / open in main window / close; the source text sits under it, then the card list and a
 // 32 px status bar. Opened only by a hotkey or the tray's clipboard entry, at its remembered position.
 const props = defineProps<{ bridge: Bridge; state: UiState }>();
+// F10.2: card read-aloud keys (DESIGN 8) need a pronunciation service; a dictionary phonetic may still play its own audio.
+const canSpeak = computed(() => props.state.window?.features.includes('pronunciation') ?? false);
+function speakCard(serviceId: string, phonetic?: number): void {
+  void props.bridge.command(UI_COMMANDS.SpeakCard, phonetic === undefined ? { serviceId } : { serviceId, phonetic });
+}
 const text = ref('');
 const area = ref<HTMLTextAreaElement | null>(null);
 const root = ref<HTMLElement | null>(null);
@@ -132,7 +137,9 @@ onBeforeUnmount(() => { observer?.disconnect(); mutations?.disconnect(); if (fra
         @toggle="bridge.command(UI_COMMANDS.ToggleCard, { serviceId: card.serviceId })"
         @retry="bridge.command(UI_COMMANDS.RetryCard, { serviceId: card.serviceId })"
         @copy="(text: string) => bridge.command(UI_COMMANDS.CopyText, { text })"
-        @settings="bridge.command(UI_COMMANDS.OpenSettings)" />
+        @settings="bridge.command(UI_COMMANDS.OpenSettings)"
+        :speech="state.speech" :can-speak="canSpeak" @speak="(phonetic?: number) => speakCard(card.serviceId, phonetic)"
+        @stop-speech="bridge.command(UI_COMMANDS.SpeechStop, {})" />
     </main>
     <footer class="statusbar" :class="{ offline }">
       <span v-if="offline" class="offline-note" role="status"><Icon name="warning" :size="13" />{{ t('main.offline') }}</span>

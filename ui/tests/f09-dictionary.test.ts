@@ -75,8 +75,8 @@ describe('F09.3 dictionary card rendering (DICT03)', () => {
     w.unmount();
   });
 
-  it('shows read-aloud and favorite as unavailable until F10/F15; phonetic keys too', async () => {
-    const w = mountCard(dictCard(entry()));
+  it('without a pronunciation service: read-aloud and favorite unavailable, phonetic keys with dictionary audio still play', async () => {
+    const w = mountCard(dictCard(entry({ phonetics: [{ accent: 'uk', ipa: 'rʌn', audioId: 'a1' }, { accent: 'us', ipa: 'rʌn' }] })));
     const actions = w.findAll('.actions button').map((b) => b.attributes('data-action'));
     expect(actions).toEqual(['pronounce', 'copy', 'favorite']);
     const pronounce = w.find('[data-action="pronounce"]');
@@ -87,16 +87,20 @@ describe('F09.3 dictionary card rendering (DICT03)', () => {
     expect(favorite.attributes('title')).toBe(t('card.needsVocab'));
     const speak = w.findAll('.speak');
     expect(speak).toHaveLength(2);
-    for (const s of speak) expect(s.attributes('disabled')).toBeDefined();
+    expect(speak[0].attributes('disabled')).toBeUndefined(); // TTS03: the entry's own audio needs no TTS service
+    expect(speak[1].attributes('disabled')).toBeDefined();
+    expect(speak[1].attributes('title')).toBe(t('card.needsSpeech'));
+    await speak[0].trigger('click');
     await pronounce.trigger('click');
     await favorite.trigger('click');
+    expect(w.emitted('speak')).toEqual([[0]]);
     expect(Object.keys(w.emitted())).not.toContain('copy');
     w.unmount();
   });
 
-  it('a plain translation card keeps its single copy action', () => {
+  it('a plain translation card has read-aloud and copy (F10.2)', () => {
     const w = mountCard({ serviceId: 's', displayName: 's', state: 'Ready', collapsed: false, text: '你好' });
-    expect(w.findAll('.actions button').map((b) => b.attributes('data-action'))).toEqual(['copy']);
+    expect(w.findAll('.actions button').map((b) => b.attributes('data-action'))).toEqual(['pronounce', 'copy']);
     w.unmount();
   });
 });
