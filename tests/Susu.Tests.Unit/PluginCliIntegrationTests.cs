@@ -78,6 +78,7 @@ public class PluginCliIntegrationTests
     [InlineData("openai", "app.susu.openai")]
     [InlineData("tencent-translate", "app.susu.tencent-translate")]
     [InlineData("deepl", "app.susu.deepl")]
+    [InlineData("youdao", "app.susu.youdao")] // F09 P-T07
     public void Check_passes_for_every_shipped_translation_package(string directory, string id)
     {
         string? cli = FindPublished(Path.Combine("tools", "Susu.PluginCli", "bin", "Release", "net10.0", "win-x64", "publish", "susu-plugin.exe"));
@@ -99,6 +100,7 @@ public class PluginCliIntegrationTests
     [InlineData("openai")]
     [InlineData("tencent-translate")]
     [InlineData("deepl")]
+    [InlineData("youdao")] // F09 P-T07
     public void Test_runs_every_shipped_translation_package_without_crashing(string directory)
     {
         string? cli = FindPublished(Path.Combine("tools", "Susu.PluginCli", "bin", "Release", "net10.0", "win-x64", "publish", "susu-plugin.exe"));
