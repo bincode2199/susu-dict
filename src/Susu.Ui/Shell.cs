@@ -107,6 +107,7 @@ public sealed partial class ShellCoordinator
     private readonly WebViewLifecycle lifecycle = new();
     private Dictionary<string, bool> hotkeyResults = new(StringComparer.Ordinal);
     private readonly TranslationBackend? backend;
+    private readonly CaptureCoordinator? capture;
     private TranslationSession? translation;
     // Settings changed since the session was built: the next submit rebuilds it from the current services,
     // so enable/disable/reorder/key changes apply without a restart while shown results stay until then.
@@ -114,8 +115,10 @@ public sealed partial class ShellCoordinator
     private (string From, string To)? languageOverride;
 
     public ShellCoordinator(IWindowPlatform platform, IConfigService config, FeatureRegistry features, Func<Capability, bool> capabilityReady,
-        ShellOptions options, Func<AppSettings, TranslationSession?>? sessionFactory = null, ILanguageDetector? languageDetector = null, TranslationBackend? backend = null)
+        ShellOptions options, Func<AppSettings, TranslationSession?>? sessionFactory = null, ILanguageDetector? languageDetector = null, TranslationBackend? backend = null,
+        CaptureCoordinator? capture = null)
     {
+        this.capture = capture;
         this.platform = platform;
         this.config = config;
         this.features = features;
@@ -207,6 +210,20 @@ public sealed partial class ShellCoordinator
         if (!hotkeyFeatures.TryGetValue(action, out var feature) || Resolve(feature).State != FeatureState.Available) return; // unavailable: no action (PLAN 1.2)
         hotkeyAt = System.Diagnostics.Stopwatch.GetTimestamp();
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
+        // F08.2: selection/clipboard capture. The foreground snapshot is taken synchronously here, before any Su-Su
+        // window can take focus; F08.3 shows the Selection window (or the failure bar) from Captured.
+        else if (capture is not null && CaptureCoordinator.TriggerFor(action, config.State.Effective.Hotkeys) is { } trigger)
+            _ = CaptureAsync(capture, capture.CaptureAsync(trigger));
+    }
+
+    /// <summary>A capture started by a hotkey finished and is still the current one (J01); superseded ones are never raised.</summary>
+    public event Action<CaptureOutcome>? Captured;
+
+    private async Task CaptureAsync(CaptureCoordinator coordinator, Task<CaptureOutcome> pending)
+    {
+        var outcome = await pending;
+        Diagnostic?.Invoke($"capture {outcome.Trigger} {outcome.Status} {outcome.Source} {outcome.FailureKey}");
+        if (outcome.Status != CaptureStatus.Superseded && coordinator.IsCurrent(outcome.Generation)) Captured?.Invoke(outcome);
     }
 
     // ---------- page messages ----------

@@ -63,6 +63,23 @@ public sealed class CaptureCoordinator(ISelectionReader reader, ClipboardBorrowe
 
     public long CurrentGeneration { get { lock (_gate) return _generation; } }
 
+    /// <summary>
+    /// Maps a hotkey action to its capture (PLAN 6.1, CFG05): selection with the same chord as clipboard translation is
+    /// <see cref="CaptureTrigger.Shared"/> (the shell registers only the selection action for a shared chord); null for
+    /// actions that are not captures.
+    /// </summary>
+    public static CaptureTrigger? TriggerFor(string action, Susu.Domain.HotkeySettings hotkeys)
+    {
+        ArgumentNullException.ThrowIfNull(hotkeys);
+        string Chord(string a) => hotkeys.Chords.TryGetValue(a, out var chord) ? chord : "";
+        return action switch
+        {
+            "selectionTranslate" => Chord("selectionTranslate") is { Length: > 0 } chord && chord == Chord("clipboardTranslate") ? CaptureTrigger.Shared : CaptureTrigger.Selection,
+            "clipboardTranslate" => CaptureTrigger.Clipboard,
+            _ => null,
+        };
+    }
+
     public bool IsCurrent(long generation) { lock (_gate) return generation == _generation; }
 
     /// <summary>

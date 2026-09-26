@@ -152,11 +152,15 @@ internal static class MainMode
             log.Event("options.failed", ("instance", query.InstanceId), ("kind", (outcome.ErrorKind ?? ErrorKind.Unavailable).ToString()));
             return new OptionsLoad(null, null, outcome.ErrorKind ?? ErrorKind.Unavailable);
         }, clock);
+        // F08.2: three-level capture (UIA/IA2 helper, optional clipboard borrow in its own helper). Status only is logged, never text.
+        var capture = new CaptureCoordinator(new Susu.Windows.Selection.SelectionReader(Susu.Windows.Selection.Win32SelectionPlatform.ForCurrentProcess()),
+            new ClipboardBorrower(Susu.Windows.Clipboard.Win32ClipboardPlatform.ForCurrentProcess()), () => config.State.Effective.General.AllowClipboardBorrowing);
+        capture.Completed += (trigger, status, source, reason, ms) => log.Event("capture", ("trigger", trigger.ToString()), ("status", status.ToString()), ("source", source), ("reason", reason), ("ms", ms));
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
             new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector(),
             new TranslationBackend(translation.Supervisor is not null, translation.ValidationProvider,
                 serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)),
-                schemas, optionsBroker, (network, targets, cancel) => NetworkProbe.RunAsync(network, secrets, targets, cancel)));
+                schemas, optionsBroker, (network, targets, cancel) => NetworkProbe.RunAsync(network, secrets, targets, cancel)), capture);
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;

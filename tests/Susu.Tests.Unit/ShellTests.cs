@@ -199,14 +199,19 @@ public class ShellCoordinatorTests
         private long counter;
         private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
-        public Rig(bool translateReady = false, Func<AppSettings, TranslationSession?>? sessions = null, ILanguageDetector? languageDetector = null)
+        public Rig(bool translateReady = false, Func<AppSettings, TranslationSession?>? sessions = null, ILanguageDetector? languageDetector = null, CaptureCoordinator? capture = null)
         {
             Settings = new SettingsStore(Root.Paths, new ManualClock());
             Secrets = new SecretStore(Root.Paths.Secrets, new XorProtector());
             Config = new ConfigService(Settings, Secrets);
             Features.Register(new FeatureDescriptor(FeatureRegistry.Ids.InputTranslation, FeatureState.Available, null, [Capability.Translate]));
             Features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Ocr, FeatureState.InDevelopment, "feature.inDevelopment", []));
-            Shell = new ShellCoordinator(Platform, Config, Features, c => translateReady && c == Capability.Translate, new ShellOptions(false, false), sessions, languageDetector);
+            if (capture is not null)
+            {
+                Features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Selection, FeatureState.Available, null, []));
+                Features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Clipboard, FeatureState.Available, null, []));
+            }
+            Shell = new ShellCoordinator(Platform, Config, Features, c => translateReady && c == Capability.Translate, new ShellOptions(false, false), sessions, languageDetector, capture: capture);
             Shell.Start();
         }
 
@@ -424,6 +429,31 @@ public class ShellCoordinatorTests
         Assert.True(rig.Result(rig.Command(WindowKind.Main, UiCommands.CopyText, new { text = "T:hello" })).Ok);
         Assert.Equal("T:hello", rig.Platform.Clipboard);
         Assert.Equal("text-length", rig.Result(rig.Command(WindowKind.Main, UiCommands.SubmitText, new { text = "   " })).Error);
+    }
+
+    private sealed class SelectingReader : ISelectionReader
+    {
+        public int Snapshots;
+        public ForegroundSnapshot Snapshot() { Snapshots++; return FakeClipboardPlatform.Target(); }
+        public Task<SelectionResult> ReadAsync(ForegroundSnapshot snapshot, CancellationToken cancellationToken)
+            => Task.FromResult(new SelectionResult(SelectionStatus.Selected, "picked", "uia", null, 96, 1, 1));
+        public void Prime(nint window) { }
+    }
+
+    [Fact] // F08.2: the default shared Alt+D chord registers once and captures with the shared arbitration
+    public async Task Selection_hotkey_snapshots_synchronously_and_raises_the_current_capture()
+    {
+        var reader = new SelectingReader();
+        var capture = new CaptureCoordinator(reader, new ClipboardBorrower(new FakeClipboardPlatform()), () => false);
+        using var rig = new Rig(capture: capture);
+        var captured = new TaskCompletionSource<CaptureOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Shell.Captured += o => captured.TrySetResult(o);
+        Assert.True(rig.Shell.HotkeyResults.ContainsKey("selectionTranslate"));
+        Assert.False(rig.Shell.HotkeyResults.ContainsKey("clipboardTranslate")); // shared chord: one registration
+        rig.Shell.OnHotkey("selectionTranslate");
+        Assert.Equal(1, reader.Snapshots);
+        var outcome = await captured.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal((CaptureTrigger.Shared, CaptureStatus.Text, "picked"), (outcome.Trigger, outcome.Status, outcome.Text));
     }
 
     private sealed class FakeDetector(IReadOnlyList<string> candidates) : ILanguageDetector

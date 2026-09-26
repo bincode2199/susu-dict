@@ -38,6 +38,19 @@ public class CaptureCoordinatorTests
         return (new CaptureCoordinator(reader, new ClipboardBorrower(clipboard, Fast), () => borrow), reader, clipboard);
     }
 
+    [Fact] // CFG05 / PLAN 6.1
+    public void Hotkey_actions_map_to_shared_selection_or_clipboard_triggers()
+    {
+        var shared = new Susu.Domain.HotkeySettings(new Dictionary<string, string> { ["selectionTranslate"] = "Alt+D", ["clipboardTranslate"] = "Alt+D" });
+        var separate = new Susu.Domain.HotkeySettings(new Dictionary<string, string> { ["selectionTranslate"] = "Alt+D", ["clipboardTranslate"] = "Alt+C" });
+        var unassigned = new Susu.Domain.HotkeySettings(new Dictionary<string, string> { ["selectionTranslate"] = "", ["clipboardTranslate"] = "" });
+        Assert.Equal(CaptureTrigger.Shared, CaptureCoordinator.TriggerFor("selectionTranslate", shared));
+        Assert.Equal(CaptureTrigger.Selection, CaptureCoordinator.TriggerFor("selectionTranslate", separate));
+        Assert.Equal(CaptureTrigger.Selection, CaptureCoordinator.TriggerFor("selectionTranslate", unassigned));
+        Assert.Equal(CaptureTrigger.Clipboard, CaptureCoordinator.TriggerFor("clipboardTranslate", separate));
+        Assert.Null(CaptureCoordinator.TriggerFor("ocrTranslate", shared));
+    }
+
     [Fact]
     public async Task Lossless_selection_is_used_directly()
     {
