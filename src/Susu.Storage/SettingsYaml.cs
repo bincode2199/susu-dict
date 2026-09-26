@@ -236,7 +236,7 @@ public static partial class SettingsYaml
             Keys(map, p, "service", "autoTranslate", "keepScreenshots", "retentionDays");
             string service = Str(map, p, "service", d.Service);
             if (OcrCatalog.Find(service) is null) { Issue($"{p}.service", "range", $"'{service}' is not an OCR service", map.Get("service") ?? node); service = d.Service; }
-            // F11.3: each field falls back on its own, so a bad retention value never turns "keep screenshots" on or off.
+            // F11.3: keep screenshots stays off unless written as true (OCR03); retention is 1-365 days (a bad value is a located issue).
             return new OcrSettings(service, Bool(map, p, "autoTranslate", d.AutoTranslate), Bool(map, p, "keepScreenshots", d.KeepScreenshots),
                 (int)Long(map, p, "retentionDays", d.RetentionDays, OcrSettings.MinRetentionDays, OcrSettings.MaxRetentionDays));
         }
