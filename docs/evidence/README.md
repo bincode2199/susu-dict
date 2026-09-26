@@ -18,5 +18,6 @@ What has been delivered and verified. [PROGRESS](PROGRESS.md) is the one-page cu
 | [F08](F08/F08.md) | Selection and clipboard translation |
 | [F09](F09/F09.md) | Dictionary card |
 | [F10](F10/F10.md) | Pronunciation |
+| [F11](F11/F11.md) | Screenshot OCR |
 
 New records are created from [MODULE-TEMPLATE](../development/MODULE-TEMPLATE.md).
