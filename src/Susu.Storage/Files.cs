@@ -23,7 +23,14 @@ public sealed record AppPaths(string Roaming, string Local)
     public string Transactions => Path.Combine(Local, "transactions");
     public string Updates => Path.Combine(Local, "updates");
 
-    public static AppPaths UnderRoot(string root) => new(Path.Combine(root, "Roaming", "Su-Su"), Path.Combine(root, "Local", "Su-Su"));
+    /// <summary>
+    /// ARCHITECTURE 8.1 "Pictures/Su-Su": copies kept only when the user enables "keep screenshots". Not created up front.
+    /// Defaults to a Pictures folder beside <see cref="Local"/>'s parent so explicit test roots stay self-contained;
+    /// <see cref="Resolve"/> points production at the user's Pictures folder.
+    /// </summary>
+    public string KeptScreenshots { get; init; } = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(Local))) ?? Local, "Pictures", "Su-Su");
+
+    public static AppPaths UnderRoot(string root) => new(Path.Combine(root, "Roaming", "Su-Su"), Path.Combine(root, "Local", "Su-Su")) { KeptScreenshots = Path.Combine(root, "Pictures", "Su-Su") };
 
     /// <param name="overrideRoot">From <c>--data-root</c> or <see cref="DataRootVariable"/>.</param>
     /// <param name="development">Development builds default to a separate Su-Su-Dev folder instead of real user data.</param>
@@ -32,7 +39,10 @@ public sealed record AppPaths(string Roaming, string Local)
         if (!string.IsNullOrWhiteSpace(overrideRoot)) return UnderRoot(Path.GetFullPath(overrideRoot));
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (development) return UnderRoot(Path.Combine(local, "Su-Su-Dev"));
-        return new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Su-Su"), Path.Combine(local, "Su-Su"));
+        return new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Su-Su"), Path.Combine(local, "Su-Su"))
+        {
+            KeptScreenshots = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Su-Su"),
+        };
     }
 
     public AppPaths EnsureCreated()

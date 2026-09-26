@@ -131,6 +131,25 @@ public sealed class LeasedAudioClip(FileLeases leases, FileLease lease, string m
     public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) == 0) leases.Release(Lease); }
 }
 
+/// <summary>One owner's reference on a leased file (F11.1 screenshots): disposing releases it exactly once.</summary>
+public sealed class LeasedFile(FileLeases leases, FileLease lease, string mime) : Susu.Abstractions.ILeasedFile
+{
+    private int disposed;
+    public FileLease Lease { get; } = lease;
+    public string LeaseId => Lease.Id;
+    public string Mime { get; } = mime;
+    public string FilePath => leases.PathOf(Lease);
+    public long Bytes { get { try { return new FileInfo(FilePath).Length; } catch (Exception e) when (e is IOException or ObjectDisposedException) { return 0; } } }
+    public bool Released => Volatile.Read(ref disposed) != 0;
+    public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) == 0) leases.Release(Lease); }
+}
+
+/// <summary>Empty leased files in the session cache folder (ARCHITECTURE 8.4 "临时 OCR … lease 到零删除").</summary>
+public sealed class LeasedFiles(FileLeases leases) : Susu.Abstractions.ILeasedFileFactory
+{
+    public Susu.Abstractions.ILeasedFile Create(string purpose, string mime, string extension) => new LeasedFile(leases, leases.Create(purpose, extension), mime);
+}
+
 /// <summary>Empty leased files for host-produced audio (SAPI synthesis).</summary>
 public sealed class LeasedAudioFiles(FileLeases leases, string purpose = "tts") : Susu.Abstractions.IAudioFileFactory
 {
