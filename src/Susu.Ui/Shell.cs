@@ -1054,7 +1054,8 @@ public sealed partial class ShellCoordinator
             }
             else if (backend is not null) implemented = false;
             int order = x.Capability == Capability.Translate ? translationOrder.IndexOf(x.ServiceId) : -1;
-            long? usage = targets is not null && backend?.MonthlyUsage is { } monthly ? monthly(x.ServiceId) : null;
+            // Local usage counts translated characters; OCR calls are not counted in characters (no OCR usage line yet).
+            long? usage = targets is not null && x.Capability != Capability.Ocr && backend?.MonthlyUsage is { } monthly ? monthly(x.ServiceId) : null;
             return new ServiceView(x.ServiceId, x.Instance, x.Capability.ToString().ToLowerInvariant(), package?.Page ?? "general", x.Enabled, availability,
                 implemented, secrets, secrets.Length > 0 && instance.AccountBindings.TryGetValue(secrets[0], out var a) ? a : null, targets, plan, order, usage,
                 ConfigFields(instance), instance.Revision);
