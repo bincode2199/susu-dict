@@ -89,8 +89,15 @@ public class F09ClassifierVerificationTests
         Assert.Null(TextForms.DictionaryWord("hello！"));
     }
 
-    [Fact(Skip = "F09 finding (low): a decomposed (NFD) Latin word such as \"cafe\\u0301\" (e + U+0301 combining acute, as macOS/some PDFs copy it) is classified Other, so the dictionary never triggers, while the precomposed \"café\" does. TextForms counts combining marks as 'other'; PLAN 6.1 says letters only, so this is a spec reading question for the master.")]
-    public void Decomposed_latin_word_is_a_word_form() => Assert.True(TextForms.UsesDictionary("café", true));
+    [Fact] // a decomposed (NFD) Latin word classifies like its NFC form; the looked-up word is NFC
+    public void Decomposed_latin_word_is_a_word_form()
+    {
+        string nfd = "cafe" + (char)0x0301, nfc = "caf" + (char)0x00E9; // e + combining acute vs precomposed é
+        Assert.True(TextForms.UsesDictionary(nfd, true));
+        Assert.Equal(TextForm.LatinWord, TextForms.Classify(nfd));
+        Assert.Equal(nfc, TextForms.DictionaryWord($" {nfd} ")); // the vendor lookup receives NFC
+        Assert.Null(TextForms.DictionaryWord("a\ud800b"));
+    }
 }
 
 /// <summary>

@@ -38,7 +38,7 @@ public static class TextForms
 
     public static TextForm Classify(string? text)
     {
-        string t = (text ?? "").Trim();
+        string t = Nfc((text ?? "").Trim());
         if (t.Length == 0) return TextForm.Empty;
 
         int latin = 0, han = 0, joiners = 0, spaces = 0, punctuation = 0, digits = 0, other = 0, scalars = 0;
@@ -78,8 +78,18 @@ public static class TextForms
     /// and at least one configured dictionary service. Only Youdao is a dictionary source; there is no fallback.</summary>
     public static bool UsesDictionary(string? text, bool dictionaryConfigured) => dictionaryConfigured && IsWordForm(Classify(text));
 
-    /// <summary>The trimmed word to look up, or null when <paramref name="text"/> is not a word form.</summary>
-    public static string? DictionaryWord(string? text) => IsWordForm(Classify(text)) ? text!.Trim() : null;
+    /// <summary>The trimmed, NFC-normalized word to look up, or null when <paramref name="text"/> is not a word form.
+    /// The dictionary vendor receives this NFC form; the plain translation path sends the original text unchanged.</summary>
+    public static string? DictionaryWord(string? text) => IsWordForm(Classify(text)) ? Nfc(text!.Trim()) : null;
+
+    // Classification runs on NFC so a decomposed word ("cafe" + U+0301, as macOS and some PDFs copy it) is
+    // the same word form as the precomposed "café" (F09 finding). Text with a lone surrogate cannot be
+    // normalized; it is classified as-is (and is never a word form).
+    private static string Nfc(string text)
+    {
+        try { return text.Normalize(NormalizationForm.FormC); }
+        catch (ArgumentException) { return text; }
+    }
 
     // Latin-script letters: ASCII, Latin-1 Supplement letters (not × ÷), Latin Extended-A/B, IPA-free
     // Extended Additional (Vietnamese etc.).
