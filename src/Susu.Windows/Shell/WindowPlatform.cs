@@ -19,7 +19,7 @@ public sealed record UiHosting(string UiFolder, string WebViewUserData, bool Dev
 /// windows, one controller per window, lazily created; hidden windows stay warm (suspended) until the
 /// coordinator asks for a full release, after which BrowserProcessExited is awaited and reported.
 /// </summary>
-public sealed class WindowPlatform : IWindowPlatform, IDisposable
+public sealed class WindowPlatform : IWindowPlatform, ICaptureWindowHider, IDisposable
 {
     private readonly UiDispatcher dispatcher;
     private readonly UiHosting hosting;
@@ -84,6 +84,29 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
         window.View?.Visible(false);
         ShowWindow(window.Handle, SW_HIDE);
         if (IsZoomed(window.Handle)) ShowWindow(window.Handle, SW_RESTORE); // size and maximize are never remembered
+    }
+
+    /// <summary>
+    /// F11.1: hides every visible Su-Su window before the screenshot freeze-frame (no position save, no page event: this is not
+    /// a close) and waits for DWM to compose without them; the token shows the same windows again without activating them.
+    /// </summary>
+    public Task<IDisposable> HideAllAsync(CancellationToken cancellationToken)
+    {
+        var hidden = windows.Values.Where(w => w.Visible).Select(w => w.Handle).ToList();
+        foreach (var hwnd in hidden) ShowWindow(hwnd, SW_HIDE);
+        if (hidden.Count > 0) { Capture.CaptureNative.DwmFlush(); Capture.CaptureNative.DwmFlush(); }
+        return Task.FromResult<IDisposable>(new CaptureRestore(this, hidden));
+    }
+
+    private sealed class CaptureRestore(WindowPlatform platform, List<nint> hidden) : IDisposable
+    {
+        private int done;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref done, 1) != 0) return;
+            foreach (var hwnd in hidden)
+                if (platform.windows.Values.Any(w => w.Handle == hwnd)) ShowWindow(hwnd, SW_SHOWNOACTIVATE); // skip windows released meanwhile
+        }
     }
 
     public void ToggleMaximize(WindowKind kind)

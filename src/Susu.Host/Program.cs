@@ -8,6 +8,7 @@ using Susu.Storage;
 using Susu.Ui;
 using Susu.Windows;
 using Susu.Windows.Audio;
+using Susu.Windows.Capture;
 using Susu.Windows.Shell;
 
 [assembly: SupportedOSPlatform("windows10.0.19041")]
@@ -202,6 +203,15 @@ internal static class MainMode
                 serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)),
                 schemas, optionsBroker, (network, targets, cancel) => NetworkProbe.RunAsync(network, secrets, targets, cancel), speech), capture);
         shell = coordinator;
+        // F11.1: screenshot capture port for OCR (the feature stays InDevelopment until F11.3 marks it Available). Kept copies
+        // are written only when "keep screenshots" is on (no setting yet, so off: OCR03); indexed copies older than 7 days go at startup.
+        var keptScreenshots = KeptScreenshots.For(paths);
+        try { keptScreenshots.Cleanup(clock.UtcNow); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log.Event("capture.retention", ("code", e.GetType().Name)); }
+        coordinator.ScreenCapture = new ScreenCaptureCoordinator(new GdiScreenGrabber(), new RegionOverlay(), platform, new LeasedFiles(leases), clock, keptScreenshots,
+            keepScreenshots: () => false,
+            overlay: () => new RegionSelectOptions(config.State.Effective.General.UiLanguage == "en" ? ScreenCaptureCoordinator.HintEn : ScreenCaptureCoordinator.HintZh,
+                config.State.Effective.General.Theme == "dark"));
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;

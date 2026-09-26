@@ -229,8 +229,34 @@ public sealed partial class ShellCoordinator
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
         // F08.2: selection/clipboard capture. The foreground snapshot is taken synchronously here, before any Su-Su
         // window can take focus; no Su-Su window is shown or activated until the capture has finished (UI03, SEL02).
+        else if (feature == FeatureRegistry.Ids.Ocr) StartScreenCapture();
         else if (capture is not null && CaptureCoordinator.TriggerFor(action, config.State.Effective.Hotkeys) is { } trigger)
             _ = CaptureAsync(capture, capture.CaptureAsync(trigger));
+    }
+
+    /// <summary>
+    /// F11.1 screenshot port (ARCHITECTURE 7 <c>IScreenCapture.CaptureRegion</c>). The OCR hotkey and tray entry reach it only
+    /// while the OCR feature resolves Available (F11.3), or in a development preview.
+    /// </summary>
+    public IScreenCapture? ScreenCapture { get; set; }
+
+    /// <summary>A screenshot capture finished (captured, cancelled or failed). A subscriber (F11.2/F11.3) owns and disposes
+    /// <see cref="ScreenCaptureResult.Image"/>; with no subscriber the image lease is released at once.</summary>
+    public event Action<ScreenCaptureResult>? ScreenCaptured;
+
+    private void StartScreenCapture()
+    {
+        if (ScreenCapture is { } screen) _ = RunScreenCaptureAsync(screen);
+    }
+
+    private async Task RunScreenCaptureAsync(IScreenCapture screen)
+    {
+        ScreenCaptureResult result;
+        try { result = await screen.CaptureRegionAsync(); }
+        catch (Exception e) { Diagnostic?.Invoke($"capture.screen.exception {e.GetType().Name}"); return; }
+        Diagnostic?.Invoke($"capture.screen {result.Status} {result.ErrorCode ?? result.CopyErrorCode ?? ""}".TrimEnd());
+        if (ScreenCaptured is { } handler) handler(result);
+        else result.Image?.Dispose();
     }
 
     /// <summary>A capture (hotkey or tray) finished and is still the current one (J01); superseded ones are never raised.</summary>
@@ -1079,6 +1105,10 @@ public sealed partial class ShellCoordinator
             case "clipboard":
                 if (capture is null) return new CommandResult(false, "unavailable");
                 _ = CaptureAsync(capture, capture.CaptureAsync(CaptureTrigger.Clipboard));
+                break;
+            case "ocr":
+                if (ScreenCapture is null) return new CommandResult(false, "unavailable");
+                StartScreenCapture();
                 break;
         }
         return Ok();
