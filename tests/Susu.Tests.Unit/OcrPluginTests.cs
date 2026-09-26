@@ -60,6 +60,9 @@ public class OcrPluginTests
         return dir;
     });
 
+    /// <summary>The staged host folder (susu.exe + both packages), or null when the host is not published.</summary>
+    internal static string? StagedDir => staged.Value;
+
     private sealed class FakeSecretStore : ISecretStore
     {
         private readonly Dictionary<(string, string), string> values = [];
@@ -71,7 +74,7 @@ public class OcrPluginTests
         public bool TryRead(string a, string n, out string v) => values.TryGetValue((a, n), out v!);
     }
 
-    private sealed class Rig : IDisposable
+    internal sealed class Rig : IDisposable
     {
         public required FileLeases Leases { get; init; }
         public required Supervisor<HostSession> Supervisor { get; init; }
@@ -121,7 +124,7 @@ public class OcrPluginTests
     /// The instance with its secrets on one account. For Tencent the account is the shared Tencent Cloud account (PLAN 1.3): it
     /// always carries the TMT grants, and the OCR grant for the OCR origin only when <paramref name="grantOcr"/>.
     /// </summary>
-    private static Rig? Build(string instanceId, LoopbackHttpServer server, Dictionary<string, string>? config = null, bool grantOcr = true)
+    internal static Rig? Build(string instanceId, LoopbackHttpServer server, Dictionary<string, string>? config = null, bool grantOcr = true, string? directory = null)
     {
         if (staged.Value is not { } dir) return null;
         var package = PluginTranslationProviders.WiredPackages.Single(p => p.InstanceId == instanceId);
@@ -148,7 +151,7 @@ public class OcrPluginTests
         {
             var session = HostSession.Start(options);
             session.Broker.ApproveLocalOrigin(server.Origin);
-            var loaded = session.Load(package.PackageId, package.Directory);
+            var loaded = session.Load(package.PackageId, directory ?? package.Directory);
             if (!loaded.Ok) { session.Shutdown(2000); throw new InvalidOperationException($"{package.PackageId} failed to load: {loaded.Error}"); }
             rig!.Session = session;
             return session;
