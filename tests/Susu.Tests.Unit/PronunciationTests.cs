@@ -219,15 +219,20 @@ public class PronunciationFlowTests
         {
             Shell.Open(WindowKind.Main);
             Ready(WindowKind.Main);
+            // The page is ready once its snapshot arrived; results before that are not sent to it.
+            Assert.True(await Eventually.WaitAsync(() => Platform.Posted.Any(p => p.Kind == WindowKind.Main && p.Envelope.Kind == UiMessageKind.Snapshot)));
             Assert.True(Run(WindowKind.Main, UiCommands.SubmitText, new { text }).Ok);
             CardSnapshot? card = null;
             Assert.True(await Eventually.WaitAsync(() => (card = Cards().LastOrDefault(c => c.ServiceId == serviceId && c.State == CardState.Ready)) is not null));
             return card!;
         }
 
+        /// <summary>Cards as the page sees them, in order: from "translation" snapshots and "card" patches (a fast result may only be in the snapshot).</summary>
         public IEnumerable<CardSnapshot> Cards() => Platform.Posted.ToArray()
-            .Where(p => p.Kind == WindowKind.Main && p.Envelope.Kind == UiMessageKind.Patch)
-            .Select(p => p.Envelope.Payload!.Value.GetProperty("card").Deserialize(ContractsJson.Default.CardSnapshot)!);
+            .Where(p => p.Kind == WindowKind.Main && (p.Envelope.Kind == UiMessageKind.Patch || p.Envelope.Name == "translation"))
+            .SelectMany(p => p.Envelope.Kind == UiMessageKind.Patch
+                ? [p.Envelope.Payload!.Value.GetProperty("card").Deserialize(ContractsJson.Default.CardSnapshot)!]
+                : p.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.TranslationSnapshot)!.Cards);
 
         public SpeechStateView[] States(WindowKind kind) => [.. Platform.Posted.ToArray()
             .Where(p => p.Kind == kind && p.Envelope.Name == "speech").Select(p => p.Envelope.Payload!.Value.Deserialize(ContractsJson.Default.SpeechStateView)!)];
