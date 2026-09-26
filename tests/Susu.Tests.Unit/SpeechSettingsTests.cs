@@ -221,7 +221,7 @@ public class SpeechSettingsTests
     {
         Assert.All(SpeechCatalog.All.Where(p => !p.Native), p =>
         {
-            Assert.False(p.Installed);
+            Assert.Equal(p.Capability == Capability.Tts, p.Installed); // F10.1 installed P-S01-P-S03; ASR comes in F12
             Assert.NotNull(BuiltInCatalog.Find(p.InstanceId));
             Assert.Equal(BuiltInCatalog.Find(p.InstanceId)!.Secrets, p.SecretNames);
             Assert.Contains(p.Capability, BuiltInCatalog.Find(p.InstanceId)!.Capabilities);

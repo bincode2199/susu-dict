@@ -108,3 +108,22 @@ public sealed class PluginTtsProvider(WiredPackage package, InstanceSettings ins
 
     private static AudioOutcome Fail(ErrorKind kind, string? detail = null) => new AudioOutcome.Failure(new ProviderError(kind, detail));
 }
+
+/// <summary>F10.1: builds the <c>tts</c> provider of an installed speech package instance from the current settings.</summary>
+public static class PluginTtsProviders
+{
+    /// <summary>
+    /// The provider for <paramref name="instanceId"/>, or null when it is not an installed speech package, the instance is
+    /// missing, or its credentials are not saved and granted for the origin its config selects (nothing is called then).
+    /// </summary>
+    public static PluginTtsProvider? Create(AppSettings settings, string instanceId, Func<string, string, bool> hasSecret, Supervisor<HostSession> supervisor,
+        IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? schemas = null)
+    {
+        var package = PluginTranslationProviders.WiredPackages.FirstOrDefault(p => p.InstanceId == instanceId && p.Credentials is SpeechPackage { Capability: Capability.Tts });
+        var instance = settings.Instances.FirstOrDefault(i => i.Id == instanceId);
+        if (package is null || instance is null || instance.Package != package.PackageId) return null;
+        if (!CredentialPackages.States(settings, package.Credentials, instance, hasSecret).All(t => t.Saved && t.Granted)) return null;
+        IReadOnlyList<ConfigField>? schema = schemas is not null && schemas.TryGetValue(instanceId, out var fields) ? fields : null;
+        return new PluginTtsProvider(package, instance, supervisor, schema);
+    }
+}

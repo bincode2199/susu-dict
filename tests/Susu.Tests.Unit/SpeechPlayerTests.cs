@@ -233,6 +233,29 @@ public class SpeechPlayerTests
         Assert.Equal(0, leases.ActiveCount);
     }
 
+    [Fact] // the request carries the instance's configured voice and speed; the selected service is used; a missing one is unavailable
+    public async Task Backend_uses_the_selected_service_with_its_configured_voice_and_rate()
+    {
+        var defaults = Susu.Domain.BuiltInCatalog.Defaults();
+        var settings = defaults with
+        {
+            Instances = [.. defaults.Instances.Select(i => i.Id == "native-sapi" ? i with { Config = new Dictionary<string, string> { ["voice"] = "TTS_X", ["rate"] = "1.5" } } : i)],
+        };
+        var request = SpeechBackend.RequestFor(settings, "native-sapi", "hello", "en");
+        Assert.Equal(new SpeakRequest("hello", "en", "TTS_X", 1.5), request);
+        Assert.Equal(new SpeakRequest("hi", null, null, 1.0), SpeechBackend.RequestFor(settings, "microsoft-tts", "hi", null));
+        Assert.Equal(2.0, new SpeakRequest("x", Rate: 9).ClampedRate);
+
+        var provider = new RecordingProvider(new FakeClip("sapi"));
+        var backend = new SpeechBackend(new SpeechPlayer(new FakeSink { Instant = true }), (_, id) => id == "native-sapi" ? provider : null);
+        Assert.Equal(PlaybackStatus.Completed, (await backend.SpeakSelectedAsync(settings, "hello", "en", TimeSpan.FromSeconds(5), Ct)).Status);
+        Assert.Equal("TTS_X", provider.Last!.Request.Voice);
+        var none = settings with { Speech = settings.Speech with { Tts = new Susu.Domain.SpeechSelection("google-tts", "") } };
+        var result = await backend.SpeakSelectedAsync(none, "hello", "en", TimeSpan.FromSeconds(5), Ct);
+        Assert.Equal(PlaybackStatus.Failed, result.Status);
+        Assert.Equal(ErrorKind.Unavailable, result.Error!.Kind);
+    }
+
     private sealed class FakeSinkAcceptingAny : IAudioSink
     {
         public AudioDeviceStatus Probe() => new(true);

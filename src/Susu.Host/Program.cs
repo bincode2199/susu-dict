@@ -7,6 +7,7 @@ using Susu.Plugins;
 using Susu.Storage;
 using Susu.Ui;
 using Susu.Windows;
+using Susu.Windows.Audio;
 using Susu.Windows.Shell;
 
 [assembly: SupportedOSPlatform("windows10.0.19041")]
@@ -133,7 +134,11 @@ internal static class MainMode
         var usage = new UsageRepository(db, clock);
         // F07.2: settings controls come from each package's manifest schema; F07.3: the same schema gates model
         // parameters (temperature) on every plugin call.
-        var schemas = PluginTranslationProviders.LoadSchemas(exeFolder, package => log.Event("plugin.manifest-invalid", ("package", package)));
+        // F10.1: the native SAPI instance has no manifest; its voice/speed controls come from its built-in schema.
+        var schemas = new Dictionary<string, IReadOnlyList<ConfigField>>(PluginTranslationProviders.LoadSchemas(exeFolder, package => log.Event("plugin.manifest-invalid", ("package", package))))
+        {
+            [BuiltInCatalog.NativeTts] = SapiTtsProvider.Schema,
+        };
         var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log, ReleaseAfter(mode) ?? TimeSpan.FromMinutes(10), schemas);
         Func<AppSettings, TranslationSession?> sessions = s =>
         {
@@ -148,6 +153,8 @@ internal static class MainMode
         // F07.2: dynamic fields load through the package's own options method with the instance's current config and grants.
         OptionsBroker? optionsBroker = translation.Supervisor is not { } supervisor ? null : new OptionsBroker(async (query, cancel) =>
         {
+            if (query.InstanceId == BuiltInCatalog.NativeTts) // SAPI voices come from the OS, not the plugin host
+                return new OptionsLoad([.. (await SapiTtsProvider.VoicesAsync()).Select(v => new OptionItem(v.Id, v.Lang.Length == 0 ? v.Name : $"{v.Name} ({v.Lang})"))], null);
             var outcome = await PluginTranslationProviders.LoadOptionsAsync(supervisor, config.State.Effective, query.InstanceId, query.Method, query.Field,
                 query.Revision, query.Cursor, OptionsBroker.Timeout, cancel);
             if (outcome.Ok) return new OptionsLoad(outcome.Result?.Items, outcome.Result?.NextCursor);
@@ -158,11 +165,26 @@ internal static class MainMode
         var capture = new CaptureCoordinator(new Susu.Windows.Selection.SelectionReader(Susu.Windows.Selection.Win32SelectionPlatform.ForCurrentProcess()),
             new ClipboardBorrower(Susu.Windows.Clipboard.Win32ClipboardPlatform.ForCurrentProcess()), () => config.State.Effective.General.AllowClipboardBorrowing);
         capture.Completed += (trigger, status, source, reason, ms) => log.Event("capture", ("trigger", trigger.ToString()), ("status", status.ToString()), ("source", source), ("reason", reason), ("ms", ms));
+        // F10.1 pronunciation port (F10.2 adds the commands and the bar): one player on the WASAPI output; native SAPI works
+        // without the plugin host; cloud TTS through the installed speech packages; F09 dictionary audio downloads only
+        // within the source service's declared origins, for entries still shown.
+        ShellCoordinator? shell = null;
+        var sapi = new SapiTtsProvider(new LeasedAudioFiles(leases));
+        DictionaryAudioFetcher? dictionaryAudio = translation.Network is not { } audioNetwork ? null : new DictionaryAudioFetcher(
+            id => shell?.ResolveAudioLinkAsync(id) ?? Task.FromResult<DictionaryAudioLink?>(null),
+            serviceId => translation.Providers(config.State.Effective).OfType<PluginProvider>().FirstOrDefault(p => p.ServiceId == serviceId)?.HostOrigins,
+            () => audioNetwork.Current, leases);
+        var speech = new SpeechBackend(new SpeechPlayer(new WasapiAudioSink()),
+            (s, instanceId) => instanceId == BuiltInCatalog.NativeTts ? sapi
+                : translation.Supervisor is { } ttsHost ? PluginTtsProviders.Create(s, instanceId, secrets.Has, ttsHost, schemas) : null,
+            dictionaryAudio is null ? null : dictionaryAudio.FetchClipAsync);
+        speech.Player.StateChanged += state => log.Event("tts.player", ("phase", state.Phase.ToString()));
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,
             new ShellOptions(Program.DevelopmentBuild, Program.DevelopmentBuild, ReleaseAfter(mode)), sessions, new ElsLanguageDetector(),
             new TranslationBackend(translation.Supervisor is not null, translation.ValidationProvider,
                 serviceId => usage.Count(serviceId, "chars", clock.UtcNow.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)),
-                schemas, optionsBroker, (network, targets, cancel) => NetworkProbe.RunAsync(network, secrets, targets, cancel)), capture);
+                schemas, optionsBroker, (network, targets, cancel) => NetworkProbe.RunAsync(network, secrets, targets, cancel), speech), capture);
+        shell = coordinator;
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;
@@ -214,7 +236,7 @@ internal static class MainMode
 
     /// <summary>Providers are built from the settings each call (F06.3a), so service changes need no restart.</summary>
     private sealed record TranslationRuntime(Supervisor<HostSession>? Supervisor, Func<AppSettings, IReadOnlyList<ITranslationProvider>> Providers,
-        Func<AppSettings, string, ITranslationProvider?> ValidationProvider);
+        Func<AppSettings, string, ITranslationProvider?> ValidationProvider, NetworkBrokerProvider? Network = null);
 
     /// <summary>
     /// F06.1/F06.3a composition root: the real F04/F05 plugin runtime (NetworkBrokerProvider, Supervisor
@@ -252,7 +274,7 @@ internal static class MainMode
             supervisor.RestartFailed += error => log.Event("plugin-host.restart-failed", ("code", error.GetType().Name));
             supervisor.Stalled += () => log.Event("plugin-host.stalled");
             return new TranslationRuntime(supervisor, settings => PluginTranslationProviders.Build(settings, secrets.Has, supervisor, schemas),
-                (settings, serviceId) => PluginTranslationProviders.ForValidation(settings, serviceId, supervisor, schemas));
+                (settings, serviceId) => PluginTranslationProviders.ForValidation(settings, serviceId, supervisor, schemas), networkBrokerProvider);
         }
         catch (Exception error)
         {

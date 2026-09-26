@@ -83,6 +83,19 @@ public sealed class DictionaryAudioFetcher(
         }
     }
 
+    /// <summary>
+    /// F10.1: <see cref="FetchAsync"/> as player audio. A ready download becomes a leased clip the player releases after
+    /// playback; a refusal is <c>unavailable</c> (the reason stays in the detail), a failure keeps its class.
+    /// </summary>
+    public async Task<AudioOutcome> FetchClipAsync(string audioId, CancellationToken cancellationToken)
+        => await FetchAsync(audioId, cancellationToken) switch
+        {
+            DictionaryAudioOutcome.Ready ready => new AudioOutcome.Ready(new LeasedAudioClip(leases, ready.Lease, ready.Mime)),
+            DictionaryAudioOutcome.Refused refused => new AudioOutcome.Failure(new ProviderError(ErrorKind.Unavailable, $"audio refused: {refused.Reason}")),
+            DictionaryAudioOutcome.Failure failure => new AudioOutcome.Failure(new ProviderError(failure.Kind)),
+            _ => new AudioOutcome.Failure(new ProviderError(ErrorKind.BadResponse)),
+        };
+
     /// <summary>Declared origins normalized to <see cref="NetworkBroker.Origin"/> form (explicit port); invalid entries are dropped.</summary>
     public static HashSet<string> AllowedOrigins(IReadOnlyList<string>? declared)
     {

@@ -60,6 +60,37 @@ public sealed class DictionaryAudioTests : IDisposable
         Assert.Equal(0, leases.ActiveCount);
     }
 
+    [Fact] // F10.1: dictionary audio through the single player; the lease goes after playback, a stale id is a classified failure
+    public async Task Dictionary_audio_plays_through_the_player_and_releases_its_lease()
+    {
+        using var server = new LoopbackHttpServer(_ => Audio());
+        using var broker = Broker(server);
+        var fetcher = Fetcher(broker, new Dictionary<string, string> { ["audio-1"] = server.Origin + "/a.mp3" }, server.Origin);
+        string? played = null;
+        var player = new Susu.Jobs.SpeechPlayer(new PathSink(p => played = p));
+        var result = await player.PlayAsync(token => fetcher.FetchClipAsync("audio-1", token), TestContext.Current.CancellationToken);
+        Assert.Equal(Susu.Jobs.PlaybackStatus.Completed, result.Status);
+        Assert.NotNull(played);
+        Assert.False(File.Exists(played));
+        Assert.Equal(0, leases.ActiveCount);
+
+        var stale = await player.PlayAsync(token => fetcher.FetchClipAsync("audio-gone", token), TestContext.Current.CancellationToken);
+        Assert.Equal(Susu.Jobs.PlaybackStatus.Failed, stale.Status);
+        Assert.Equal(ErrorKind.Unavailable, stale.Error!.Kind);
+    }
+
+    private sealed class PathSink(Action<string> seen) : Susu.Abstractions.IAudioSink
+    {
+        public Susu.Abstractions.AudioDeviceStatus Probe() => new(true);
+        public Task PlayAsync(Susu.Abstractions.IAudioClip clip, CancellationToken cancellationToken)
+        {
+            Assert.True(File.Exists(clip.FilePath));
+            Assert.Equal("audio/mpeg", clip.Mime);
+            seen(clip.FilePath);
+            return Task.CompletedTask;
+        }
+    }
+
     [Fact]
     public async Task Unknown_or_stale_ids_are_refused_without_any_request()
     {

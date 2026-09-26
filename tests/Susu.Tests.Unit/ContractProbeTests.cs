@@ -237,6 +237,15 @@ public class ContractProbeTests
         return null;
     }
 
+    private static async Task<FileLease?> InvokeAdoptingAsync(HostSession session, string capability, string requestJson, string origin)
+    {
+        var (requestId, _, task) = session.Invoke("vendor", capability, requestJson, $"job-{capability}-adopt", [origin], adoptResultFiles: true);
+        var envelope = await task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        var result = envelope.Payload!.Value.Deserialize(ContractsJson.Default.CompletedPayload)!.Result!.Value.Deserialize(ContractsJson.Default.TtsResult)!;
+        var adopted = session.TakeAdoptedFiles(requestId);
+        return adopted.SingleOrDefault(l => l.Id == result.Audio.Id);
+    }
+
     /// <summary>B03-shaped: TTS JSON response - a Base64 audio field extracted host-side into a fresh
     /// FileHandle; the plugin only ever sees {id, mime, bytes}, never the encoded audio bytes.</summary>
     [Fact]
@@ -264,7 +273,9 @@ public class ContractProbeTests
             Assert.Equal("audio/mpeg", outcome.Result!.Audio.Mime);
             Assert.Equal(audioBytes.LongLength, outcome.Result.Audio.Bytes);
 
-            var lease = leases.AddReference(outcome.Result.Audio.Id);
+            // B07: a result file nobody adopted is released with the call's grant; the host takes it over only on request (F10.1).
+            Assert.Null(leases.AddReference(outcome.Result.Audio.Id));
+            var lease = await InvokeAdoptingAsync(session, "ttsJson", requestJson, server.Origin);
             Assert.NotNull(lease);
             Assert.Equal(audioBytes, File.ReadAllBytes(leases.PathOf(lease!))); // the real decoded bytes are on disk, not just referenced
         }
@@ -295,7 +306,9 @@ public class ContractProbeTests
             Assert.True(outcome.Ok, outcome.ErrorDetail);
             Assert.Equal("audio/mpeg", outcome.Result!.Audio.Mime);
 
-            var lease = leases.AddReference(outcome.Result.Audio.Id);
+            // B07: a result file nobody adopted is released with the call's grant; the host takes it over only on request (F10.1).
+            Assert.Null(leases.AddReference(outcome.Result.Audio.Id));
+            var lease = await InvokeAdoptingAsync(session, "ttsRaw", requestJson, server.Origin);
             Assert.NotNull(lease);
             Assert.Equal(audioBytes, File.ReadAllBytes(leases.PathOf(lease!)));
         }

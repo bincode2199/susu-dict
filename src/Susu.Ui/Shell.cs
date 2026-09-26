@@ -54,7 +54,8 @@ public sealed record ShellOptions(bool DevelopmentBuild, bool DevPreview, TimeSp
 /// </summary>
 public sealed record TranslationBackend(bool RuntimeAvailable, Func<AppSettings, string, ITranslationProvider?> ValidationProvider, Func<string, long>? MonthlyUsage = null,
     IReadOnlyDictionary<string, IReadOnlyList<ConfigField>>? Schemas = null, OptionsBroker? Options = null,
-    Func<NetworkSettings, IReadOnlyList<NetworkProbeTarget>, CancellationToken, Task<IReadOnlyList<NetworkProbeResult>>>? TestNetwork = null);
+    Func<NetworkSettings, IReadOnlyList<NetworkProbeTarget>, CancellationToken, Task<IReadOnlyList<NetworkProbeResult>>>? TestNetwork = null,
+    SpeechBackend? Speech = null);
 
 /// <summary>
 /// The UI brain on the message thread: window sessions, snapshot + patch sequencing, command dispatch,
@@ -448,6 +449,20 @@ public sealed partial class ShellCoordinator
     // ---------- translation projection ----------
 
     private TranslationSession? TranslationOf(WindowKind kind) => translations.TryGetValue(kind, out var slot) ? slot.Session : null;
+
+    /// <summary>F10.1: the pronunciation port (single player, TTS providers, dictionary audio) for the F10.2 commands.</summary>
+    public SpeechBackend? Speech => backend?.Speech;
+
+    /// <summary>
+    /// F09.3/F10: resolves a dictionary audio id against the entries currently shown in any result window (message thread).
+    /// Null when no shown entry has it, so a stale id is refused (S06).
+    /// </summary>
+    public async Task<DictionaryAudioLink?> ResolveAudioLinkAsync(string audioId)
+    {
+        foreach (var slot in translations.Values.ToList())
+            if (await slot.Session.ResolveAudioLinkAsync(audioId) is { } link) return link;
+        return null;
+    }
 
     private void ReattachTranslation(WindowKind kind)
     {

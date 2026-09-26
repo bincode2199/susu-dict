@@ -1,5 +1,6 @@
 using Susu.Abstractions;
 using Susu.Contracts;
+using Susu.Domain;
 
 namespace Susu.Jobs;
 
@@ -18,6 +19,33 @@ public enum PlaybackStatus
 
 /// <summary>Error: the service failure (auth, rate_limited, network, ...). Device: the audio output failure.</summary>
 public sealed record PlaybackResult(PlaybackStatus Status, ProviderError? Error = null, AudioFailure? Device = null);
+
+/// <summary>
+/// The pronunciation port F10.2 builds on (composed in Program.cs): the one <see cref="Player"/>, the TTS provider for a
+/// configured instance (native SAPI, or a speech package's <c>tts</c>; null when unknown or not ready), and F09
+/// dictionary audio by audio id (null when the plugin runtime is unavailable).
+/// </summary>
+public sealed record SpeechBackend(SpeechPlayer Player, Func<AppSettings, string, ITtsProvider?> Tts, Func<string, CancellationToken, Task<AudioOutcome>>? DictionaryAudio = null)
+{
+    /// <summary>The request for <paramref name="text"/> with the instance's configured voice and speed (F07 config fields <c>voice</c>, <c>rate</c>).</summary>
+    public static SpeakRequest RequestFor(AppSettings settings, string instanceId, string text, string? lang)
+    {
+        var config = settings.Instances.FirstOrDefault(i => i.Id == instanceId)?.Config;
+        string? voice = config is not null && config.TryGetValue("voice", out var v) && v.Length > 0 ? v : null;
+        double rate = config is not null && config.TryGetValue("rate", out var r)
+            && double.TryParse(r, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : 1.0;
+        return new SpeakRequest(text, lang, voice, rate);
+    }
+
+    /// <summary>Speaks with the selected pronunciation service (SetSpeech), or fails with unavailable when it cannot run.</summary>
+    public Task<PlaybackResult> SpeakSelectedAsync(AppSettings settings, string text, string? lang, TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        string instance = settings.Speech.Tts.Instance;
+        if (Tts(settings, instance) is not { } provider)
+            return Task.FromResult(new PlaybackResult(PlaybackStatus.Failed, new ProviderError(ErrorKind.Unavailable, "the pronunciation service is not available")));
+        return Player.SpeakAsync(provider, RequestFor(settings, instance, text, lang), timeout, cancellationToken);
+    }
+}
 
 /// <summary>What the player is doing now: Idle, Loading (synthesis or download) or Playing; Generation counts requests.</summary>
 public enum PlayerPhase { Idle, Loading, Playing }
