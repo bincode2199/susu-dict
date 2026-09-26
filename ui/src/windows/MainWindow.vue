@@ -58,7 +58,7 @@ const offline = computed(() => props.state.translation?.offline === true);
       <ResultCard v-for="card in state.translation?.cards ?? []" :key="card.serviceId" :card="card" :from="from" :to="to"
         @toggle="bridge.command(UI_COMMANDS.ToggleCard, { serviceId: card.serviceId })"
         @retry="bridge.command(UI_COMMANDS.RetryCard, { serviceId: card.serviceId })"
-        @copy="bridge.command(UI_COMMANDS.CopyText, { text: card.text })"
+        @copy="(text: string) => bridge.command(UI_COMMANDS.CopyText, { text })"
         @settings="bridge.command(UI_COMMANDS.OpenSettings)" />
     </main>
     <footer class="statusbar" :class="{ offline }">

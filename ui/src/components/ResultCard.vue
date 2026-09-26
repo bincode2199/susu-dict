@@ -3,11 +3,14 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { CardSnapshot } from '@protocol/ui';
 import Icon from './Icon.vue';
 import { t } from '../locales/i18n';
+import DictionaryEntry from './DictionaryEntry.vue';
+import { entryPlainText } from './dictionary';
 
 // DESIGN 8: 1 px line, 8 px radius; 38 px header (26 px toggle · name · right status · icon buttons);
 // body indented 38 px. Service text is always rendered as text (mustache), never as HTML (PLAN 4.5.5, S08).
 const props = defineProps<{ card: CardSnapshot; from: string; to: string }>();
-const emit = defineEmits<{ toggle: []; retry: []; copy: []; settings: [] }>();
+// `copy` carries the text to copy: the card text, or the entry's plain-text projection on a dictionary card (DICT03).
+const emit = defineEmits<{ toggle: []; retry: []; copy: [text: string]; settings: [] }>();
 
 // DESIGN 8 "译文 · 失败": one action per error kind. Retryable kinds (the host already retried once
 // automatically) offer a manual retry; quota/auth lead to settings; bad_response has no action yet (the log
@@ -28,10 +31,14 @@ const status = computed(() => {
 const errorKey = computed(() => (props.card.state === 'Failed' ? `error.${props.card.error ?? 'bad_response'}` : props.card.state === 'Cancelled' ? 'card.cancelled' : null));
 const errorKind = computed(() => (props.card.state === 'Cancelled' ? 'cancelled' : props.card.error));
 // Streaming text keeps appending in place; the copy button appears once the result is complete.
-watch(() => props.card.text, () => { copied.value = false; });
+watch(() => [props.card.text, props.card.entry], () => { copied.value = false; });
+
+// F09.3: a dictionary card shows the structured entry; read-aloud (F10) and favorite (F15) are shown but
+// unavailable until those modules exist.
+const entry = computed(() => (props.card.state === 'Ready' ? props.card.entry : undefined));
 
 function copy(): void {
-  emit('copy');
+  emit('copy', entry.value ? entryPlainText(entry.value) : props.card.text);
   copied.value = true;
   clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => (copied.value = false), 1500);
@@ -48,7 +55,9 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
       <h2 class="name">{{ card.displayName }}</h2>
       <span class="status" aria-live="polite">{{ status }}</span>
       <div v-if="!collapsed && card.state === 'Ready'" class="actions">
-        <button type="button" class="icon-btn" :aria-label="t('card.copy')" :title="t('card.copy')" @click="copy"><Icon name="copy" /></button>
+        <button v-if="entry" type="button" class="icon-btn unavailable" data-action="pronounce" disabled :aria-label="t('card.pronounce')" :title="t('card.needsSpeech')"><Icon name="audio" /></button>
+        <button type="button" class="icon-btn" data-action="copy" :aria-label="t('card.copy')" :title="t('card.copy')" @click="copy"><Icon name="copy" /></button>
+        <button v-if="entry" type="button" class="icon-btn unavailable" data-action="favorite" disabled :aria-label="t('card.favorite')" :title="t('card.needsVocab')"><Icon name="star" /></button>
       </div>
     </header>
     <div v-if="!collapsed" class="body">
@@ -58,6 +67,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         <a v-if="errorKind && retryable.has(errorKind)" href="#" class="retry" @click.prevent="emit('retry')">{{ t('card.retry') }}</a>
         <a v-else-if="errorKind === 'quota' || errorKind === 'auth'" href="#" @click.prevent="emit('settings')">{{ t('card.goSettings') }}</a>
       </p>
+      <DictionaryEntry v-else-if="entry" :entry="entry" />
       <p v-else class="text selectable" :class="{ streaming: card.state === 'Streaming' }">{{ card.text }}</p>
     </div>
   </section>
@@ -71,6 +81,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .collapsed .name { color: var(--ink-secondary); }
 .status { margin-left: auto; font-size: 11px; color: var(--hint); white-space: nowrap; padding-right: 8px; }
 .actions { display: flex; gap: 2px; }
+.unavailable:disabled { opacity: 0.45; cursor: default; }
 .body { padding: 0 14px 12px 38px; }
 .text { margin: 0; font-size: 14.5px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
 .error { margin: 0; font-size: 12px; color: var(--error); display: flex; gap: 10px; align-items: baseline; }
