@@ -158,11 +158,18 @@ internal static class MainMode
             Capability.Tts => speechPort is { } port && port.Tts(config.State.Effective, config.State.Effective.Speech.Tts.Instance) is not null,
             _ => false,
         };
+        // F10.1 native SAPI (no plugin host). F10.3: its phase timings are logged (no text), and the engine is warmed once, off the
+        // UI thread, when the native voice list is first opened in Settings; never at startup (idle memory, PER02).
+        var sapi = new SapiTtsProvider(new LeasedAudioFiles(leases));
+        sapi.Timed += t => log.Event("tts.sapi", ("voiceMs", Math.Round(t.VoiceMs)), ("setupMs", Math.Round(t.SetupMs)), ("speakMs", Math.Round(t.SpeakMs)));
         // F07.2: dynamic fields load through the package's own options method with the instance's current config and grants.
         OptionsBroker? optionsBroker = translation.Supervisor is not { } supervisor ? null : new OptionsBroker(async (query, cancel) =>
         {
             if (query.InstanceId == BuiltInCatalog.NativeTts) // SAPI voices come from the OS, not the plugin host
+            {
+                _ = sapi.WarmUpAsync();
                 return new OptionsLoad([.. (await SapiTtsProvider.VoicesAsync()).Select(v => new OptionItem(v.Id, v.Lang.Length == 0 ? v.Name : $"{v.Name} ({v.Lang})"))], null);
+            }
             var outcome = await PluginTranslationProviders.LoadOptionsAsync(supervisor, config.State.Effective, query.InstanceId, query.Method, query.Field,
                 query.Revision, query.Cursor, OptionsBroker.Timeout, cancel);
             if (outcome.Ok) return new OptionsLoad(outcome.Result?.Items, outcome.Result?.NextCursor);
@@ -177,15 +184,16 @@ internal static class MainMode
         // without the plugin host; cloud TTS through the installed speech packages; F09 dictionary audio downloads only
         // within the source service's declared origins, for entries still shown.
         ShellCoordinator? shell = null;
-        var sapi = new SapiTtsProvider(new LeasedAudioFiles(leases));
         DictionaryAudioFetcher? dictionaryAudio = translation.Network is not { } audioNetwork ? null : new DictionaryAudioFetcher(
             id => shell?.ResolveAudioLinkAsync(id) ?? Task.FromResult<DictionaryAudioLink?>(null),
             serviceId => translation.Providers(config.State.Effective).OfType<PluginProvider>().FirstOrDefault(p => p.ServiceId == serviceId)?.HostOrigins,
             () => audioNetwork.Current, leases);
+        // F10.3: replays of the same text/service/voice/speed/config reuse the leased clip (ARCHITECTURE 8.4: 32 MiB, 7 days, session-scoped).
+        using var ttsCache = new TtsCache(clock);
         var speech = new SpeechBackend(new SpeechPlayer(new WasapiAudioSink()),
             (s, instanceId) => instanceId == BuiltInCatalog.NativeTts ? sapi
                 : translation.Supervisor is { } ttsHost ? PluginTtsProviders.Create(s, instanceId, secrets.Has, ttsHost, schemas) : null,
-            dictionaryAudio is null ? null : dictionaryAudio.FetchClipAsync);
+            dictionaryAudio is null ? null : dictionaryAudio.FetchClipAsync, ttsCache);
         speechPort = speech;
         speech.Player.StateChanged += state => log.Event("tts.player", ("phase", state.Phase.ToString()));
         var coordinator = new ShellCoordinator(platform, config, features, capabilityReady,

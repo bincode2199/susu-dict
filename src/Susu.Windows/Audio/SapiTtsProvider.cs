@@ -18,6 +18,9 @@ namespace Susu.Windows.Audio;
 /// captured text can never change voice, volume or output. Cancelling stops synthesis promptly and deletes the partial
 /// file (B07).
 /// </summary>
+/// <summary>One SAPI synthesis split into phases (ms): voice lookup, engine setup, speaking.</summary>
+public sealed record SapiTiming(double VoiceMs, double SetupMs, double SpeakMs);
+
 public sealed class SapiTtsProvider(IAudioFileFactory files) : ITtsProvider
 {
     public const int MaxChars = 5000;
@@ -45,6 +48,31 @@ public sealed class SapiTtsProvider(IAudioFileFactory files) : ITtsProvider
     public string InstanceId => BuiltInCatalog.NativeTts;
     public bool Native => true;
 
+    private int warmed;
+
+    /// <summary>
+    /// Per synthesis, how long each phase took (ms): voice lookup (token enumeration), engine setup (voice + stream
+    /// creation, output binding, voice selection) and speaking. For diagnostics only; carries no text.
+    /// </summary>
+    public event Action<SapiTiming>? Timed;
+
+    /// <summary>
+    /// F10.3: loads the SAPI engine and a voice once, off the caller's thread, by speaking one short word into a lease that is
+    /// discarded. Called when the native voice list is first opened in Settings, not at startup: a loaded engine costs
+    /// about 3 MiB of private memory, which the idle budget (PER02) should not pay for users who never use SAPI.
+    /// Later calls do nothing. Never throws.
+    /// </summary>
+    public async Task WarmUpAsync()
+    {
+        if (Interlocked.Exchange(ref warmed, 1) == 1) return;
+        try
+        {
+            var outcome = await SynthesizeAsync(new SpeakCall(new SpeakRequest("a"), "sapi-warmup", TimeSpan.FromSeconds(60)), CancellationToken.None).ConfigureAwait(false);
+            if (outcome is AudioOutcome.Ready ready) ready.Clip.Dispose();
+        }
+        catch (Exception) { } // best effort: the real request reports its own error
+    }
+
     /// <summary>Installed SAPI voices (id, display name, BCP-47 language). Empty when SAPI has none.</summary>
     public static Task<IReadOnlyList<Voice>> VoicesAsync()
         => Com.RunMta<IReadOnlyList<Voice>>(() =>
@@ -67,7 +95,9 @@ public sealed class SapiTtsProvider(IAudioFileFactory files) : ITtsProvider
         try
         {
             string path = clip.FilePath;
-            var error = await Com.RunMta(() => Speak(request, path, deadline.Token), "susu-sapi-speak");
+            var phases = new double[3];
+            var error = await Com.RunMta(() => Speak(request, path, deadline.Token, phases), "susu-sapi-speak");
+            Timed?.Invoke(new SapiTiming(phases[0], phases[1], phases[2]));
             if (error is not null) return new AudioOutcome.Failure(error);
             handedOver = true;
             return new AudioOutcome.Ready(clip);
@@ -85,12 +115,14 @@ public sealed class SapiTtsProvider(IAudioFileFactory files) : ITtsProvider
         => (int)Math.Clamp(Math.Round(10 * Math.Log(Math.Clamp(multiplier, SpeakRequest.MinRate, SpeakRequest.MaxRate)) / Math.Log(3)), -10, 10);
 
     /// <summary>Runs on an MTA thread. Null on success; the file at <paramref name="path"/> then holds the WAV.</summary>
-    private static unsafe ProviderError? Speak(SpeakRequest request, string path, CancellationToken cancellationToken)
+    private static unsafe ProviderError? Speak(SpeakRequest request, string path, CancellationToken cancellationToken, double[] phases)
     {
         nint token = 0, voice = 0, stream = 0;
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             token = FindToken(request.Voice, request.Lang, out var refusal);
+            phases[0] = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             if (refusal is not null) return refusal;
 
             voice = Com.Create(ClsidSpVoice, IidSpVoice);
@@ -105,6 +137,7 @@ public sealed class SapiTtsProvider(IAudioFileFactory files) : ITtsProvider
             Com.Check(((delegate* unmanaged[Stdcall]<nint, nint, int, int>)Com.Slot(voice, 13))(voice, stream, 1), "ISpVoice.SetOutput");
             if (token != 0) Com.Check(((delegate* unmanaged[Stdcall]<nint, nint, int>)Com.Slot(voice, 18))(voice, token), "ISpVoice.SetVoice");
             Com.Check(((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(voice, 28))(voice, SapiRate(request.ClampedRate)), "ISpVoice.SetRate");
+            phases[1] = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds - phases[0];
 
             fixed (char* text = request.Text)
                 Com.Check(((delegate* unmanaged[Stdcall]<nint, char*, uint, uint*, int>)Com.Slot(voice, 20))(voice, text, SpfAsync | SpfIsNotXml, null), "ISpVoice.Speak");
@@ -121,6 +154,7 @@ public sealed class SapiTtsProvider(IAudioFileFactory files) : ITtsProvider
                     cancellationToken.ThrowIfCancellationRequested();
                 }
             }
+            phases[2] = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds - phases[0] - phases[1];
             return null;
         }
         finally

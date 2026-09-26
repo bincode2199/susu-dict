@@ -69,6 +69,25 @@ public class NativeSpeechTests
         Assert.Equal(0, leases.ActiveCount);
     }
 
+    [Fact] // F10.3: warm-up speaks once into a discarded lease (no file left), reports phase timings, and runs only once
+    public async Task Warm_up_runs_once_leaves_no_file_and_reports_phase_timings()
+    {
+        await VoicesOrSkip();
+        using var leases = new FileLeases(TestTemp.NewDir("susu-sapi-warm"));
+        var sapi = new SapiTtsProvider(new LeasedAudioFiles(leases));
+        var timings = new List<SapiTiming>();
+        sapi.Timed += t => { lock (timings) timings.Add(t); };
+        await sapi.WarmUpAsync();
+        await sapi.WarmUpAsync();
+        var timing = Assert.Single(timings);
+        Assert.True(timing.VoiceMs >= 0 && timing.SetupMs >= 0 && timing.SpeakMs > 0, timing.ToString());
+        Assert.Equal(0, leases.ActiveCount);
+        var ready = Assert.IsType<AudioOutcome.Ready>(await sapi.SynthesizeAsync(Call("warm"), Ct));
+        ready.Clip.Dispose();
+        Assert.Equal(2, timings.Count);
+        TestContext.Current.TestOutputHelper?.WriteLine($"SAPI warm-up {timings[0]}, next {timings[1]}");
+    }
+
     [Fact] // an explicit voice id is used; an unknown voice or a language no voice speaks is classified, no file left
     public async Task Voice_selection_and_classified_refusals()
     {
@@ -136,6 +155,16 @@ public class NativeSpeechTests
         Assert.Equal(0, SapiTtsProvider.LanguageScore("ja", "en-US"));
         Assert.Equal(3, SapiTtsProvider.LanguageScore("en-GB", "en-GB"));
     }
+
+    [Theory] // TTS02 device errors: WASAPI HRESULTs map to the classes the bar shows (a real device can't be unplugged here)
+    [InlineData(unchecked((int)0x88890004), AudioFailure.DeviceLost)]   // AUDCLNT_E_DEVICE_INVALIDATED: unplugged, disabled, default changed
+    [InlineData(unchecked((int)0x88890026), AudioFailure.DeviceLost)]   // AUDCLNT_E_RESOURCES_INVALIDATED
+    [InlineData(unchecked((int)0x80070490), AudioFailure.NoDevice)]     // E_NOTFOUND: no default render endpoint
+    [InlineData(unchecked((int)0x88890010), AudioFailure.NoDevice)]     // AUDCLNT_E_SERVICE_NOT_RUNNING
+    [InlineData(unchecked((int)0x8889000F), AudioFailure.NoDevice)]     // AUDCLNT_E_ENDPOINT_CREATE_FAILED
+    [InlineData(unchecked((int)0x88890008), AudioFailure.Unsupported)]  // AUDCLNT_E_UNSUPPORTED_FORMAT
+    [InlineData(unchecked((int)0x8889000A), AudioFailure.Failed)]       // AUDCLNT_E_DEVICE_IN_USE
+    public void Wasapi_errors_are_classified(int hr, AudioFailure expected) => Assert.Equal(expected, WasapiAudioSink.Classify(hr));
 
     [Fact] // a JSON error body saved as audio is never "played": the decoder refuses it
     public void Decoder_refuses_non_audio()
