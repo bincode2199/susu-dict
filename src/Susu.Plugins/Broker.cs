@@ -502,7 +502,8 @@ public sealed class Broker : IDisposable
 
         foreach (string handle in bodyHandles) if (!grant.Handles.Contains(handle)) throw new BrokerDenyException("file handle not granted to this call");
 
-        return new BrokerHttpRequest(method, uri, headers, body, bodyFiles, credentials, (spec, name) => ResolveSecret(grant, spec, name, origin, resolvedSecretValues), sign, responseType, responseFiles, errorPointer, LocalOriginApproved: true);
+        return new BrokerHttpRequest(method, uri, headers, body, bodyFiles, credentials, (spec, name) => ResolveSecret(grant, spec, name, origin, resolvedSecretValues), sign, responseType, responseFiles, errorPointer, LocalOriginApproved: true,
+            AllowedOrigins: grant.Origins); // PLAN 4.5 item 3 / S06: every followed redirect hop stays inside the call's granted origins
     }
 
     private string ResolveSecret(GrantInfo grant, CredentialSpec spec, string secretName, string origin, List<string> resolvedSecretValues)
