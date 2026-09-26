@@ -15,6 +15,8 @@ namespace Susu.Windows.Selection;
 public static class SelectionHost
 {
     public const string Mode = "--selection-host";
+    /// <summary>First stderr line of a helper whose runtime has started and whose arguments are valid.</summary>
+    public const string ReadyMarker = "selection-host: ready";
     /// <summary>Text limit in UTF-16 units (the native buffer is one larger for the terminator).</summary>
     public const int MaxText = 65536;
     private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(2);
@@ -37,6 +39,10 @@ public static class SelectionHost
             error.WriteLine("usage: susu --selection-host <hwnd> <uiaBudgetMs> [ia2]");
             return 2;
         }
+        // Ready marker on stderr: the parent caches a Timeout only when the helper got this far, so a slow process
+        // start (cold disk, AV scan) is not remembered as an unreadable target for 60 s (F08.2).
+        error.WriteLine(ReadyMarker);
+        error.Flush();
         var watchdog = new Thread(() => { Thread.Sleep(Watchdog); Environment.Exit(3); }) { IsBackground = true, Name = "selection-watchdog" };
         if (processWatchdog) watchdog.Start();
         try

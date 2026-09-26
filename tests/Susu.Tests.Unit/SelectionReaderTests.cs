@@ -12,6 +12,8 @@ public class SelectionReaderTests
     {
         public readonly TaskCompletionSource<HelperReply> Reply = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Killed;
+        public bool IsReady = true;
+        public bool Ready => IsReady;
         public Task<HelperReply> Completion => Reply.Task;
         public void Dispose() { Killed = true; Reply.TrySetException(new InvalidOperationException("killed")); }
     }
@@ -110,6 +112,22 @@ public class SelectionReaderTests
         Assert.True(platform.Helpers[0].Killed);
         platform.Helpers[0].Reply.TrySetResult(Reply("selected", "late")); // no effect: already failed and dropped
         Assert.Equal("", result.Text);
+    }
+
+    [Fact]
+    public async Task Timeout_is_cached_only_when_the_helper_had_started()
+    {
+        var platform = new FakePlatform { NextHelper = () => new FakeHelper { IsReady = false } };
+        var reader = new SelectionReader(platform, Options(acquireMs: 80));
+        Assert.Equal(SelectionStatus.Timeout, (await reader.ReadAsync(Snap(), CancellationToken.None)).Status);
+        Assert.Equal(SelectionStatus.Timeout, (await reader.ReadAsync(Snap(), CancellationToken.None)).Status);
+        Assert.Equal(2, platform.Starts); // slow start: not cached, the next hotkey tries again
+
+        platform.NextHelper = () => new FakeHelper(); // started, then ran out of time
+        Assert.Equal(SelectionStatus.Timeout, (await reader.ReadAsync(Snap(pid: 101), CancellationToken.None)).Status);
+        var cached = await reader.ReadAsync(Snap(pid: 101), CancellationToken.None);
+        Assert.Equal("cache", cached.Source);
+        Assert.Equal(3, platform.Starts);
     }
 
     [Fact]

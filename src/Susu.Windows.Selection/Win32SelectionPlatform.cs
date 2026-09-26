@@ -96,9 +96,20 @@ public sealed class ProcessSelectionHelper : ISelectionHelper
         return SelectionHost.Parse(line);
     }
 
-    private static async Task DrainAsync(StreamReader error)
+    /// <inheritdoc />
+    public bool Ready => Volatile.Read(ref _ready);
+    private bool _ready;
+
+    private async Task DrainAsync(StreamReader error)
     {
-        try { var sink = new char[512]; while (await error.ReadAsync(sink).ConfigureAwait(false) > 0) { } }
+        try
+        {
+            // Only the first line matters (the ready marker); the rest is drained unread so the pipe never fills.
+            string? first = await error.ReadLineAsync().ConfigureAwait(false);
+            if (first == SelectionHost.ReadyMarker) Volatile.Write(ref _ready, true);
+            var sink = new char[512];
+            while (await error.ReadAsync(sink).ConfigureAwait(false) > 0) { }
+        }
         catch (Exception e) when (e is IOException or ObjectDisposedException) { }
     }
 

@@ -11,6 +11,9 @@ public interface ISelectionHelper : IDisposable
 {
     /// <summary>Completes with the reply, or faults when the helper crashed or replied with an invalid frame.</summary>
     Task<HelperReply> Completion { get; }
+
+    /// <summary>True once the helper reported <see cref="SelectionHost.ReadyMarker"/> (its runtime started). A timeout before that is a slow start, not a slow target.</summary>
+    bool Ready => true;
 }
 
 /// <summary>OS side of <see cref="SelectionReader"/>: Win32 in production (<see cref="Win32SelectionPlatform"/>), faked in tests.</summary>
@@ -141,7 +144,10 @@ public sealed class SelectionReader(ISelectionPlatform platform, SelectionReader
                 _ = helper.Completion.ContinueWith(static t => _ = t.Exception, TaskScheduler.Default);
                 if (cancel.IsCancellationRequested) return SelectionResult.Failure(SelectionStatus.Cancelled, Ms());
                 HelperFailed();
-                return Cache(key, SelectionResult.Failure(SelectionStatus.Timeout, Ms()));
+                var timeout = SelectionResult.Failure(SelectionStatus.Timeout, Ms());
+                // Only a helper that started and then ran out of time says something about the target; a slow
+                // process start still counts towards the restart breaker but is not cached per target.
+                return helper.Ready ? Cache(key, timeout) : timeout;
             }
             try { reply = await helper.Completion.ConfigureAwait(false); }
             catch (Exception error) when (error is not OutOfMemoryException)
