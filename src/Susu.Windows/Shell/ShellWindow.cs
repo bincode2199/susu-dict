@@ -22,7 +22,8 @@ internal sealed class ShellWindow : IMessageTarget
         Spec = WindowSpec.For(kind);
         Framed = kind is WindowKind.Main or WindowKind.Settings or WindowKind.Ocr or WindowKind.Transcribe;
         uint style = Framed ? WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CLIPCHILDREN : WS_POPUP | WS_CLIPCHILDREN;
-        uint exStyle = Framed ? WS_EX_APPWINDOW : WS_EX_TOOLWINDOW | (kind == WindowKind.Tray ? WS_EX_TOPMOST : 0);
+        // The failure bar never takes focus from the program the user was working in (DESIGN 9, UI03).
+        uint exStyle = Framed ? WS_EX_APPWINDOW : WS_EX_TOOLWINDOW | (kind == WindowKind.Tray ? WS_EX_TOPMOST : 0) | (kind == WindowKind.Error ? WS_EX_TOPMOST | WS_EX_NOACTIVATE : 0);
         Handle = WindowClasses.Create(this, ClassName, exStyle, style, 0, 0, 400, 300);
         int corner = DWMWCP_ROUND;
         DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, corner, sizeof(int));

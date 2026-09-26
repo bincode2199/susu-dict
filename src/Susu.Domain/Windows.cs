@@ -25,7 +25,7 @@ public sealed record WindowSpec(WindowKind Kind, int WidthDip, int HeightDip, bo
         WindowKind.Transcribe => new(kind, 760, 580, true, "transcribe", false, true, true),
         WindowKind.Settings => new(kind, 900, 700, false, "settings", false, true, true),
         WindowKind.Tray => new(kind, 236, 360, false, "tray", true, false, true),
-        _ => new(kind, 380, 34, false, "error", true, false, false),
+        _ => new(kind, 460, 34, false, "error", true, false, false),
     };
 
     /// <summary>Floating windows may grow with content up to the work area height minus 32 DIP.</summary>
@@ -74,6 +74,49 @@ public static class PlacementPolicy
         else { x = work.X + (work.Width - width) / 2; y = work.Y + (work.Height - height) / 2; }
         x = Math.Clamp(x, work.X, work.Right - width);
         y = Math.Clamp(y, work.Y, work.Bottom - height);
+        return new PixelRect(x, y, width, height);
+    }
+
+    /// <summary>Gap between the pointer and the failure bar, in DIPs (clear of the cursor image).</summary>
+    public const int PointerGapDip = 16;
+
+    /// <summary>
+    /// The failure bar (DESIGN 9 "悬浮条", the one surface that points at its trigger): just below-right of the pointer,
+    /// sized with the DPI of the monitor whose work area holds the pointer, flipped above the pointer when it would run
+    /// off the bottom, then clamped inside that work area. A pointer outside every work area (an invalid position, such
+    /// as a monitor that was just unplugged) centers the bar on <paramref name="fallback"/>.
+    /// </summary>
+    public static PixelRect NearPointer(WindowSpec spec, IReadOnlyList<MonitorInfo> monitors, MonitorInfo fallback, (int X, int Y) pointer, int? heightDip = null)
+    {
+        MonitorInfo? target = null;
+        foreach (var monitor in monitors)
+            if (monitor.WorkArea.Contains(pointer.X, pointer.Y)) { target = monitor; break; }
+        var screen = target ?? fallback;
+        var work = screen.WorkArea;
+        int width = Math.Min(Dip.ToPixels(spec.WidthDip, screen.Dpi), work.Width);
+        int height = Math.Min(Dip.ToPixels(heightDip ?? spec.HeightDip, screen.Dpi), work.Height);
+        if (target is null) return new PixelRect(work.X + (work.Width - width) / 2, work.Y + (work.Height - height) / 2, width, height);
+        int gap = Dip.ToPixels(PointerGapDip, screen.Dpi);
+        int x = pointer.X + gap / 2, y = pointer.Y + gap;
+        if (y + height > work.Bottom) y = pointer.Y - gap / 2 - height;
+        x = Math.Clamp(x, work.X, work.Right - width);
+        y = Math.Clamp(y, work.Y, work.Bottom - height);
+        return new PixelRect(x, y, width, height);
+    }
+
+    /// <summary>
+    /// An auto-height window reported its content height (UI01): it keeps its left/top, grows or shrinks up to the work
+    /// area height minus <see cref="WindowSpec.FloatMarginDip"/> (taller content scrolls inside the page) and is clamped
+    /// back inside the work area of its monitor. Width stays the design width at that monitor's DPI.
+    /// </summary>
+    public static PixelRect FitHeight(WindowSpec spec, PixelRect current, MonitorInfo monitor, int contentHeightDip)
+    {
+        var work = monitor.WorkArea;
+        int maxDip = Math.Max(1, Dip.ToDip(work.Height, monitor.Dpi) - (spec.Kind == WindowKind.Error ? 0 : WindowSpec.FloatMarginDip));
+        int height = Math.Min(Dip.ToPixels(Math.Clamp(contentHeightDip, 1, maxDip), monitor.Dpi), work.Height);
+        int width = Math.Min(Dip.ToPixels(spec.WidthDip, monitor.Dpi), work.Width);
+        int x = Math.Clamp(current.X, work.X, work.Right - width);
+        int y = Math.Clamp(current.Y, work.Y, work.Bottom - height);
         return new PixelRect(x, y, width, height);
     }
 }

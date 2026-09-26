@@ -90,6 +90,17 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
         if (windows.TryGetValue(kind, out var window) && window.Framed) ShowWindow(window.Handle, IsZoomed(window.Handle) ? SW_RESTORE : SW_MAXIMIZE);
     }
 
+    public void FitHeight(WindowKind kind, int contentHeightDip)
+    {
+        if (!windows.TryGetValue(kind, out var window) || !window.Spec.AutoHeight || IsZoomed(window.Handle)) return;
+        var current = window.Rect();
+        string hint = MonitorFromWindow(window.Handle, MONITOR_DEFAULTTONEAREST).ToString("x");
+        var monitors = Monitors();
+        var monitor = monitors.FirstOrDefault(m => m.Hint == hint) ?? monitors[0];
+        var fitted = PlacementPolicy.FitHeight(window.Spec, current, monitor, contentHeightDip);
+        if (fitted != current) window.Place(fitted);
+    }
+
     public void SetPinned(WindowKind kind, bool pinned)
     {
         if (windows.TryGetValue(kind, out var window)) SetWindowPos(window.Handle, pinned ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -217,6 +228,7 @@ public sealed class WindowPlatform : IWindowPlatform, IDisposable
             var work = cursorMonitor.WorkArea;
             return new PixelRect(Math.Clamp(cursor.X - width, work.X, work.Right - width), Math.Clamp(cursor.Y - height, work.Y, work.Bottom - height), width, height);
         }
+        if (window.Kind == WindowKind.Error) return PlacementPolicy.NearPointer(window.Spec, monitors, cursorMonitor, (cursor.X, cursor.Y));
         (int, int)? remembered = null;
         if (window.Spec.RemembersPosition)
         {

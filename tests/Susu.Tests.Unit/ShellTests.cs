@@ -166,6 +166,7 @@ public sealed class FakePlatform : IWindowPlatform
     }
     public void Hide(WindowKind kind) => Calls.Add($"hide:{kind}");
     public void ToggleMaximize(WindowKind kind) => Calls.Add($"max:{kind}");
+    public void FitHeight(WindowKind kind, int contentHeightDip) => Calls.Add($"fit:{kind}:{contentHeightDip}");
     public void SetPinned(WindowKind kind, bool pinned) => Calls.Add($"pin:{kind}:{pinned}");
     public void Post(WindowKind kind, string json) => Posted.Enqueue((kind, JsonSerializer.Deserialize(json, ContractsJson.Default.UiEnvelope)!));
     public void Suspend(WindowKind kind) => Calls.Add($"suspend:{kind}");

@@ -121,10 +121,12 @@ internal static class MainMode
             new WindowStateRepository(db), () => config.State.Effective.General.UiLanguage);
 
         var features = new FeatureRegistry();
-        // Input translation is F06's real, shipped entry point (DEV-PLAN G1); everything else is still
-        // in development and stays off the release entry-point list regardless of capabilityReady.
+        // Input translation (F06) and selection/clipboard translation (F08) are real, shipped entry points; everything
+        // else is still in development and stays off the release entry-point list regardless of capabilityReady.
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.InputTranslation, FeatureState.Available, null, [Capability.Translate]));
-        foreach (var id in new[] { FeatureRegistry.Ids.Selection, FeatureRegistry.Ids.Clipboard, FeatureRegistry.Ids.Ocr,
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Selection, FeatureState.Available, null, [Capability.Translate]));
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Clipboard, FeatureState.Available, null, [Capability.Translate]));
+        foreach (var id in new[] { FeatureRegistry.Ids.Ocr,
                      FeatureRegistry.Ids.Voice, FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, FeatureRegistry.Ids.Pronunciation, "update" })
             features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 

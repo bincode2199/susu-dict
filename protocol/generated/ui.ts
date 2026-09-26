@@ -41,6 +41,8 @@ export const UI_COMMANDS = {
   TrayExit: 'Tray.Exit',
   OpenSettings: 'Window.OpenSettings',
   Painted: 'Window.Painted',
+  OpenInMain: 'Window.OpenInMain',
+  FitContent: 'Window.FitContent',
 } as const;
 
 export type UiCommandName = (typeof UI_COMMANDS)[keyof typeof UI_COMMANDS];
@@ -56,6 +58,12 @@ export interface BindAccountRequest {
   instanceId: string;
   accountId?: string;
   confirmGrants?: boolean;
+}
+
+export interface CaptureView {
+  id: number;
+  origin: string;
+  empty: boolean;
 }
 
 export interface CardPatch {
@@ -116,7 +124,21 @@ export interface CredentialTargetView {
   granted: boolean;
 }
 
+export interface ErrorBarView {
+  id: number;
+  lines: ErrorLineView[];
+}
+
 export type ErrorKind = 'auth' | 'quota' | 'rate_limited' | 'network' | 'timeout' | 'unsupported_language' | 'bad_response' | 'cancelled' | 'busy' | 'unavailable';
+
+export interface ErrorLineView {
+  key: string;
+  link?: string;
+}
+
+export interface FitContentRequest {
+  heightDip: number;
+}
 
 export interface GeneralView {
   uiLanguage: string;
@@ -412,6 +434,8 @@ export interface UiSnapshot {
   translation?: TranslationSnapshot;
   settings?: SettingsView;
   tray?: TrayView;
+  capture?: CaptureView;
+  errorBar?: ErrorBarView;
 }
 
 export interface ValidateProviderRequest {

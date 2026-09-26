@@ -73,6 +73,7 @@ public sealed partial class ShellCoordinator
         ["videoTranscribe"] = FeatureRegistry.Ids.Transcription, ["pronounce"] = FeatureRegistry.Ids.Pronunciation,
     };
 
+    // PLAN 1.4: selection translation is hotkey-only; the menu offers clipboard translation instead.
     private static readonly (string Id, string? Hotkey, string? Feature, bool SeparatorBefore)[] trayLayout =
     [
         ("input-translation", "inputTranslate", FeatureRegistry.Ids.InputTranslation, false),
@@ -108,11 +109,22 @@ public sealed partial class ShellCoordinator
     private Dictionary<string, bool> hotkeyResults = new(StringComparer.Ordinal);
     private readonly TranslationBackend? backend;
     private readonly CaptureCoordinator? capture;
-    private TranslationSession? translation;
-    // Settings changed since the session was built: the next submit rebuilds it from the current services,
-    // so enable/disable/reorder/key changes apply without a restart while shown results stay until then.
-    private bool translationStale;
+    // One translation session per result window (Main, and the floating Selection window for hotkey/tray captures):
+    // closing one window cancels only its own task. Stale: settings changed since the session was built, so the next
+    // submit rebuilds it from the current services (enable/disable/reorder/key changes apply without a restart while
+    // shown results stay until then).
+    private sealed class TranslationSlot(TranslationSession session)
+    {
+        public TranslationSession Session { get; } = session;
+        public bool Stale;
+    }
+    private readonly Dictionary<WindowKind, TranslationSlot> translations = [];
     private (string From, string To)? languageOverride;
+    private CaptureView? captureView;
+    private ErrorBarView? errorBar;
+    private long captureViews, errorBars;
+    /// <summary>The failure bar hides itself after 4 s (DESIGN 9).</summary>
+    public static readonly TimeSpan ErrorBarLifetime = TimeSpan.FromSeconds(4);
 
     public ShellCoordinator(IWindowPlatform platform, IConfigService config, FeatureRegistry features, Func<Capability, bool> capabilityReady,
         ShellOptions options, Func<AppSettings, TranslationSession?>? sessionFactory = null, ILanguageDetector? languageDetector = null, TranslationBackend? backend = null,
@@ -148,16 +160,19 @@ public sealed partial class ShellCoordinator
 
     // ---------- windows ----------
 
-    public void Open(WindowKind kind)
+    public void Open(WindowKind kind) => _ = OpenAsync(kind, WindowSpec.For(kind).Activates);
+
+    /// <summary>Shows a window; the task completes once a warm page has been resynchronized (so later events follow the snapshot).</summary>
+    private Task OpenAsync(WindowKind kind, bool activate)
     {
-        if (kind is WindowKind.Main && translation is null) AttachTranslation();
+        if (kind is WindowKind.Main && !translations.ContainsKey(kind)) AttachTranslation(kind);
         bool wasVisible = lifecycle.Visible.Contains(kind);
         if (!wasVisible) openedAt[kind] = System.Diagnostics.Stopwatch.GetTimestamp();
-        string session = platform.Show(kind, WindowSpec.For(kind).Activates);
+        string session = platform.Show(kind, activate);
         if (hotkeyAt != 0 && !wasVisible) Timing?.Invoke(kind, "NativeShellAfterHotkey", System.Diagnostics.Stopwatch.GetElapsedTime(hotkeyAt).TotalMilliseconds);
         if (!windows.TryGetValue(kind, out var existing) || existing.Id != session) windows[kind] = existing = new WindowSession(session);
         lifecycle.Shown(kind);
-        if (!wasVisible && existing.Ready) _ = SendSnapshotAsync(kind, existing); // warm reopen: resynchronize the page
+        return !wasVisible && existing.Ready ? SendSnapshotAsync(kind, existing) : Task.CompletedTask; // warm reopen: resynchronize the page
     }
 
     public bool IsOpen(WindowKind kind) => lifecycle.Visible.Contains(kind);
@@ -170,8 +185,7 @@ public sealed partial class ShellCoordinator
                 platform.Exit();
                 return;
             case WindowOutcome.HideCancelTask:
-                if (kind is WindowKind.Main && translation is { } session) _ = session.CloseAsync(TimeSpan.FromSeconds(3));
-                if (kind is WindowKind.Main) translation = null;
+                if (translations.Remove(kind, out var slot)) _ = slot.Session.CloseAsync(TimeSpan.FromSeconds(3));
                 break;
         }
         HideWindow(kind);
@@ -211,19 +225,79 @@ public sealed partial class ShellCoordinator
         hotkeyAt = System.Diagnostics.Stopwatch.GetTimestamp();
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
         // F08.2: selection/clipboard capture. The foreground snapshot is taken synchronously here, before any Su-Su
-        // window can take focus; F08.3 shows the Selection window (or the failure bar) from Captured.
+        // window can take focus; no Su-Su window is shown or activated until the capture has finished (UI03, SEL02).
         else if (capture is not null && CaptureCoordinator.TriggerFor(action, config.State.Effective.Hotkeys) is { } trigger)
             _ = CaptureAsync(capture, capture.CaptureAsync(trigger));
     }
 
-    /// <summary>A capture started by a hotkey finished and is still the current one (J01); superseded ones are never raised.</summary>
+    /// <summary>A capture (hotkey or tray) finished and is still the current one (J01); superseded ones are never raised.</summary>
     public event Action<CaptureOutcome>? Captured;
+
+    /// <summary>The last capture's presentation finished (window opened and text submitted, or failure bar shown); for tests and diagnostics.</summary>
+    public event Action<CaptureOutcome>? CapturePresented;
 
     private async Task CaptureAsync(CaptureCoordinator coordinator, Task<CaptureOutcome> pending)
     {
         var outcome = await pending;
         Diagnostic?.Invoke($"capture {outcome.Trigger} {outcome.Status} {outcome.Source} {outcome.FailureKey}");
-        if (outcome.Status != CaptureStatus.Superseded && coordinator.IsCurrent(outcome.Generation)) Captured?.Invoke(outcome);
+        if (outcome.Status == CaptureStatus.Superseded || !coordinator.IsCurrent(outcome.Generation)) return;
+        // Back on the UI thread; a newer capture that finished meanwhile wins (J01).
+        platform.StartTimer(TimeSpan.Zero, () =>
+        {
+            if (!coordinator.IsCurrent(outcome.Generation)) return;
+            Captured?.Invoke(outcome);
+            _ = PresentAsync(coordinator, outcome);
+        });
+    }
+
+    /// <summary>
+    /// F08.3 (PLAN 3.1/6.1, DESIGN 9): text or an empty capture opens the floating Selection window at its remembered
+    /// position (never at the pointer or the selection) and only now activates it, so Esc and typing reach it; a failure
+    /// with a message shows the failure bar near the pointer instead of a window; a restore notice rides along as its own
+    /// bar line. A focus change or a vanished target shows nothing (the user already moved on).
+    /// </summary>
+    private async Task PresentAsync(CaptureCoordinator coordinator, CaptureOutcome outcome)
+    {
+        var lines = new List<ErrorLineView>();
+        if (outcome.Status == CaptureStatus.Failed && outcome.Message is { } message) lines.Add(LineFor(message));
+        if (outcome.Notice is { } notice) lines.Add(LineFor(notice));
+        if (lines.Count > 0) ShowErrorBar([.. lines]);
+        if (outcome.Status is CaptureStatus.Text or CaptureStatus.Empty)
+        {
+            string origin = outcome.Source == "clipboard" ? "clipboard" : "selection";
+            bool empty = outcome.Status == CaptureStatus.Empty;
+            // Every capture is a new task for the floating window: the previous one is cancelled, never merged (J01).
+            ReattachTranslation(WindowKind.Selection);
+            captureView = new CaptureView(++captureViews, origin, empty);
+            await OpenAsync(WindowKind.Selection, activate: true);
+            if (windows.TryGetValue(WindowKind.Selection, out var session) && session.Ready)
+            {
+                Send(WindowKind.Selection, session, UiMessageKind.Event, "capture", null, JsonSerializer.SerializeToElement(captureView, ContractsJson.Default.CaptureView));
+                if (TranslationOf(WindowKind.Selection) is { } fresh)
+                    Send(WindowKind.Selection, session, UiMessageKind.Event, "translation", null, JsonSerializer.SerializeToElement(await fresh.SnapshotAsync(), ContractsJson.Default.TranslationSnapshot));
+            }
+            if (!empty && coordinator.IsCurrent(outcome.Generation)) await SubmitAsync(WindowKind.Selection, outcome.Text);
+        }
+        CapturePresented?.Invoke(outcome);
+    }
+
+    /// <summary>Capture texts are host resources: the page shows them in the UI language (Error artboard 01).</summary>
+    private static ErrorLineView LineFor(string message) => message switch
+    {
+        CaptureMessages.NotSupportedBorrowOff => new ErrorLineView("capture.notSupportedBorrowOff", "settings"),
+        CaptureMessages.NotSupported => new ErrorLineView("capture.notSupported"),
+        CaptureMessages.RestoreFailed => new ErrorLineView("capture.restoreFailed", "settings"),
+        _ => new ErrorLineView("capture.failed"),
+    };
+
+    private void ShowErrorBar(ErrorLineView[] lines)
+    {
+        var bar = errorBar = new ErrorBarView(++errorBars, lines);
+        bool wasVisible = lifecycle.Visible.Contains(WindowKind.Error);
+        _ = OpenAsync(WindowKind.Error, activate: false);
+        if (wasVisible && windows.TryGetValue(WindowKind.Error, out var session) && session.Ready)
+            Send(WindowKind.Error, session, UiMessageKind.Event, "errorbar", null, JsonSerializer.SerializeToElement(bar, ContractsJson.Default.ErrorBarView));
+        platform.StartTimer(ErrorBarLifetime, () => { if (ReferenceEquals(errorBar, bar)) HideWindow(WindowKind.Error); });
     }
 
     // ---------- page messages ----------
@@ -239,10 +313,12 @@ public sealed partial class ShellCoordinator
 
     private async Task SendSnapshotAsync(WindowKind kind, WindowSession session)
     {
-        TranslationSnapshot? snapshot = kind is WindowKind.Main && translation is { } t ? await t.SnapshotAsync() : null;
+        TranslationSnapshot? snapshot = TranslationOf(kind) is { } t ? await t.SnapshotAsync() : null;
         var payload = new UiSnapshot(WindowViewFor(kind, session), snapshot,
             kind == WindowKind.Settings ? ProjectSettings(config.State) : null,
-            kind == WindowKind.Tray ? TrayModel() : null);
+            kind == WindowKind.Tray ? TrayModel() : null,
+            kind == WindowKind.Selection ? captureView : null,
+            kind == WindowKind.Error ? errorBar : null);
         session.Ready = true;
         session.PendingCards.Clear();
         Send(kind, session, UiMessageKind.Snapshot, null, null, JsonSerializer.SerializeToElement(payload, ContractsJson.Default.UiSnapshot));
@@ -282,26 +358,25 @@ public sealed partial class ShellCoordinator
                 platform.SetClipboardText(Read(payload, ContractsJson.Default.SubmitTextRequest).Text);
                 return Ok();
             case UiCommands.SubmitText:
+                return await SubmitAsync(kind, Read(payload, ContractsJson.Default.SubmitTextRequest).Text);
+            case UiCommands.OpenInMain:
             {
-                if (translation is null || translationStale) ReattachTranslation();
-                if (translation is null) return new CommandResult(false, "unavailable");
+                // The floating window hands its text over; its own task is cancelled, the main window translates it anew.
                 var text = Read(payload, ContractsJson.Default.SubmitTextRequest).Text;
-                if (string.IsNullOrWhiteSpace(text) || text.Length > 100_000) return new CommandResult(false, "text-length");
-                var general = config.State.Effective.General;
-                var (from, to) = languageOverride ?? await ResolveLanguageAsync(text, general);
-                await translation.SubmitAsync(text, from, to);
-                // A submit starts a new generation: the page adopts it from this snapshot and replays newer patches.
-                var snapshot = await translation.SnapshotAsync();
-                if (session.Ready) Send(kind, session, UiMessageKind.Event, "translation", null, JsonSerializer.SerializeToElement(snapshot, ContractsJson.Default.TranslationSnapshot));
-                return Ok();
+                OnWindowRequest(kind, WindowRequest.Close);
+                await OpenAsync(WindowKind.Main, WindowSpec.For(WindowKind.Main).Activates);
+                return string.IsNullOrWhiteSpace(text) ? Ok() : await SubmitAsync(WindowKind.Main, text);
             }
+            case UiCommands.FitContent:
+                platform.FitHeight(kind, Read(payload, ContractsJson.Default.FitContentRequest).HeightDip);
+                return Ok();
             case UiCommands.ToggleCard:
-                if (translation is null) return new CommandResult(false, "unavailable");
-                await translation.ToggleAsync(Read(payload, ContractsJson.Default.ToggleCardRequest).ServiceId);
+                if (TranslationOf(kind) is not { } toggled) return new CommandResult(false, "unavailable");
+                await toggled.ToggleAsync(Read(payload, ContractsJson.Default.ToggleCardRequest).ServiceId);
                 return Ok();
             case UiCommands.RetryCard:
-                if (translation is null) return new CommandResult(false, "unavailable");
-                await translation.RetryAsync(Read(payload, ContractsJson.Default.ToggleCardRequest).ServiceId);
+                if (TranslationOf(kind) is not { } retried) return new CommandResult(false, "unavailable");
+                await retried.RetryAsync(Read(payload, ContractsJson.Default.ToggleCardRequest).ServiceId);
                 return Ok();
             case UiCommands.SelectLanguage:
             {
@@ -372,49 +447,70 @@ public sealed partial class ShellCoordinator
 
     // ---------- translation projection ----------
 
-    private void ReattachTranslation()
+    private TranslationSession? TranslationOf(WindowKind kind) => translations.TryGetValue(kind, out var slot) ? slot.Session : null;
+
+    private void ReattachTranslation(WindowKind kind)
     {
-        if (translation is { } old) _ = old.CloseAsync(TimeSpan.FromSeconds(3));
-        translation = null;
-        translationStale = false;
-        AttachTranslation();
+        if (translations.Remove(kind, out var old)) _ = old.Session.CloseAsync(TimeSpan.FromSeconds(3));
+        AttachTranslation(kind);
     }
 
-    private void AttachTranslation()
+    private void AttachTranslation(WindowKind kind)
     {
-        translation = sessionFactory(config.State.Effective);
-        if (translation is null) return;
-        var attached = translation;
-        attached.CardChanged += patch => platform.StartTimer(TimeSpan.Zero, () => { if (translation == attached) OnCardPatch(patch); });
+        if (sessionFactory(config.State.Effective) is not { } attached) return;
+        var slot = translations[kind] = new TranslationSlot(attached);
+        attached.CardChanged += patch => platform.StartTimer(TimeSpan.Zero, () =>
+        {
+            if (translations.TryGetValue(kind, out var current) && current == slot) OnCardPatch(kind, patch);
+        });
     }
+
+    /// <summary>Translates text in a result window's own session (a new generation) and hands the page the new snapshot.</summary>
+    private async Task<CommandResult> SubmitAsync(WindowKind kind, string text)
+    {
+        if (!translations.TryGetValue(kind, out var slot) || slot.Stale) ReattachTranslation(kind);
+        if (TranslationOf(kind) is not { } translation) return new CommandResult(false, "unavailable");
+        if (string.IsNullOrWhiteSpace(text) || text.Length > 100_000) return new CommandResult(false, "text-length");
+        var general = config.State.Effective.General;
+        var (from, to) = languageOverride ?? await ResolveLanguageAsync(text, general);
+        await translation.SubmitAsync(text, from, to);
+        // A submit starts a new generation: the page adopts it from this snapshot and replays newer patches.
+        var snapshot = await translation.SnapshotAsync();
+        if (windows.TryGetValue(kind, out var session) && session.Ready)
+            Send(kind, session, UiMessageKind.Event, "translation", null, JsonSerializer.SerializeToElement(snapshot, ContractsJson.Default.TranslationSnapshot));
+        return Ok();
+    }
+
+    /// <summary>Main window card patch (kept for the F06 tests); see <see cref="OnCardPatch(WindowKind, CardPatch)"/>.</summary>
+    public void OnCardPatch(CardPatch patch) => OnCardPatch(WindowKind.Main, patch);
 
     /// <summary>Streaming states are coalesced to at most 30 per second; every other state is sent at once.</summary>
-    public void OnCardPatch(CardPatch patch)
+    public void OnCardPatch(WindowKind kind, CardPatch patch)
     {
-        if (!windows.TryGetValue(WindowKind.Main, out var session) || !session.Ready) return;
+        if (!windows.TryGetValue(kind, out var session) || !session.Ready) return;
         if (patch.Card.State == CardState.Streaming)
         {
             session.PendingCards[patch.Card.ServiceId] = patch;
             if (session.FlushScheduled) return;
             session.FlushScheduled = true;
-            platform.StartTimer(PatchInterval, () => FlushCards(session));
+            platform.StartTimer(PatchInterval, () => FlushCards(kind, session));
             return;
         }
         session.PendingCards.Remove(patch.Card.ServiceId);
-        SendCard(session, patch);
+        SendCard(kind, session, patch);
     }
 
-    private void FlushCards(WindowSession session)
+    private void FlushCards(WindowKind kind, WindowSession session)
     {
         session.FlushScheduled = false;
-        if (!windows.TryGetValue(WindowKind.Main, out var current) || current != session) return;
+        if (!windows.TryGetValue(kind, out var current) || current != session) return;
         var pending = session.PendingCards.Values.OrderBy(p => p.Revision).ToList();
         session.PendingCards.Clear();
-        foreach (var patch in pending) SendCard(session, patch);
+        foreach (var patch in pending) SendCard(kind, session, patch);
     }
 
-    private void SendCard(WindowSession session, CardPatch patch)
-        => Send(WindowKind.Main, session, UiMessageKind.Patch, "card", null, JsonSerializer.SerializeToElement(patch, ContractsJson.Default.CardPatch));
+    private void SendCard(WindowKind kind, WindowSession session, CardPatch patch)
+        => Send(kind, session, UiMessageKind.Patch, "card", null, JsonSerializer.SerializeToElement(patch, ContractsJson.Default.CardPatch));
 
     // ---------- settings ----------
 
@@ -422,7 +518,7 @@ public sealed partial class ShellCoordinator
     {
         platform.StartTimer(TimeSpan.Zero, () =>
         {
-            translationStale = true;
+            foreach (var slot in translations.Values) slot.Stale = true;
             ApplyHotkeys(state.Effective);
             Broadcast(UiMessageKind.Event, "settings", JsonSerializer.SerializeToElement(ProjectSettings(state), ContractsJson.Default.SettingsView), WindowKind.Settings);
             foreach (var (kind, session) in windows)
@@ -941,6 +1037,12 @@ public sealed partial class ShellCoordinator
             case "settings": Open(WindowKind.Settings); break;
             case "exit": platform.Exit(); break;
             case "input-translation": Open(WindowKind.Main); break;
+            // Reads the text already on the clipboard (never Ctrl+C). There is no selection entry: opening this menu has
+            // already taken focus from the program holding the selection (PLAN 1.4, D-51).
+            case "clipboard":
+                if (capture is null) return new CommandResult(false, "unavailable");
+                _ = CaptureAsync(capture, capture.CaptureAsync(CaptureTrigger.Clipboard));
+                break;
         }
         return Ok();
     }

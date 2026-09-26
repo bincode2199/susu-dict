@@ -20,6 +20,8 @@ public interface IWindowPlatform
     string Show(WindowKind kind, bool activate);
     void Hide(WindowKind kind);
     void ToggleMaximize(WindowKind kind);
+    /// <summary>Auto-height windows (floats, failure bar): resize to the page's content height (PlacementPolicy.FitHeight).</summary>
+    void FitHeight(WindowKind kind, int contentHeightDip);
     void SetPinned(WindowKind kind, bool pinned);
     /// <summary>Posts one UI envelope (JSON) to the page of a window.</summary>
     void Post(WindowKind kind, string json);

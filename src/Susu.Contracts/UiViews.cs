@@ -4,7 +4,30 @@ namespace Susu.Contracts;
 
 /// <summary>First message to a page after Ready; later changes arrive as Patch/Event.</summary>
 [TsExport("ui")]
-public sealed record UiSnapshot(WindowView Window, TranslationSnapshot? Translation = null, SettingsView? Settings = null, TrayView? Tray = null);
+public sealed record UiSnapshot(WindowView Window, TranslationSnapshot? Translation = null, SettingsView? Settings = null, TrayView? Tray = null,
+    CaptureView? Capture = null, ErrorBarView? ErrorBar = null);
+
+/// <summary>
+/// The capture shown in the floating Selection window (F08.3). Origin: "selection" (UIA/IA2/borrow) or "clipboard"
+/// (text read from the clipboard). Empty: nothing to translate, so the window waits for input. Never carries text;
+/// the text travels in the translation snapshot's SourceText.
+/// </summary>
+[TsExport("ui")]
+public sealed record CaptureView(long Id, string Origin, bool Empty);
+
+/// <summary>
+/// The failure bar (DESIGN 9 "悬浮条", Error artboard 01): one 34 DIP row per line near the pointer, gone after 4 s.
+/// Key is a UI resource key (texts come from the host resource table, never from a plugin); Link is "settings" or null.
+/// </summary>
+[TsExport("ui")]
+public sealed record ErrorBarView(long Id, ErrorLineView[] Lines);
+
+[TsExport("ui")]
+public sealed record ErrorLineView(string Key, string? Link = null);
+
+/// <summary>Window.FitContent: the page's content height in DIPs (CSS px); the host clamps it to the work area.</summary>
+[TsExport("ui")]
+public sealed record FitContentRequest(int HeightDip);
 
 [TsExport("ui")]
 public sealed record WindowView(WindowKind Kind, string UiLanguage, string Theme, bool Maximized, bool Pinned, bool DevPreview, string[] Features);
