@@ -231,7 +231,7 @@ describe('SetSpeechB with a text-only ASR (A03)', () => {
     speech: s,
   });
 
-  it('voice/audio says it can be used with Gemini; video has no timecoded service and says so; video transcription is not built yet when one is chosen', () => {
+  it('voice/audio says it can be used with Gemini; video has no timecoded service and says so; a chosen video service says what it still needs (F14.4: no longer "not built")', () => {
     const gemini = mount(SpeechSettings, {
       props: { settings: settings({ tts: ttsSlot, asr: slot('asr', 'gemini-asr', 'gemini-2.5-flash', true), videoAsr: slot('videoAsr', '', '', false, 'needs-timecodes') }), bridge: fakeBridge() },
     });
@@ -243,9 +243,9 @@ describe('SetSpeechB with a text-only ASR (A03)', () => {
     expect(video.find('[data-choice="gemini-asr"]').attributes('disabled')).toBeDefined();
     expect(video.find('[data-timecode-note]').text()).toBe(t('speech.videoAsrTimecodes'));
     const chosen = mount(SpeechSettings, {
-      props: { settings: settings({ tts: ttsSlot, asr: slot('asr', 'gemini-asr', 'gemini-2.5-flash', true), videoAsr: slot('videoAsr', 'openai-asr', 'whisper-1', false, 'not-built') }), bridge: fakeBridge() },
+      props: { settings: settings({ tts: ttsSlot, asr: slot('asr', 'gemini-asr', 'gemini-2.5-flash', true), videoAsr: slot('videoAsr', 'openai-asr', 'whisper-1', false, 'missing-credential') }), bridge: fakeBridge() },
     });
-    expect(chosen.find('[data-slot="videoAsr"] [data-status]').text()).toBe(t('speech.reason.videoNotBuilt'));
+    expect(chosen.find('[data-slot="videoAsr"] [data-status]').text()).toBe(t('speech.reason.missing-credential', { plan: '' }));
     expect(chosen.find('[data-slot="asr"] [data-status]').text()).toBe(t('speech.reason.ready'));
   });
 });

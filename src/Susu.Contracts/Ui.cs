@@ -95,6 +95,7 @@ public static class UiCommands
         CancelRecording = "Audio.CancelRecording", TranscribeRecorded = "Audio.TranscribeRecorded",
         PickMedia = "Transcription.PickMedia", StartTranscription = "Transcription.Start", PauseTranscription = "Transcription.Pause",
         ChangeTranslator = "Transcription.ChangeTranslator", Export = "Transcription.Export",
+        ConfirmTranscription = "Transcription.Confirm", ResumeTranscription = "Transcription.Resume", CancelTranscription = "Transcription.Cancel",
         Collect = "Vocab.Collect", Speak = "Vocab.Speak", TrayOpen = "Tray.Open", TrayExit = "Tray.Exit", OpenSettings = "Window.OpenSettings", Painted = "Window.Painted",
         OpenInMain = "Window.OpenInMain", FitContent = "Window.FitContent",
         SpeakCard = "Speech.SpeakCard", SpeechPlay = "Speech.Play", SpeechStop = "Speech.Stop";
@@ -119,6 +120,7 @@ public static class UiCommands
         [CancelRecording] = [WindowKind.Voice], [TranscribeRecorded] = [WindowKind.Voice],
         [PickMedia] = [WindowKind.Transcribe], [StartTranscription] = [WindowKind.Transcribe], [PauseTranscription] = [WindowKind.Transcribe],
         [ChangeTranslator] = [WindowKind.Transcribe], [Export] = [WindowKind.Transcribe],
+        [ConfirmTranscription] = [WindowKind.Transcribe], [ResumeTranscription] = [WindowKind.Transcribe], [CancelTranscription] = [WindowKind.Transcribe],
         [TrayOpen] = [WindowKind.Tray], [TrayExit] = [WindowKind.Tray],
         [OpenSettings] = [.. resultWindows, WindowKind.Transcribe, WindowKind.Error],
         // F08.3: the floating window hands its text to the main window; auto-height windows report their content height.

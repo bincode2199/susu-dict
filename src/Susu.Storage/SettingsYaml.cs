@@ -206,7 +206,7 @@ public static partial class SettingsYaml
             if (node is null) return d;
             const string p = "speech";
             if (node is not YMap map) { Issue(p, "type", "expected a mapping", node); return d; }
-            Keys(map, p, "tts", "asr", "videoAsr");
+            Keys(map, p, "tts", "asr", "videoAsr", "videoTranslator");
             SpeechSelection One(string key, SpeechSlot slot)
             {
                 var fallback = d[slot];
@@ -223,7 +223,7 @@ public static partial class SettingsYaml
                 }
                 return selection;
             }
-            return new SpeechSettings(One("tts", SpeechSlot.Tts), One("asr", SpeechSlot.Asr), One("videoAsr", SpeechSlot.VideoAsr));
+            return new SpeechSettings(One("tts", SpeechSlot.Tts), One("asr", SpeechSlot.Asr), One("videoAsr", SpeechSlot.VideoAsr), Str(map, p, "videoTranslator", ""));
         }
 
         /// <summary>SetOcr default service (F11.2); an id outside the OCR catalog is an issue and falls back to the default.</summary>
@@ -441,6 +441,7 @@ public static partial class SettingsYaml
             w.Append("  ").Append(key).Append(":\n");
             Pair(w, 2, "instance", Q(selection.Instance)); Pair(w, 2, "model", Q(selection.Model));
         }
+        Pair(w, 1, "videoTranslator", Q(s.Speech.VideoTranslator));
         Section(w, c, "ocr");
         Pair(w, 1, "service", Q(s.Ocr.Service));
         Pair(w, 1, "autoTranslate", B(s.Ocr.AutoTranslate));

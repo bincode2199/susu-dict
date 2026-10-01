@@ -5,7 +5,7 @@ namespace Susu.Contracts;
 /// <summary>First message to a page after Ready; later changes arrive as Patch/Event.</summary>
 [TsExport("ui")]
 public sealed record UiSnapshot(WindowView Window, TranslationSnapshot? Translation = null, SettingsView? Settings = null, TrayView? Tray = null,
-    CaptureView? Capture = null, ErrorBarView? ErrorBar = null, SpeechStateView? Speech = null, SpeechBarView? SpeechBar = null, OcrView? Ocr = null, VoiceView? Voice = null);
+    CaptureView? Capture = null, ErrorBarView? ErrorBar = null, SpeechStateView? Speech = null, SpeechBarView? SpeechBar = null, OcrView? Ocr = null, VoiceView? Voice = null, TranscribeView? Transcribe = null);
 
 /// <summary>
 /// The one player's state as the pages show it (F10.2). Phase: idle, loading (synthesis or download), playing,
@@ -84,6 +84,55 @@ public sealed record OcrBlockView(string Text, string Kind);
 public sealed record VoiceView(long Id, string Phase, long ElapsedMs, long LimitMs, double Level, bool Silent, string? Reason, string? ErrorCode, string? ServiceId,
     string? Text, ErrorKind? ErrorKind, bool Translated, string Hotkey, bool CanTranscribe, string? Notice = null, int? Chunk = null, int? Chunks = null, long? TranscribeMs = null,
     string Source = "microphone", bool OwnPlayback = false);
+
+/// <summary>
+/// The Transcribe window (F14.4, DESIGN Transcribe artboard, PLAN 6.2). Phase: idle (no file), picked (file probed: FileName, DurationMs,
+/// HasVideo, Streams), pickError (ErrorCode is a media.* code: the file cannot be used), confirm (Upload: what is sent where, answered with
+/// Transcription.Confirm), running (Stage probe | asr | translate with SlicesDone of SlicesTotal), paused, quota (QuotaSide asr |
+/// translation, Choices: services to switch to), failed (ErrorCode and ErrorKind), cancelled, done. The page never sees a path or a media
+/// token. Cues travel as <c>transcribe.cue</c> events (upsert by Id) while a job runs; the snapshot carries the full list; an event view
+/// with empty Cues and the same JobId keeps the list the page has. Export is the last export attempt.
+/// </summary>
+[TsExport("ui")]
+public sealed record TranscribeView(long Id, string Phase, string? JobId, string? FileName, long? DurationMs, bool HasVideo, TranscribeStreamView[] Streams,
+    string? ErrorCode, ErrorKind? ErrorKind, string Stage, int SlicesDone, int SlicesTotal, int CueCount, int Translated, int FailedCues,
+    string? AsrService, string? TranslationService, string? QuotaSide, TranscribeUploadView? Upload, TranscribeChoiceView[] Choices,
+    TranscribeCueView[] Cues, TranscribeExportView? Export, string Hotkey);
+
+[TsExport("ui")]
+public sealed record TranscribeStreamView(string Codec, int SampleRate, int Channels, bool Decodable, bool Selected);
+
+/// <summary>The upload confirmation (T06): file, services, limits and an upper bound of the upload. Character total and price are null when unknown (never made up).</summary>
+[TsExport("ui")]
+public sealed record TranscribeUploadView(string FileName, long DurationMs, bool HasVideo, string AsrService, string AsrModel, long UploadBytesEstimate,
+    int ChunkSecondsLimit, long ChunkBytesLimit, string TranslationService, string TranslationServiceName, int TranslationMaxInput, int TranslationMaxItems,
+    string? QuotaNoteKey, long? EstimatedCharacters, string? EstimatedPrice);
+
+/// <summary>A service to switch to when one ran out of quota. Kind: translation | asr; Model is set for asr.</summary>
+[TsExport("ui")]
+public sealed record TranscribeChoiceView(string Kind, string Id, string Model, bool Current);
+
+[TsExport("ui")]
+public sealed record TranscribeCueView(string Id, double Start, double End, string Original, string? Translation, string? TranslationError);
+
+/// <summary>The last export: Path when saved, Error (export.*) otherwise (Retryable for a full disk), Exported cues written and the cues left out with their code.</summary>
+[TsExport("ui")]
+public sealed record TranscribeExportView(string Format, string Mode, string? Path, string? Error, bool Retryable, int Exported, int Overlaps, TranscribeIssueView[] Issues);
+
+[TsExport("ui")]
+public sealed record TranscribeIssueView(string CueId, string Code);
+
+/// <summary>Transcription.Confirm: the answer to the upload confirmation.</summary>
+[TsExport("ui")]
+public sealed record TranscribeConfirmRequest(bool Accept);
+
+/// <summary>Transcription.ChangeTranslator: Side translation | asr, the service id (and the ASR model). The choice is saved as the video selection and applied to the job.</summary>
+[TsExport("ui")]
+public sealed record TranscribeSwitchRequest(string Side, string Id, string Model = "");
+
+/// <summary>Transcription.Export: Format srt | vtt | txt, Mode original | translation | bilingual | bilingualTranslationFirst.</summary>
+[TsExport("ui")]
+public sealed record TranscribeExportRequest(string Format, string Mode);
 
 /// <summary>
 /// The failure bar (DESIGN 9 "悬浮条", Error artboard 01): one 34 DIP row per line near the pointer, gone after 4 s.
@@ -292,7 +341,7 @@ public sealed record TrayOpenRequest(string Id);
 /// translation model (A02).
 /// </summary>
 [TsExport("ui")]
-public sealed record SpeechView(SpeechSlotView Tts, SpeechSlotView Asr, SpeechSlotView VideoAsr);
+public sealed record SpeechView(SpeechSlotView Tts, SpeechSlotView Asr, SpeechSlotView VideoAsr, string VideoTranslator = "", string[]? VideoTranslatorChoices = null);
 
 /// <summary>
 /// One selection. Slot: tts | asr | videoAsr. Instance "" = nothing selected. Choices: the services whose package

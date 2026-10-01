@@ -45,7 +45,7 @@ public sealed record SpeechSelection(string Instance, string Model)
 /// separately). Each is its own field: changing one never touches the others, nor the AI translation model, which is
 /// the <c>openai</c> instance's config (A02).
 /// </summary>
-public sealed record SpeechSettings(SpeechSelection Tts, SpeechSelection Asr, SpeechSelection VideoAsr)
+public sealed record SpeechSettings(SpeechSelection Tts, SpeechSelection Asr, SpeechSelection VideoAsr, string VideoTranslator = "")
 {
     /// <summary>DESIGN SetSpeechB: OpenAI whisper-1 for both transcription groups; native SAPI pronounces.</summary>
     public static SpeechSettings Default => new(new(BuiltInCatalog.NativeTts, ""), new(SpeechCatalog.OpenAiAsr, "whisper-1"), new(SpeechCatalog.OpenAiAsr, "whisper-1"));

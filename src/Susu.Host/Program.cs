@@ -137,9 +137,9 @@ internal static class MainMode
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Voice, FeatureState.Available, null, [Capability.Asr]));
         // F13.2: system-audio translation is the same recorder, ASR and window over the output device; it needs the same ASR service.
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.SystemAudio, FeatureState.Available, null, [Capability.Asr]));
-        foreach (var id in new[] {
-                     FeatureRegistry.Ids.Transcription, "update" })
-            features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
+        // F14.4: video transcription is available once the video ASR selection can run and returns timecodes (the shell resolves that itself).
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Transcription, FeatureState.Available, null, []));
+        features.Register(new FeatureDescriptor("update", FeatureState.InDevelopment, "feature.inDevelopment", []));
 
         var usage = new UsageRepository(db, clock);
         // F07.2: settings controls come from each package's manifest schema; F07.3: the same schema gates model
@@ -239,11 +239,15 @@ internal static class MainMode
             new LeasedFiles(leases), async text => await coordinator.SubmitRecognizedTextAsync(text, WindowKind.Voice), autoTranslate: () => true);
         asrJob.StateChanged += state => log.Event("asr", ("phase", state.Phase.ToString()), ("service", state.ServiceId ?? ""), ("kind", state.Error?.Kind.ToString() ?? ""));
         coordinator.Asr = asrJob;
-        // F14.2: the video job. ASR comes from the video selection (never the microphone voice one); translation is the first enabled
+        // F14.2: the video job. ASR comes from the video selection (never the microphone voice one); translation is the video selection (SetSpeechB) or the first enabled
         // service, one text per request (an items-capable plugin API is not wired yet). The Transcribe window (F14.4) sets Confirmation.
-        coordinator.VideoJobs = new VideoJobs(new MediaTokens(), new MediaFoundationDecoder(), new LeasedFiles(leases),
+        var mediaTokens = new MediaTokens();
+        coordinator.MediaTokens = mediaTokens;
+        coordinator.MediaPicker = new Win32MediaPicker(mediaTokens);
+        coordinator.SubtitleSavePicker = new Win32SubtitleSavePicker();
+        coordinator.VideoJobs = new VideoJobs(mediaTokens, new MediaFoundationDecoder(), new LeasedFiles(leases),
             () => translation.Supervisor is { } videoSupervisor ? PluginAsrProviders.Create(config.State.Effective, SpeechSlot.VideoAsr, secrets.Has, videoSupervisor, schemas) : null,
-            () => translation.Providers(config.State.Effective).FirstOrDefault() is { } videoTranslator
+            () => VideoTranslatorOf(translation.Providers(config.State.Effective), config.State.Effective.Speech.VideoTranslator) is { } videoTranslator
                 ? new SingleItemSubtitleProvider(videoTranslator, () => config.State.Effective.Snapshot(), videoTranslator.ServiceId == "mymemory" ? "video.quota.sharedDaily" : null) : null);
 
         using var tray = new TrayIcon(dispatcher, assets);
@@ -295,6 +299,10 @@ internal static class MainMode
     }
 
     /// <summary>Keep-warm override: 2 s for --smoke; --release-after-seconds only in development builds (PER03 cold runs).</summary>
+    /// <summary>F14.4: the video translation service: the one SetSpeechB names when it is still enabled, else the first enabled service.</summary>
+    private static ITranslationProvider? VideoTranslatorOf(IEnumerable<ITranslationProvider> providers, string selected)
+        => providers.FirstOrDefault(p => selected != "" && p.ServiceId == selected) ?? providers.FirstOrDefault();
+
     private static TimeSpan? ReleaseAfter(StartupMode mode)
         => mode.SmokeReport is not null ? TimeSpan.FromSeconds(2)
         : Program.DevelopmentBuild && mode.ReleaseAfterSeconds is int seconds ? TimeSpan.FromSeconds(seconds) : null;

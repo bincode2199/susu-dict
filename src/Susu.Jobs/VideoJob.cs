@@ -495,6 +495,19 @@ public sealed class VideoJobs(IMediaTokens tokens, IMediaDecoder decoder, ILease
         return new(job, null);
     }
 
+    /// <summary>Duration and audio streams of a picked file without decoding (the Transcribe window shows them before a job starts). Throws <see cref="MediaDecodeException"/> (media.notFound, media.openFailed).</summary>
+    public async Task<MediaProbe> ProbeAsync(string mediaToken, CancellationToken cancellationToken = default)
+    {
+        if (!tokens.TryResolve(mediaToken, out string path)) throw new MediaDecodeException(MediaErrors.NotFound, "token");
+        return await decoder.ProbeAsync(path, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The video ASR the next request would use (selection read now); for switching a running job.</summary>
+    public IAsrProvider? CurrentAsr() => asr();
+
+    /// <summary>The video translation service the next request would use (selection read now); for switching a running job.</summary>
+    public ISubtitleTranslationProvider? CurrentTranslator() => translator();
+
     /// <summary>Cancels the active job, if any (window close, exit).</summary>
     public void CancelActive() => Active?.Cancel();
 }

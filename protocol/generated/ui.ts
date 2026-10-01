@@ -38,6 +38,9 @@ export const UI_COMMANDS = {
   PauseTranscription: 'Transcription.Pause',
   ChangeTranslator: 'Transcription.ChangeTranslator',
   Export: 'Transcription.Export',
+  ConfirmTranscription: 'Transcription.Confirm',
+  ResumeTranscription: 'Transcription.Resume',
+  CancelTranscription: 'Transcription.Cancel',
   Collect: 'Vocab.Collect',
   Speak: 'Vocab.Speak',
   TrayOpen: 'Tray.Open',
@@ -498,6 +501,8 @@ export interface SpeechView {
   tts: SpeechSlotView;
   asr: SpeechSlotView;
   videoAsr: SpeechSlotView;
+  videoTranslator?: string;
+  videoTranslatorChoices?: string[];
 }
 
 export interface SubmitTextRequest {
@@ -506,6 +511,105 @@ export interface SubmitTextRequest {
 
 export interface ToggleCardRequest {
   serviceId: string;
+}
+
+export interface TranscribeChoiceView {
+  kind: string;
+  id: string;
+  model: string;
+  current: boolean;
+}
+
+export interface TranscribeConfirmRequest {
+  accept: boolean;
+}
+
+export interface TranscribeCueView {
+  id: string;
+  start: number;
+  end: number;
+  original: string;
+  translation?: string;
+  translationError?: string;
+}
+
+export interface TranscribeExportRequest {
+  format: string;
+  mode: string;
+}
+
+export interface TranscribeExportView {
+  format: string;
+  mode: string;
+  path?: string;
+  error?: string;
+  retryable: boolean;
+  exported: number;
+  overlaps: number;
+  issues: TranscribeIssueView[];
+}
+
+export interface TranscribeIssueView {
+  cueId: string;
+  code: string;
+}
+
+export interface TranscribeStreamView {
+  codec: string;
+  sampleRate: number;
+  channels: number;
+  decodable: boolean;
+  selected: boolean;
+}
+
+export interface TranscribeSwitchRequest {
+  side: string;
+  id: string;
+  model?: string;
+}
+
+export interface TranscribeUploadView {
+  fileName: string;
+  durationMs: number;
+  hasVideo: boolean;
+  asrService: string;
+  asrModel: string;
+  uploadBytesEstimate: number;
+  chunkSecondsLimit: number;
+  chunkBytesLimit: number;
+  translationService: string;
+  translationServiceName: string;
+  translationMaxInput: number;
+  translationMaxItems: number;
+  quotaNoteKey?: string;
+  estimatedCharacters?: number;
+  estimatedPrice?: string;
+}
+
+export interface TranscribeView {
+  id: number;
+  phase: string;
+  jobId?: string;
+  fileName?: string;
+  durationMs?: number;
+  hasVideo: boolean;
+  streams: TranscribeStreamView[];
+  errorCode?: string;
+  errorKind?: ErrorKind;
+  stage: string;
+  slicesDone: number;
+  slicesTotal: number;
+  cueCount: number;
+  translated: number;
+  failedCues: number;
+  asrService?: string;
+  translationService?: string;
+  quotaSide?: string;
+  upload?: TranscribeUploadView;
+  choices: TranscribeChoiceView[];
+  cues: TranscribeCueView[];
+  export?: TranscribeExportView;
+  hotkey: string;
 }
 
 export interface TranslationSnapshot {
@@ -558,6 +662,7 @@ export interface UiSnapshot {
   speechBar?: SpeechBarView;
   ocr?: OcrView;
   voice?: VoiceView;
+  transcribe?: TranscribeView;
 }
 
 export interface ValidateProviderRequest {

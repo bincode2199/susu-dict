@@ -18,6 +18,8 @@ const roots: Partial<Record<WindowKind, ReturnType<typeof defineAsyncComponent>>
   Ocr: defineAsyncComponent(() => import('./windows/OcrWindow.vue')),
   // F12.3: the voice window (DESIGN 9, Voice artboard).
   Voice: defineAsyncComponent(() => import('./windows/VoiceWindow.vue')),
+  // F14.4: the video transcription window (DESIGN 9, Transcribe artboard).
+  Transcribe: defineAsyncComponent(() => import('./windows/TranscribeWindow.vue')),
   // F10.2: the pronunciation bar next to the selection (DESIGN 9).
   Speech: defineAsyncComponent(() => import('./windows/SpeechBar.vue')),
 };

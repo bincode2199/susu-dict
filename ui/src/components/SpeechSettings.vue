@@ -36,10 +36,23 @@ const modelLabel = (id: string, timecodes: boolean) => `${id} · ${t(timecodes ?
 /** Status of the selected service: why it cannot be used yet (not installed, not built, key missing, ...). */
 function status(slot: SpeechSlotView): string {
   if (slot.ready) return t('speech.reason.ready');
-  // Video transcription is built in F14: until then a complete selection still says so (the voice entry does not wait for it).
-  if (slot.slot === 'videoAsr' && slot.reasonKey === 'not-built') return t('speech.reason.videoNotBuilt');
   const choice = choiceOf(slot);
   return t(`speech.reason.${slot.reasonKey ?? 'none-selected'}`, { plan: choice?.plan ?? '' });
+}
+
+// F14.4: the translation service of video transcription (SetSpeechB), saved alone like the other selections.
+const videoTranslator = computed(() => speech.value.videoTranslator ?? '');
+const videoTranslatorChoices = computed(() => speech.value.videoTranslatorChoices ?? []);
+async function selectVideoTranslator(event: Event): Promise<void> {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = null;
+  try {
+    const instance = (event.target as HTMLSelectElement).value;
+    const result = await props.bridge.command(UI_COMMANDS.SelectSpeech, { expectedRevision: props.settings.revision, expectedFileHash: props.settings.fileHash, slot: 'videoTranslator', instance, model: '' });
+    if (result.value && (result.ok || result.error === 'conflict')) emit('settings', result.value as SettingsView);
+    if (!result.ok) error.value = { slot: 'videoTranslator', text: t(`speech.error.${result.error === 'range' ? 'range' : result.error === 'conflict' ? 'conflict' : 'failed'}`) };
+  } finally { busy.value = false; }
 }
 
 async function select(slot: SpeechSlotView, instance: string, model: string): Promise<void> {
@@ -90,6 +103,16 @@ function onModel(slot: SpeechSlotView, event: Event): void {
       </p>
       <p v-if="slot.slot === 'videoAsr' && slot.choices.some((c) => !c.selectable)" class="hint-text small" data-timecode-note>{{ t('speech.videoAsrTimecodes') }}</p>
       <p v-if="error?.slot === slot.slot" class="error-text small" role="alert">{{ error.text }}</p>
+      <template v-if="slot.slot === 'videoAsr'">
+        <SettingRow :title="t('speech.videoTranslation')" for-id="speech-videoTranslator">
+          <select id="speech-videoTranslator" class="field" :value="videoTranslator" :disabled="busy" data-video-translator @change="selectVideoTranslator">
+            <option value="">{{ t('speech.videoTranslationAuto') }}</option>
+            <option v-for="id in videoTranslatorChoices" :key="id" :value="id">{{ serviceName(id) }}</option>
+          </select>
+        </SettingRow>
+        <p class="hint-text small">{{ t('speech.videoTranslationHint') }}</p>
+        <p v-if="error?.slot === 'videoTranslator'" class="error-text small" role="alert">{{ error.text }}</p>
+      </template>
     </section>
   </div>
 </template>

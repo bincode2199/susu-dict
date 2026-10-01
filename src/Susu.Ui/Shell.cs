@@ -191,6 +191,7 @@ public sealed partial class ShellCoordinator
                 if (translations.Remove(kind, out var slot)) _ = slot.Session.CloseAsync(TimeSpan.FromSeconds(3));
                 if (kind == WindowKind.Ocr) Ocr?.Cancel(); // Esc/close stops the recognition too; its image lease goes as it unwinds
                 if (kind == WindowKind.Voice) CancelVoice(); // Esc/close discards the recording, stops transcription and releases the microphone
+                if (kind == WindowKind.Transcribe) CancelTranscribeWindow(); // Esc/close cancels the job; finished cues stay for reopen and export
                 break;
         }
         HideWindow(kind);
@@ -239,6 +240,7 @@ public sealed partial class ShellCoordinator
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
         else if (feature == FeatureRegistry.Ids.Voice) OpenVoice();
         else if (feature == FeatureRegistry.Ids.SystemAudio) OpenVoice(AudioSourceKind.SystemLoopback);
+        else if (feature == FeatureRegistry.Ids.Transcription) OpenTranscribe();
         // F08.2: selection/clipboard capture. The foreground snapshot is taken synchronously here, before any Su-Su
         // window can take focus; no Su-Su window is shown or activated until the capture has finished (UI03, SEL02).
         else if (feature == FeatureRegistry.Ids.Ocr) StartScreenCapture();
@@ -257,8 +259,6 @@ public sealed partial class ShellCoordinator
 
     /// <summary>F13.2: the same recorder over the system output (WASAPI loopback). The system-audio hotkey and tray entry use it in the voice window.</summary>
     public IAudioCapture? SystemAudioCapture { get; set; }
-    /// <summary>F14.2: the video job service (its own ASR and translation selection, results kept for the process). The Transcribe window (F14.4) answers its upload confirmation.</summary>
-    public VideoJobs? VideoJobs { get; set; }
 
     /// <summary>A screenshot capture finished (captured, cancelled or failed). A subscriber (F11.2/F11.3) owns and disposes
     /// <see cref="ScreenCaptureResult.Image"/>; with no subscriber the image lease is released at once.</summary>
@@ -399,7 +399,8 @@ public sealed partial class ShellCoordinator
             kind == WindowKind.Speech || UiCommands.IsAllowed(kind, UiCommands.SpeakCard) ? speechState : null,
             kind == WindowKind.Speech ? speechBar : null,
             kind == WindowKind.Ocr ? ocrView : null,
-            kind == WindowKind.Voice ? voiceView : null);
+            kind == WindowKind.Voice ? voiceView : null,
+            kind == WindowKind.Transcribe ? TranscribeForSnapshot() : null);
         session.Ready = true;
         session.PendingCards.Clear();
         Send(kind, session, UiMessageKind.Snapshot, null, null, JsonSerializer.SerializeToElement(payload, ContractsJson.Default.UiSnapshot));
@@ -486,6 +487,14 @@ public sealed partial class ShellCoordinator
             case UiCommands.StopRecording: return await StopRecordingAsync();
             case UiCommands.CancelRecording: return CancelVoiceCommand();
             case UiCommands.TranscribeRecorded: return TranscribeRecorded();
+            case UiCommands.PickMedia: return await PickMediaAsync();
+            case UiCommands.StartTranscription: return StartTranscription();
+            case UiCommands.PauseTranscription: return PauseTranscription();
+            case UiCommands.ResumeTranscription: return ResumeTranscription();
+            case UiCommands.CancelTranscription: return CancelTranscription();
+            case UiCommands.ConfirmTranscription: return ConfirmTranscription(Read(payload, ContractsJson.Default.TranscribeConfirmRequest));
+            case UiCommands.ChangeTranslator: return ChangeTranscribeService(Read(payload, ContractsJson.Default.TranscribeSwitchRequest));
+            case UiCommands.Export: return await ExportTranscriptAsync(Read(payload, ContractsJson.Default.TranscribeExportRequest));
             case UiCommands.SpeakCard: return await SpeakCardAsync(kind, Read(payload, ContractsJson.Default.SpeakCardRequest));
             case UiCommands.SpeechPlay: return PlayBarService(Read(payload, ContractsJson.Default.SpeechPlayRequest).Instance);
             case UiCommands.SpeechStop: Speech?.Player.Stop(); return Ok();
@@ -1090,7 +1099,7 @@ public sealed partial class ShellCoordinator
             services, accounts,
             new PromptView(s.Prompt.Level, s.Prompt.Profile, [.. s.Prompt.Scope], [.. PromptCatalog.Levels.Select(l => l.Id)], [.. PromptCatalog.AiInstances],
                 [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]),
-            new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr)),
+            new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr), s.Speech.VideoTranslator, VideoTranslatorChoices(s)),
             OcrSettingsOf(s));
     }
 
@@ -1116,7 +1125,7 @@ public sealed partial class ShellCoordinator
                 [.. p.Models.Select(m => new SpeechModelView(m.Id, m.Timecodes, SpeechCatalog.Encodable(m) && (slot != SpeechSlot.VideoAsr || m.Timecodes)))], reason);
         }).ToArray();
         // Pronunciation plays since F10.2 and voice/audio recording transcribes since F12.3; video transcription comes in F14.
-        string? why = SpeechProblem(s, slot) ?? (slot == SpeechSlot.VideoAsr ? "not-built" : null);
+        string? why = SpeechProblem(s, slot);
         return new SpeechSlotView(speechSlotNames[slot], selection.Instance, selection.Model, choices, why is null, why);
     }
 
@@ -1139,6 +1148,13 @@ public sealed partial class ShellCoordinator
     /// </summary>
     private CommandResult SelectSpeech(SpeechSelectRequest request)
     {
+        if (request.Slot == "videoTranslator")
+        {
+            // F14.4: the translation service of video transcription, independent of the main window (empty: the first enabled service).
+            var current = config.State.Effective;
+            if (request.Instance != "" && !VideoTranslatorChoices(current).Contains(request.Instance)) return new CommandResult(false, "range");
+            return Outcome(config.Save(current with { Speech = current.Speech with { VideoTranslator = request.Instance } }, request.ExpectedRevision, request.ExpectedFileHash));
+        }
         var slot = speechSlotNames.Where(kv => kv.Value == request.Slot).Select(kv => (SpeechSlot?)kv.Key).FirstOrDefault() ?? throw new ArgumentException("slot");
         var selection = new SpeechSelection(request.Instance, request.Model);
         if (SpeechCatalog.Check(slot, selection) is { } problem) return new CommandResult(false, problem);
@@ -1183,6 +1199,9 @@ public sealed partial class ShellCoordinator
             case "system-audio":
                 OpenVoice(AudioSourceKind.SystemLoopback);
                 break;
+            case "transcription":
+                OpenTranscribe();
+                break;
             case "voice":
                 OpenVoice();
                 break;
@@ -1197,6 +1216,12 @@ public sealed partial class ShellCoordinator
     private (FeatureState State, string? ReasonKey) Resolve(string feature)
     {
         var (state, reason) = features.Resolve(feature, capabilityReady);
+        if (feature == FeatureRegistry.Ids.Transcription && videoJobs is not null)
+        {
+            // F14.4 (A03): the Transcribe entry needs the video ASR selection to work and return timecodes; text-only ASR greys it with the prerequisite.
+            if (SpeechProblem(config.State.Effective, SpeechSlot.VideoAsr) is not null) return (FeatureState.Unavailable, "feature.noService.videoAsr");
+            return (FeatureState.Available, null);
+        }
         if (state == FeatureState.InDevelopment && options.DevPreview) return (FeatureState.Available, null);
         // A03: video transcription needs a service that returns timecodes. Voice and audio entries do not (text-only is fine), so
         // with only a text-only service the video entry stays greyed with that prerequisite, never an invented start/end.

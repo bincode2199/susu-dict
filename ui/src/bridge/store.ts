@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { CaptureView, CardPatch, ErrorBarView, OcrView, SettingsView, SpeechBarView, SpeechStateView, TranslationSnapshot, TrayView, UiSnapshot, VoiceView, WindowView } from '@protocol/ui';
+import type { CaptureView, CardPatch, ErrorBarView, OcrView, SettingsView, SpeechBarView, SpeechStateView, TranscribeCueView, TranscribeView, TranslationSnapshot, TrayView, UiSnapshot, VoiceView, WindowView } from '@protocol/ui';
 import type { Inbound } from './bridge';
 
 /**
@@ -23,11 +23,13 @@ export interface UiState {
   ocr: OcrView | null;
   /** F12.3 voice window: the recording / transcription state (phases and numbers only, never audio). */
   voice: VoiceView | null;
+  /** F14.4 Transcribe window: the file, job phase, stage progress and the incremental cue list (never a path or a media token). */
+  transcribe: TranscribeView | null;
   hiddenCount: number;
 }
 
 export function createStore(onWindow?: (view: WindowView) => void): { state: UiState; inbound: Inbound } {
-  const state = reactive<UiState>({ window: null, translation: null, settings: null, tray: null, capture: null, errorBar: null, speech: null, speechBar: null, ocr: null, voice: null, hiddenCount: 0 });
+  const state = reactive<UiState>({ window: null, translation: null, settings: null, tray: null, capture: null, errorBar: null, speech: null, speechBar: null, ocr: null, voice: null, transcribe: null, hiddenCount: 0 });
   const cardRevision = new Map<string, number>();
   let latestRevision = 0;
   let early: CardPatch[] = []; // patches of a newer generation that arrived before its snapshot event
@@ -59,6 +61,18 @@ export function createStore(onWindow?: (view: WindowView) => void): { state: UiS
     }
   };
 
+  // F14.4: view events carry no cues (they arrive one by one as transcribe.cue); an empty list of the same job keeps what the page has.
+  const adoptTranscribe = (view: TranscribeView) => {
+    const same = state.transcribe !== null && state.transcribe.jobId !== undefined && state.transcribe.jobId !== null && state.transcribe.jobId === view.jobId;
+    state.transcribe = view.cues.length === 0 && same ? { ...view, cues: state.transcribe!.cues } : view;
+  };
+  const upsertCue = (cue: TranscribeCueView) => {
+    if (!state.transcribe) return;
+    const cues = state.transcribe.cues;
+    const index = cues.findIndex((c) => c.id === cue.id);
+    if (index >= 0) cues[index] = cue; else cues.push(cue);
+  };
+
   const inbound: Inbound = {
     onSnapshot(payload) {
       const snapshot = payload as UiSnapshot;
@@ -71,6 +85,7 @@ export function createStore(onWindow?: (view: WindowView) => void): { state: UiS
       state.speechBar = snapshot.speechBar ?? null;
       state.ocr = snapshot.ocr ?? null;
       state.voice = snapshot.voice ?? null;
+      state.transcribe = snapshot.transcribe ?? null;
       early = [];
       adoptTranslation(snapshot.translation ?? null);
       onWindow?.(snapshot.window);
@@ -85,6 +100,8 @@ export function createStore(onWindow?: (view: WindowView) => void): { state: UiS
       else if (name === 'errorbar') state.errorBar = payload as ErrorBarView;
       else if (name === 'ocr') state.ocr = payload as OcrView;
       else if (name === 'voice') state.voice = payload as VoiceView;
+      else if (name === 'transcribe') adoptTranscribe(payload as TranscribeView);
+      else if (name === 'transcribe.cue') upsertCue(payload as TranscribeCueView);
       else if (name === 'speech') {
         const next = payload as SpeechStateView;
         if (!state.speech || next.generation >= state.speech.generation) state.speech = next; // never step back to an older request

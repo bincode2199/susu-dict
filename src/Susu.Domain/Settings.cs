@@ -102,7 +102,7 @@ public static class SettingsText
         }
         b.Append('|').AppendJoin(';', s.Services).Append('|').AppendJoin(';', s.TranslationOrder).Append('|').AppendJoin(';', s.Prompts)
             .Append('|').Append(s.Prompt.Level).Append(',').Append(s.Prompt.Profile).Append(',').AppendJoin(';', s.Prompt.Scope)
-            .Append('|').Append(s.Speech.Tts).Append(',').Append(s.Speech.Asr).Append(',').Append(s.Speech.VideoAsr)
+            .Append('|').Append(s.Speech.Tts).Append(',').Append(s.Speech.Asr).Append(',').Append(s.Speech.VideoAsr).Append(",vt=").Append(s.Speech.VideoTranslator)
             .Append('|').Append(s.Ocr.Service).Append(',').Append(s.Ocr.AutoTranslate).Append(',').Append(s.Ocr.KeepScreenshots).Append(',').Append(s.Ocr.RetentionDays);
         return b.ToString();
     }
