@@ -71,11 +71,11 @@ public class SpeechSettingsTests
         Assert.Equal(("openai-asr", "whisper-1"), (speech.VideoAsr.Instance, speech.VideoAsr.Model));
         Assert.True(speech.Tts.Ready); // F10.2: native SAPI is installed and needs no credentials
         Assert.Null(speech.Tts.ReasonKey);
-        Assert.Equal("not-installed", speech.Asr.ReasonKey);
-        Assert.Equal("not-installed", speech.VideoAsr.ReasonKey);
-        // Planned packages are catalog entries only: listed, not installed, never implemented.
-        Assert.All(rig.View.Services.Where(s => s.Capability is "tts" or "asr"), s => Assert.False(s.Implemented));
-        Assert.All(speech.Asr.Choices, c => Assert.False(c.Installed));
+        Assert.Equal("missing-credential", speech.Asr.ReasonKey); // F12.2 installed the ASR packages; they wait for a key (and the voice entry, F12.3)
+        Assert.Equal("missing-credential", speech.VideoAsr.ReasonKey);
+        // F12.2: the ASR packages ship; only the entry points (F12.3) are still missing.
+        Assert.All(rig.View.Services.Where(s => s.Capability is "tts" or "asr"), s => Assert.False(s.Implemented)); // ServiceView.Implemented is about the translation catalog, unchanged
+        Assert.All(speech.Asr.Choices, c => Assert.True(c.Installed));
     }
 
     [Fact]
@@ -180,8 +180,8 @@ public class SpeechSettingsTests
         var grants = rig.Config.State.Effective.Accounts.Single(a => a.Id == "openai").Grants;
         Assert.Contains(grants, g => g.Package == "app.susu.openai-asr" && g.Origin == "https://api.openai.com:443" && g.Use == "header:Authorization");
         Assert.Contains(grants, g => g.Package == "app.susu.openai");
-        // Still not ready to record: the package is not installed until F12.
-        Assert.Equal("not-installed", rig.Speech.Asr.ReasonKey);
+        // Still not ready to record: the voice entry comes in F12.3.
+        Assert.Equal("not-built", rig.Speech.Asr.ReasonKey);
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public class SpeechSettingsTests
     {
         Assert.All(SpeechCatalog.All.Where(p => !p.Native), p =>
         {
-            Assert.Equal(p.Capability == Capability.Tts, p.Installed); // F10.1 installed P-S01-P-S03; ASR comes in F12
+            Assert.True(p.Installed); // F10.1 installed P-S01-P-S03, F12.2 P-R01 and P-R02
             Assert.NotNull(BuiltInCatalog.Find(p.InstanceId));
             Assert.Equal(BuiltInCatalog.Find(p.InstanceId)!.Secrets, p.SecretNames);
             Assert.Contains(p.Capability, BuiltInCatalog.Find(p.InstanceId)!.Capabilities);
