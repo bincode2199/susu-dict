@@ -1098,7 +1098,7 @@ public sealed partial class ShellCoordinator
             string? reason = SpeechCatalog.CheckPackage(slot, p);
             string availability = p.Credentials.Count == 0 || SpeechCredentialsReady(s, p) ? nameof(Availability.Ready) : nameof(Availability.MissingCredential);
             return new SpeechChoiceView(p.InstanceId, p.Native, p.Installed, p.Plan, p.Timecodes, reason is null, availability,
-                [.. p.Models.Select(m => new SpeechModelView(m.Id, m.Timecodes, slot != SpeechSlot.VideoAsr || m.Timecodes))], reason);
+                [.. p.Models.Select(m => new SpeechModelView(m.Id, m.Timecodes, SpeechCatalog.Encodable(m) && (slot != SpeechSlot.VideoAsr || m.Timecodes)))], reason);
         }).ToArray();
         string? why = null;
         if (SpeechCatalog.Find(selection.Instance) is not { } package) why = slot == SpeechSlot.VideoAsr ? SpeechCatalog.NeedsTimecodes : "none-selected";

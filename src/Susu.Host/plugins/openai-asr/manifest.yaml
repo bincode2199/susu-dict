@@ -1,0 +1,22 @@
+id: app.susu.openai-asr
+name: OpenAI speech to text
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - asr
+hosts:
+  - api.openai.com
+credentialUse:
+  - apiKey
+config:
+  type: object
+  properties:
+    baseUrl:
+      type: string
+      format: uri
+      title: API address
+      x-susu:
+        group: advanced
+        placeholder: https://api.openai.com
+        help: An OpenAI-compatible server; leave empty for api.openai.com.

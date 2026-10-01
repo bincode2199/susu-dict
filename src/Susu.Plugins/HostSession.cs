@@ -178,11 +178,11 @@ public sealed class HostSession : IHostSessionHandle
     /// every other response file of the call) is released. The caller collects them with <see cref="TakeAdoptedFiles"/>,
     /// or gives up on the call with <see cref="Abandon"/>; either way nothing leaks.</param>
     public (string RequestId, int CallId, Task<IpcEnvelope> Result) Invoke(string pluginId, string capability, string requestJson, string jobId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, string configJson = "{}", IEnumerable<string>? handles = null, string? instanceId = null, string? signer = null, Func<string, ValueTask>? onChunk = null,
-        bool adoptResultFiles = false)
+        bool adoptResultFiles = false, long? maxRequestBytes = null)
     {
         int callId = Interlocked.Increment(ref nextCall);
         string requestId = $"r{callId}-{Guid.NewGuid():N}";
-        var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles, instanceId: instanceId, signer: signer);
+        var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles, instanceId: instanceId, signer: signer, maxRequestBytes: maxRequestBytes);
         var waiter = calls[requestId] = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         callGrants[requestId] = grant.Grant;
         if (adoptResultFiles) lock (adoptGate) adoptPending.Add(requestId);

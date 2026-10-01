@@ -61,7 +61,7 @@ public sealed record SpeechSettings(SpeechSelection Tts, SpeechSelection Asr, Sp
 }
 
 /// <summary>Timecodes: the model returns segments with start/end (verbose_json). A text-only model never gets invented times (A03).</summary>
-public sealed record SpeechModel(string Id, bool Timecodes);
+public sealed record SpeechModel(string Id, bool Timecodes, AsrLimits? Limits = null);
 
 /// <summary>
 /// Catalog metadata of a planned speech service (DEV-PLAN 5: P-S01–P-S03, P-R01, P-R02, and native SAPI): what it
@@ -113,7 +113,13 @@ public static class SpeechCatalog
     public static IEnumerable<SpeechPackage> InstalledPlugins => All.Where(p => p.Installed && !p.Native);
 
     /// <summary>Reason codes of <see cref="Check"/>; the page shows the matching explanation.</summary>
-    public const string WrongCapability = "capability", NeedsTimecodes = "needs-timecodes", UnknownModel = "model";
+    public const string WrongCapability = "capability", NeedsTimecodes = "needs-timecodes", UnknownModel = "model", NoAudioFormat = "format";
+
+    private static readonly IReadOnlyList<AsrFormat> WavOnly = [AsrFormat.Wav16kMono];
+    /// <summary>Multipart: boundary, the model/response_format/granularity/language fields and part headers, well under 2 KiB.</summary>
+    public static readonly AsrLimits OpenAiLimits = new(WavOnly, MaxBytes: 24_000_000, MaxRequestBytes: 25_000_000, MaxSeconds: 300, AsrUpload.Multipart, RequestOverheadBytes: 2048);
+    /// <summary>Base64 inlineData: the JSON wrapper and the prompt, bounded generously.</summary>
+    public static readonly AsrLimits GeminiLimits = new(WavOnly, MaxBytes: 12_000_000, MaxRequestBytes: 18_000_000, MaxSeconds: 300, AsrUpload.Base64Json, RequestOverheadBytes: 4096);
 
     public static readonly IReadOnlyList<SpeechPackage> All =
     [
@@ -124,14 +130,15 @@ public static class SpeechCatalog
             "https://texttospeech.googleapis.com", [new("apiKey", "header:X-Goog-Api-Key")], []),
         new(TencentTts, "app.susu.tencent-tts", "F10.1 P-S03", Capability.Tts, false, true,
             "https://tts.tencentcloudapi.com", [new("secretId", "signer:tencent-tc3"), new("secretKey", "signer:tencent-tc3")], []),
-        // P-R01: whisper-1 returns segments (verbose_json); the gpt-4o transcribe models return text only.
-        new(OpenAiAsr, "app.susu.openai-asr", "F12.2 P-R01", Capability.Asr, false, false,
+        // P-R01: whisper-1 returns segments (verbose_json); the gpt-4o transcribe models return text only. WAV 16 kHz mono 16-bit,
+        // multipart upload (PLAN 4.7.2): encoded file at most 24 MB, whole request at most 25 MB, 300 s per chunk.
+        new(OpenAiAsr, "app.susu.openai-asr", "F12.2 P-R01", Capability.Asr, false, true,
             "https://api.openai.com", [new("apiKey", "header:Authorization")],
-            [new("whisper-1", true), new("gpt-4o-transcribe", false), new("gpt-4o-mini-transcribe", false)]),
-        // P-R02: inlineData in, text out; no timecodes, so never offered for video.
-        new(GeminiAsr, "app.susu.gemini-asr", "F12.2 P-R02", Capability.Asr, false, false,
+            [new("whisper-1", true, OpenAiLimits), new("gpt-4o-transcribe", false, OpenAiLimits), new("gpt-4o-mini-transcribe", false, OpenAiLimits)]),
+        // P-R02: inlineData in, text out; no timecodes, so never offered for video. Base64 and the JSON prompt count in the 18 MB request.
+        new(GeminiAsr, "app.susu.gemini-asr", "F12.2 P-R02", Capability.Asr, false, true,
             "https://generativelanguage.googleapis.com", [new("apiKey", "header:X-Goog-Api-Key")],
-            [new("gemini-2.5-flash", false)]),
+            [new("gemini-2.5-flash", false, GeminiLimits)]),
     ];
 
     public static SpeechPackage? Find(string instanceId) => All.FirstOrDefault(p => p.InstanceId == instanceId);
@@ -151,10 +158,16 @@ public static class SpeechCatalog
         if (Find(selection.Instance) is not { } package || package.Capability != CapabilityOf(slot)) return WrongCapability;
         if (package.Models.Count == 0) return selection.Model.Length == 0 ? null : UnknownModel;
         if (package.Models.FirstOrDefault(m => m.Id == selection.Model) is not { } model) return UnknownModel;
+        if (!Encodable(model)) return NoAudioFormat;
         return slot == SpeechSlot.VideoAsr && !model.Timecodes ? NeedsTimecodes : null;
     }
 
+    /// <summary>An ASR model can be chosen only when its declared formats and the local encoders have something in common (A04).</summary>
+    public static bool Encodable(SpeechModel model) => model.Limits is null || AsrEncodings.Negotiate(model.Limits) is not null;
+
     /// <summary>Why a whole package cannot be chosen for a slot (a text-only ASR for video), or null.</summary>
     public static string? CheckPackage(SpeechSlot slot, SpeechPackage package)
-        => package.Capability != CapabilityOf(slot) ? WrongCapability : slot == SpeechSlot.VideoAsr && !package.Timecodes ? NeedsTimecodes : null;
+        => package.Capability != CapabilityOf(slot) ? WrongCapability
+            : package.Models.Count > 0 && !package.Models.Any(Encodable) ? NoAudioFormat
+            : slot == SpeechSlot.VideoAsr && !package.Timecodes ? NeedsTimecodes : null;
 }

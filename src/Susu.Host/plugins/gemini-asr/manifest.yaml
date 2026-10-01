@@ -1,0 +1,22 @@
+id: app.susu.gemini-asr
+name: Gemini speech to text
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - asr
+hosts:
+  - generativelanguage.googleapis.com
+credentialUse:
+  - apiKey
+config:
+  type: object
+  properties:
+    baseUrl:
+      type: string
+      format: uri
+      title: API address
+      x-susu:
+        group: advanced
+        placeholder: https://generativelanguage.googleapis.com
+        help: Leave empty for the Google Generative Language API.

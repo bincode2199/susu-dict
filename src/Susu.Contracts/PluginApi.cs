@@ -47,6 +47,10 @@ public enum Capability
 /// <summary>The request of the <c>ocr</c> capability (PLAN 4.4 <c>ocr(req: { image: FileHandle; lang?: string })</c>).</summary>
 [TsExport("plugin")] public sealed record OcrRequest(FileHandleInfo Image, string? Lang = null);
 
+/// <summary>The request of the <c>asr</c> capability (PLAN 4.4, F12.2): one audio chunk as an opaque handle plus host-owned
+/// metadata (<c>DurationMs</c> set), the model id, the requested output ("text" or "segments") and an optional language hint
+/// (ISO-639-1/BCP-47 primary subtag). The plugin never sees the audio bytes (B02).</summary>
+[TsExport("plugin")] public sealed record AsrRequest(FileHandleInfo Audio, string Model, string Output, string? Lang = null);
 [TsExport("plugin")] public sealed record AsrSegment(double Start, double End, string Text);
 /// <summary><c>kind</c> is "text" (Text set) or "segments" (Segments set); must match the requested output.</summary>
 [TsExport("plugin")] public sealed record AsrResult(string Kind, string? Text = null, AsrSegment[]? Segments = null);

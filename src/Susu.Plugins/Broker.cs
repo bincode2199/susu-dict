@@ -66,6 +66,8 @@ public sealed class Broker : IDisposable
         public HashSet<string> Handles { get; } = handles;
         public DateTime Expires { get; } = expires;
         public bool Revoked { get; set; }
+        /// <summary>F12.2: host-set cap on one upload body of this call (the ASR model's maxRequestBytes); null = only the global limits.</summary>
+        public long? MaxRequestBytes { get; set; }
         public int InFlight;
         /// <summary>S02: which configured instance this call belongs to (defaults to PluginId when the
         /// caller does not track instances separately from packages yet) and the package's confirmed
@@ -136,12 +138,13 @@ public sealed class Broker : IDisposable
 
     /// <param name="expiresAt">Test-only override of the 10-minute default grant lifetime (F04.3 S09: a call token is rejected once expired).</param>
     public GrantInfo Issue(string requestId, string pluginId, int callId, IEnumerable<string> origins, IEnumerable<string>? secrets = null, IEnumerable<string>? handles = null,
-        DateTime? expiresAt = null, string? instanceId = null, string? signer = null)
+        DateTime? expiresAt = null, string? instanceId = null, string? signer = null, long? maxRequestBytes = null)
     {
         var info = new GrantInfo(Convert.ToHexString(RandomNumberGenerator.GetBytes(24)), requestId, pluginId, callId,
             [.. origins.Select(o => (Uri.TryCreate(o, UriKind.Absolute, out var uri) ? Origin(uri) : null)
                 ?? throw new ArgumentException($"Invalid origin '{o}': expected an absolute http(s) origin such as https://api.example.com", nameof(origins)))],[.. secrets ?? []], [.. handles ?? []],
             expiresAt ?? DateTime.UtcNow.AddMinutes(10), instanceId ?? pluginId, signer ?? $"unsigned:{pluginId}");
+        info.MaxRequestBytes = maxRequestBytes;
         lock (grants) grants[info.Grant] = info;
         return info;
     }
@@ -552,7 +555,7 @@ public sealed class Broker : IDisposable
         foreach (string handle in bodyHandles) if (!grant.Handles.Contains(handle)) throw new BrokerDenyException("file handle not granted to this call");
 
         return new BrokerHttpRequest(method, uri, headers, body, bodyFiles, credentials, (spec, name) => ResolveSecret(grant, spec, name, origin, resolvedSecretValues), sign, responseType, responseFiles, errorPointer, LocalOriginApproved: true,
-            AllowedOrigins: grant.Origins); // PLAN 4.5 item 3 / S06: every followed redirect hop stays inside the call's granted origins
+            AllowedOrigins: grant.Origins, MaxRequestBytes: grant.MaxRequestBytes); // PLAN 4.5 item 3 / S06: every followed redirect hop stays inside the call's granted origins
     }
 
     private string ResolveSecret(GrantInfo grant, CredentialSpec spec, string secretName, string origin, List<string> resolvedSecretValues)

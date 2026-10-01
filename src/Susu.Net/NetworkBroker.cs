@@ -52,7 +52,8 @@ public sealed record BrokerHttpRequest(
     IReadOnlyList<ResponseFileSpec> ResponseFiles,
     string? ErrorPointer,
     bool LocalOriginApproved,
-    IReadOnlySet<string>? AllowedOrigins = null);
+    IReadOnlySet<string>? AllowedOrigins = null,
+    long? MaxRequestBytes = null);
 
 public sealed record BrokerFile(string Name, byte[] Bytes, string Mime);
 
@@ -103,6 +104,8 @@ public sealed class NetworkBrokerOptions
 /// </summary>
 public sealed class NetworkBroker : IDisposable
 {
+    /// <summary>F12.2: a JSON body that carries Base64 files is written without escaping '+' (as u002B, 6 bytes) so the request is the Base64 length plus its wrapper, which the ASR request-size estimate relies on.</summary>
+    private static readonly System.Text.Json.JsonSerializerOptions Base64JsonOptions = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly HashSet<string> alwaysAllowedResponseHeaders = new(StringComparer.OrdinalIgnoreCase) { "content-type", "retry-after" };
     private readonly SocketsHttpHandler handler;
     private readonly HttpClient client;
@@ -211,7 +214,7 @@ public sealed class NetworkBroker : IDisposable
 
         byte[] finalBody = request.Body.Kind switch
         {
-            BodyKind.Json => System.Text.Encoding.UTF8.GetBytes(json!.ToJsonString()),
+            BodyKind.Json => System.Text.Encoding.UTF8.GetBytes(json!.ToJsonString(request.BodyFiles.Count > 0 ? Base64JsonOptions : null)),
             BodyKind.Text => System.Text.Encoding.UTF8.GetBytes(request.Body.Text ?? ""),
             BodyKind.File => request.Body.FileBytes ?? [],
             BodyKind.Multipart or BodyKind.None => [],
@@ -260,6 +263,9 @@ public sealed class NetworkBroker : IDisposable
 
             using var httpRequest = new HttpRequestMessage(new HttpMethod(method), uri);
             HttpContent? content = BuildContent(request.Body, headers, body);
+            // F12.2 (PLAN 4.7.2): the whole upload body, multipart or Base64 overhead included, stays within the model's maxRequestBytes.
+            if (request.MaxRequestBytes is { } cap && content?.Headers.ContentLength is { } length && length > cap)
+                return new BrokerFailure("bad_response", $"request body {length} bytes exceeds the {cap} byte request limit");
             if (content is not null) httpRequest.Content = content;
             foreach (var header in headers)
             {

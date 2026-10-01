@@ -132,7 +132,7 @@ export interface SusuPlugin {
   detect?(req: { text: string }, ctx: Context): Promise<DetectCandidate[]>;
   ocr?(req: { image: string; lang?: string }, ctx: Context): Promise<OcrResult>;
   tts?(req: { text: string; lang: string; voice?: string }, ctx: Context): Promise<{ audio: string }>;
-  asr?(req: { audio: string; model: string; output: 'text' | 'segments'; lang?: string }, ctx: Context): Promise<AsrResult>;
+  asr?(req: AsrRequest, ctx: Context): Promise<AsrResult>;
   vocab?(req: VocabRequest, ctx: Context): Promise<VocabResult>;
   validate?(ctx: Context): Promise<void>;
   voices?(ctx: Context): Promise<Voice[]>;
