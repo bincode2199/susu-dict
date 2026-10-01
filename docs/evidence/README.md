@@ -20,5 +20,6 @@ What has been delivered and verified. [PROGRESS](PROGRESS.md) is the one-page cu
 | [F10](F10/F10.md) | Pronunciation |
 | [F11](F11/F11.md) | Screenshot OCR |
 | [F12](F12/F12.md) | Microphone recording and ASR |
+| [F13](F13/F13.md) | System audio translation |
 
 New records are created from [MODULE-TEMPLATE](../development/MODULE-TEMPLATE.md).

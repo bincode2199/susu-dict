@@ -57,6 +57,7 @@ Each folder has a `README.md` that indexes its documents. Every document names i
     - [F10](docs/evidence/F10/F10.md): pronunciation.
     - [F11](docs/evidence/F11/F11.md): screenshot OCR.
     - [F12](docs/evidence/F12/F12.md): microphone recording and ASR.
+    - [F13](docs/evidence/F13/F13.md): system audio translation.
   - [Windows VMs](docs/vm/README.md): the development and clean-test virtual machines.
     - [WINDOWS-VM-OPERATIONS](docs/vm/WINDOWS-VM-OPERATIONS.md) · 运行与维护手册: current spec, daily operation, maintenance, troubleshooting, rebuild.
     - [WINDOWS-VM-DEPLOYMENT](docs/vm/WINDOWS-VM-DEPLOYMENT.md) · 部署记录: what was deployed and verified.
