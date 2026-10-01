@@ -232,12 +232,13 @@ public sealed partial class ShellCoordinator
         {
             // Unavailable: no action (PLAN 1.2). A registered OCR chord whose service became unusable says why (DESIGN 9).
             if (feature == FeatureRegistry.Ids.Ocr && featureState == FeatureState.Unavailable && Ocr is not null) ReportOcrUnavailable(reasonKey);
-            if (feature == FeatureRegistry.Ids.Voice && featureState == FeatureState.Unavailable && Asr is not null) ReportVoiceUnavailable(reasonKey);
+            if (feature is FeatureRegistry.Ids.Voice or FeatureRegistry.Ids.SystemAudio && featureState == FeatureState.Unavailable && Asr is not null) ReportVoiceUnavailable(reasonKey);
             return;
         }
         hotkeyAt = System.Diagnostics.Stopwatch.GetTimestamp();
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
         else if (feature == FeatureRegistry.Ids.Voice) OpenVoice();
+        else if (feature == FeatureRegistry.Ids.SystemAudio) OpenVoice(AudioSourceKind.SystemLoopback);
         // F08.2: selection/clipboard capture. The foreground snapshot is taken synchronously here, before any Su-Su
         // window can take focus; no Su-Su window is shown or activated until the capture has finished (UI03, SEL02).
         else if (feature == FeatureRegistry.Ids.Ocr) StartScreenCapture();
@@ -253,6 +254,9 @@ public sealed partial class ShellCoordinator
 
     /// <summary>F12.1 microphone port (ARCHITECTURE 7 <c>IAudioCapture</c>). No entry point reaches it until the Voice feature resolves Available (F12.3).</summary>
     public IAudioCapture? AudioCapture { get; set; }
+
+    /// <summary>F13.2: the same recorder over the system output (WASAPI loopback). The system-audio hotkey and tray entry use it in the voice window.</summary>
+    public IAudioCapture? SystemAudioCapture { get; set; }
 
     /// <summary>A screenshot capture finished (captured, cancelled or failed). A subscriber (F11.2/F11.3) owns and disposes
     /// <see cref="ScreenCaptureResult.Image"/>; with no subscriber the image lease is released at once.</summary>
@@ -1151,7 +1155,7 @@ public sealed partial class ShellCoordinator
             var (state, reason) = Resolve(item.Feature);
             string chord = item.Hotkey is not null && chords.TryGetValue(item.Hotkey, out var c) ? c : "";
             // A recording in progress keeps its entry usable (and marked) so the window can be brought back from the tray.
-            if (item.Id == "voice" && recording is { } active)
+            if ((item.Id == "voice" && recording is { Source: AudioSourceKind.Microphone } || item.Id == "system-audio" && recording is { Source: AudioSourceKind.SystemLoopback }) && recording is { } active)
                 return new TrayItemView(item.Id, chord, true, null, item.SeparatorBefore, active.Phase == RecordingPhase.Paused ? "paused" : "recording");
             return new TrayItemView(item.Id, chord, state == FeatureState.Available, state == FeatureState.Available ? null : reason, item.SeparatorBefore);
         })]);
@@ -1161,7 +1165,7 @@ public sealed partial class ShellCoordinator
     {
         var item = trayLayout.FirstOrDefault(t => t.Id == id);
         if (item.Id is null) throw new ArgumentException("unknown-item");
-        if (item.Feature is not null && Resolve(item.Feature).State != FeatureState.Available && !(id == "voice" && recording is not null)) return new CommandResult(false, "unavailable");
+        if (item.Feature is not null && Resolve(item.Feature).State != FeatureState.Available && !(id == "voice" && recording is { Source: AudioSourceKind.Microphone } || id == "system-audio" && recording is { Source: AudioSourceKind.SystemLoopback })) return new CommandResult(false, "unavailable");
         HideWindow(WindowKind.Tray);
         switch (id)
         {
@@ -1173,6 +1177,9 @@ public sealed partial class ShellCoordinator
             case "clipboard":
                 if (capture is null) return new CommandResult(false, "unavailable");
                 _ = CaptureAsync(capture, capture.CaptureAsync(CaptureTrigger.Clipboard));
+                break;
+            case "system-audio":
+                OpenVoice(AudioSourceKind.SystemLoopback);
                 break;
             case "voice":
                 OpenVoice();

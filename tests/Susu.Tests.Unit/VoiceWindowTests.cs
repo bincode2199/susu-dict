@@ -33,9 +33,10 @@ public sealed class VoiceWindowTests
     }
 
     /// <summary>A recording the test drives: levels, pause/resume, interruption, stop with audio.</summary>
-    private sealed class FakeSession(Func<RecordedAudio?> audio) : IRecordingSession
+    private sealed class FakeSession(Func<RecordedAudio?> audio, AudioSourceKind source = AudioSourceKind.Microphone) : IRecordingSession
     {
         private readonly TaskCompletionSource<RecordingResult> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public AudioSourceKind Source => source;
         public RecordingPhase Phase { get; private set; } = RecordingPhase.Recording;
         public TimeSpan Captured { get; set; }
         public bool CancelRequested, Disposed;
@@ -48,10 +49,10 @@ public sealed class VoiceWindowTests
         public void Cancel() { CancelRequested = true; done.TrySetResult(RecordingResult.Cancelled()); }
         public void Dispose() { Disposed = true; Cancel(); }
         public Task<RecordingResult> Completion => done.Task;
-        public void End(RecordingStatus status, MicFailure? reason = null, string? error = null) => done.TrySetResult(new RecordingResult(status, status == RecordingStatus.Failed ? null : audio(), reason, error));
+        public void End(RecordingStatus status, MicFailure? reason = null, string? error = null) => done.TrySetResult(new RecordingResult(status, status == RecordingStatus.Failed ? null : audio(), reason, error, source));
     }
 
-    private sealed class FakeCapture(Rig rig) : IAudioCapture
+    private sealed class FakeCapture(Rig rig, AudioSourceKind source = AudioSourceKind.Microphone) : IAudioCapture
     {
         public readonly Queue<RecordingStartResult> Next = new();
         public readonly List<FakeSession> Sessions = [];
@@ -61,7 +62,7 @@ public sealed class VoiceWindowTests
         {
             Starts++;
             if (Next.Count > 0) return Task.FromResult(Next.Dequeue());
-            var session = new FakeSession(rig.Audio);
+            var session = new FakeSession(rig.Audio, source);
             Sessions.Add(session);
             return Task.FromResult(RecordingStartResult.Started(session));
         }
@@ -75,6 +76,7 @@ public sealed class VoiceWindowTests
         public readonly ConfigService Config;
         public readonly ShellCoordinator Shell;
         public readonly FakeCapture Capture;
+        public readonly FakeCapture SystemCapture;
         public readonly FileLeases Leases = new(TestTemp.NewDir("susu-voicewin-leases"));
         public readonly AsrJob Job;
         public FakeAsrProvider Provider;
@@ -92,6 +94,7 @@ public sealed class VoiceWindowTests
             var features = new FeatureRegistry();
             features.Register(new FeatureDescriptor(FeatureRegistry.Ids.InputTranslation, FeatureState.Available, null, [Capability.Translate]));
             features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Voice, FeatureState.Available, null, [Capability.Asr]));
+            features.Register(new FeatureDescriptor(FeatureRegistry.Ids.SystemAudio, FeatureState.Available, null, [Capability.Asr]));
             features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Transcription, FeatureState.InDevelopment, "feature.inDevelopment", []));
             AsrReady = asrReady;
             var translator = new ScriptedProvider("svc", ScriptedProvider.Generous, new Step.Echo("T:"));
@@ -102,6 +105,8 @@ public sealed class VoiceWindowTests
             Job = new AsrJob(() => AsrReady ? Provider : null, new LeasedFiles(Leases), async text => { Translated.Add(text); await Shell.SubmitRecognizedTextAsync(text, WindowKind.Voice); }, () => true);
             Capture = new FakeCapture(this);
             Shell.AudioCapture = Capture;
+            SystemCapture = new FakeCapture(this, AudioSourceKind.SystemLoopback);
+            Shell.SystemAudioCapture = SystemCapture;
             Shell.Asr = Job;
             Shell.RecordingStatusChanged += (phase, captured) => TrayStatus.Add((phase, captured));
             Shell.Start();
@@ -118,6 +123,13 @@ public sealed class VoiceWindowTests
         }
 
         public FakeSession Session => Capture.Sessions[^1];
+        public FakeSession SystemSession => SystemCapture.Sessions[^1];
+
+        public void OpenSystemAudio()
+        {
+            Shell.OnHotkey("audioTranslate");
+            Ready(WindowKind.Voice);
+        }
 
         public void Ready(WindowKind kind)
         {
@@ -604,5 +616,130 @@ public sealed class VoiceWindowTests
             foreach (var other in Enum.GetValues<WindowKind>().Where(k => k != WindowKind.Voice)) Assert.False(UiCommands.IsAllowed(other, name), $"{other} {name}");
         }
         Assert.True(UiCommands.IsAllowed(WindowKind.Voice, UiCommands.Minimize));
+    }
+
+    // ---------- F13.2 system audio in the same window ----------
+
+    [Fact] // the system-audio entry needs the same ASR service as Voice: greyed with feature.noService.asr until it can run
+    public void System_audio_entry_needs_a_usable_asr_service()
+    {
+        using var rig = new Rig(asrReady: false);
+        var item = rig.Shell.TrayModel().Items.Single(i => i.Id == "system-audio");
+        Assert.False(item.Enabled);
+        Assert.Equal("feature.noService.asr", item.ReasonKey);
+        Assert.False(rig.Platform.Registered.ContainsKey("audioTranslate"));
+        rig.Shell.OnHotkey("audioTranslate");
+        Assert.DoesNotContain("show:Voice:True", rig.Platform.Calls);
+        Assert.Equal(new ErrorLineView("feature.noService.asr", "settings"), Assert.Single(rig.ErrorBar()!.Lines));
+        Assert.Equal("unavailable", rig.TrayOpen("system-audio"));
+        Assert.Equal(0, rig.SystemCapture.Starts);
+        rig.AsrReady = true;
+        Assert.True(rig.Shell.TrayModel().Items.Single(i => i.Id == "system-audio").Enabled);
+        Assert.Equal("ok", rig.TrayOpen("system-audio"));
+        Assert.Contains("show:Voice:True", rig.Platform.Calls);
+    }
+
+    [Fact] // REC01/REC04 UI: loopback source, never the microphone, the own-sound notice, same ASR job and translation session
+    public async Task System_audio_records_the_output_and_transcribes_through_the_same_job()
+    {
+        using var rig = new Rig();
+        rig.OpenSystemAudio();
+        var idle = rig.Snapshot(WindowKind.Voice).Voice!;
+        Assert.Equal(("idle", "systemAudio", true), (idle.Phase, idle.Source, idle.OwnPlayback));
+        Assert.Equal("Alt+B", idle.Hotkey);
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.StartRecording).Ok);
+        Assert.Equal((1, 0), (rig.SystemCapture.Starts, rig.Capture.Starts));
+        rig.SystemSession.Level(0.5, 2.0);
+        var recording = rig.Shell.VoiceWindowView!;
+        Assert.Equal(("recording", "systemAudio", true, 2000L), (recording.Phase, recording.Source, recording.OwnPlayback, recording.ElapsedMs));
+        Assert.Equal(0, rig.Provider.Calls); // nothing is sent while recording
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.StopRecording).Ok);
+        Assert.True(await rig.WaitPhase("transcribed"));
+        var view = rig.Shell.VoiceWindowView!;
+        Assert.Equal(("systemAudio", true, true), (view.Source, view.OwnPlayback, view.Translated));
+        Assert.Equal(["Hello from the microphone"], rig.Translated);
+        Assert.Equal(1, rig.Provider.Calls);
+        Assert.True(await Eventually.WaitAsync(() => rig.Audios[0].File.Released && rig.Leases.ActiveCount == 0));
+        Assert.Equal("recording", rig.TrayStatus.First(s => s.Phase is not null).Phase);
+    }
+
+    [Fact] // the one window serves both sources: an idle or finished window switches, a running recording is only brought forward
+    public async Task Hotkeys_switch_the_source_when_idle_and_keep_a_running_recording()
+    {
+        using var rig = new Rig();
+        rig.OpenVoice();
+        Assert.Equal(("microphone", false), (rig.Shell.VoiceWindowView!.Source, rig.Shell.VoiceWindowView.OwnPlayback));
+        rig.OpenSystemAudio();
+        Assert.Equal(("systemAudio", true), (rig.Shell.VoiceWindowView!.Source, rig.Shell.VoiceWindowView.OwnPlayback));
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.StartRecording).Ok);
+        Assert.Equal((1, 0), (rig.SystemCapture.Starts, rig.Capture.Starts));
+        rig.Shell.OnHotkey("voiceTranslate"); // a different source while recording: the task stays
+        Assert.Equal(("recording", "systemAudio"), (rig.Phase, rig.Shell.VoiceWindowView!.Source));
+        Assert.True(rig.Shell.IsRecording);
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.StopRecording).Ok);
+        Assert.True(await rig.WaitPhase("transcribed"));
+        rig.Shell.OnHotkey("voiceTranslate"); // finished: switch back and start empty
+        Assert.Equal(("idle", "microphone"), (rig.Phase, rig.Shell.VoiceWindowView!.Source));
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.StartRecording).Ok);
+        Assert.Equal((1, 1), (rig.SystemCapture.Starts, rig.Capture.Starts));
+    }
+
+    [Theory] // loopback start errors keep their own codes
+    [InlineData(MicFailure.NoDevice, "loopback.noDevice")]
+    [InlineData(MicFailure.Denied, "loopback.denied")]
+    [InlineData(MicFailure.Failed, "loopback.failed")]
+    public void System_audio_start_errors_use_loopback_codes(MicFailure failure, string code)
+    {
+        using var rig = new Rig();
+        rig.OpenSystemAudio();
+        rig.SystemCapture.Next.Enqueue(RecordingStartResult.Failed(failure, AudioSourceKind.SystemLoopback));
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.StartRecording).Ok);
+        var view = rig.Shell.VoiceWindowView!;
+        Assert.Equal(("error", code, "systemAudio"), (view.Phase, view.ErrorCode, view.Source));
+        Assert.Equal(0, rig.Capture.Starts);
+    }
+
+    [Fact] // a loopback failure after start with no code reports loopback.failed, not a microphone error
+    public async Task System_audio_failure_without_code_is_a_loopback_failure()
+    {
+        using var rig = new Rig();
+        rig.OpenSystemAudio();
+        rig.Run(WindowKind.Voice, UiCommands.StartRecording);
+        rig.SystemSession.End(RecordingStatus.Failed);
+        Assert.True(await rig.WaitPhase("error"));
+        Assert.Equal("loopback.failed", rig.Shell.VoiceWindowView!.ErrorCode);
+    }
+
+    [Fact] // REC03 with the output device: a switch keeps the part, offers transcribe/re-record, never follows the new device
+    public async Task System_audio_device_switch_keeps_the_part_and_rerecords_on_loopback()
+    {
+        using var rig = new Rig();
+        rig.OpenSystemAudio();
+        rig.Run(WindowKind.Voice, UiCommands.StartRecording);
+        rig.SystemSession.Level(0.3, 3.0);
+        rig.SystemSession.End(RecordingStatus.Interrupted, MicFailure.DefaultChanged);
+        Assert.True(await rig.WaitPhase("interrupted"));
+        var view = rig.Shell.VoiceWindowView!;
+        Assert.Equal(("defaultChanged", true, true, "systemAudio"), (view.Reason, view.CanTranscribe, view.OwnPlayback, view.Source));
+        Assert.Equal(1, rig.SystemCapture.Starts);
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.TranscribeRecorded).Ok);
+        Assert.True(await rig.WaitPhase("transcribed"));
+        Assert.Equal("systemAudio", rig.Shell.VoiceWindowView!.Source);
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.StartRecording).Ok); // record again: loopback again, never the microphone
+        Assert.Equal((2, 0), (rig.SystemCapture.Starts, rig.Capture.Starts));
+    }
+
+    [Fact] // the tray marks the entry of the source that is recording, not the other one; close releases the loopback
+    public void Tray_marks_the_recording_entry_and_close_releases_the_loopback()
+    {
+        using var rig = new Rig();
+        rig.OpenSystemAudio();
+        rig.Run(WindowKind.Voice, UiCommands.StartRecording);
+        var items = rig.Shell.TrayModel().Items;
+        Assert.Equal("recording", items.Single(i => i.Id == "system-audio").Status);
+        Assert.Null(items.Single(i => i.Id == "voice").Status);
+        Assert.True(rig.Run(WindowKind.Voice, UiCommands.Close).Ok);
+        Assert.False(rig.Shell.IsRecording);
+        Assert.True(rig.SystemSession.CancelRequested && rig.SystemSession.Disposed);
     }
 }

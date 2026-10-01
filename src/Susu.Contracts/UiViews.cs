@@ -76,11 +76,14 @@ public sealed record OcrBlockView(string Text, string Kind);
 /// or error (the microphone could not start or the recording could not be saved: ErrorCode is mic.denied, mic.noDevice, mic.failed,
 /// mic.busy, record.diskFull or record.writeFailed). ElapsedMs is captured time (a pause does not count) against LimitMs; Level is
 /// the 0..1 peak for the meter; Silent shows the "no voice detected" notice. Nothing is transcribed while recording: Text appears
-/// only after the recording ended. Notice: "limit" when the recording stopped at the 10-minute limit. The page never gets audio or a path.
+/// only after the recording ended. F13.2: Source is microphone | systemAudio (the same window records either); a system-audio recording sets
+/// OwnPlayback, the notice that the captured sound includes Su-Su's own playback (its ErrorCode may be loopback.noDevice, loopback.denied or
+/// loopback.failed). Notice: "limit" when the recording stopped at the 10-minute limit. The page never gets audio or a path.
 /// </summary>
 [TsExport("ui")]
 public sealed record VoiceView(long Id, string Phase, long ElapsedMs, long LimitMs, double Level, bool Silent, string? Reason, string? ErrorCode, string? ServiceId,
-    string? Text, ErrorKind? ErrorKind, bool Translated, string Hotkey, bool CanTranscribe, string? Notice = null, int? Chunk = null, int? Chunks = null, long? TranscribeMs = null);
+    string? Text, ErrorKind? ErrorKind, bool Translated, string Hotkey, bool CanTranscribe, string? Notice = null, int? Chunk = null, int? Chunks = null, long? TranscribeMs = null,
+    string Source = "microphone", bool OwnPlayback = false);
 
 /// <summary>
 /// The failure bar (DESIGN 9 "悬浮条", Error artboard 01): one 34 DIP row per line near the pointer, gone after 4 s.

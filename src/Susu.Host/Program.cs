@@ -134,8 +134,10 @@ internal static class MainMode
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Ocr, FeatureState.Available, null, [Capability.Ocr]));
         // F12.3: voice translation (hotkey, tray, window) is available once the selected recording/audio ASR service can run.
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Voice, FeatureState.Available, null, [Capability.Asr]));
+        // F13.2: system-audio translation is the same recorder, ASR and window over the output device; it needs the same ASR service.
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.SystemAudio, FeatureState.Available, null, [Capability.Asr]));
         foreach (var id in new[] {
-                     FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, "update" })
+                     FeatureRegistry.Ids.Transcription, "update" })
             features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 
         var usage = new UsageRepository(db, clock);
@@ -220,6 +222,8 @@ internal static class MainMode
                 config.State.Effective.General.Theme == "dark"));
         // F12.1: microphone recording port (WASAPI); each recording is a WAV file lease (F12.3 opens it from the voice entry).
         coordinator.AudioCapture = new AudioCaptureCoordinator(new WasapiMicrophone(), new LeasedFiles(leases), clock);
+        // F13.2: the same coordinator over WASAPI loopback (default output device); the microphone is never opened for it.
+        coordinator.SystemAudioCapture = new AudioCaptureCoordinator(WasapiMicrophone.SystemLoopback(), new LeasedFiles(leases), clock, null, AudioSourceKind.SystemLoopback);
         // F11.2: a captured image goes to the selected OCR service by handle; recognized text enters the OCR window's translation
         // session (T02) when SetOcr "translate after recognition" is on. F11.3: the shell owns each captured image, opens the OCR
         // window and runs this job; closing the window cancels it. Only status is logged, never text.

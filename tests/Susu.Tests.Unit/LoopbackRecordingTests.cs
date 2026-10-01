@@ -175,6 +175,36 @@ public class LoopbackRecordingTests : IDisposable
         Assert.Equal(AudioCaptureCoordinator.MaxDuration, TimeSpan.FromMinutes(10));
     }
 
+    [Fact] // F13 exit: a long recording streams to its file (managed memory does not grow with the length) and nothing stays after dispose
+    public async Task Long_recording_streams_to_disk_and_leaves_nothing_after_dispose()
+    {
+        long Managed() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
+        var output = new FakeDevices();
+        long baseline = Managed();
+        var session = (await Loopback(output).StartAsync(Ct)).Session!;
+        var stream = output.Last!;
+        long midway = 0;
+        for (int round = 1; round <= 30; round++) // 5 minutes of audio, 9.6 MB of PCM, fed in 10 s steps
+        {
+            for (int i = 0; i < 100; i++) stream.Push(Block(100, 8000));
+            await Until(() => session.Captured >= TimeSpan.FromSeconds(10 * round));
+            if (round == 15) midway = Managed();
+        }
+        Assert.True(midway - baseline < 2_000_000, $"managed memory grew by {midway - baseline} bytes while recording");
+        var result = await session.StopAsync();
+        var audio = result.Audio!;
+        string path = audio.File.FilePath;
+        Assert.True(new FileInfo(path).Length > 9_000_000); // the audio is on disk, not in memory
+        Assert.Equal(1, leases.ActiveCount);
+        audio.Dispose();
+        session.Dispose();
+        Assert.True(audio.File.Released);
+        Assert.False(File.Exists(path));
+        Assert.Equal(0, leases.ActiveCount);
+        Assert.True(stream.Disposed);
+        Assert.True(Managed() - baseline < 2_000_000, "memory did not return to baseline after dispose");
+    }
+
     private sealed class FileClip(string path) : IAudioClip
     {
         public string Mime => "audio/wav";

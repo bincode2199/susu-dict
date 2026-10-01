@@ -29,6 +29,12 @@ public sealed partial class ShellCoordinator
     private RecordedAudio? heldAudio;
     private long voiceGeneration = -1, voiceTranscribeStartedAt, voiceLevelSentAt;
     private int trayTipSecond = -1;
+    private AudioSourceKind voiceSource = AudioSourceKind.Microphone; // F13.2: the one window records the microphone or system audio
+
+    private bool SystemAudioSource => voiceSource == AudioSourceKind.SystemLoopback;
+    private static string SourceName(AudioSourceKind kind) => kind == AudioSourceKind.SystemLoopback ? "systemAudio" : "microphone";
+    private string VoiceFeatureId => SystemAudioSource ? FeatureRegistry.Ids.SystemAudio : FeatureRegistry.Ids.Voice;
+    private string DefaultStartError => SystemAudioSource ? "loopback.failed" : "mic.failed";
 
     /// <summary>Longest recording the view reports (the recorder enforces the real limit; DESIGN 10 minutes).</summary>
     public TimeSpan RecordingLimit { get; set; } = AudioCaptureCoordinator.MaxDuration;
@@ -61,9 +67,9 @@ public sealed partial class ShellCoordinator
     /// </summary>
     public event Action<string?, TimeSpan>? RecordingStatusChanged;
 
-    private string VoiceHotkey() => config.State.Effective.Hotkeys.Chords.TryGetValue("voiceTranslate", out var chord) ? chord : "";
+    private string VoiceHotkey() => config.State.Effective.Hotkeys.Chords.TryGetValue(SystemAudioSource ? "audioTranslate" : "voiceTranslate", out var chord) ? chord : "";
 
-    private VoiceView IdleVoice() => new(++voiceViews, "idle", 0, (long)RecordingLimit.TotalMilliseconds, 0, false, null, null, null, null, null, false, VoiceHotkey(), false);
+    private VoiceView IdleVoice() => new(++voiceViews, "idle", 0, (long)RecordingLimit.TotalMilliseconds, 0, false, null, null, null, null, null, false, VoiceHotkey(), false, null, null, null, null, SourceName(voiceSource), SystemAudioSource);
 
     private VoiceView WithPhase(string phase, Func<VoiceView, VoiceView>? edit = null)
     {
@@ -72,9 +78,18 @@ public sealed partial class ShellCoordinator
         return edit is null ? next : edit(next);
     }
 
-    /// <summary>The voice hotkey or tray item: shows the window (it keeps whatever task is running, e.g. a minimized recording).</summary>
-    private void OpenVoice()
+    /// <summary>
+    /// The voice or system-audio hotkey or tray item: shows the window (it keeps whatever task is running, e.g. a minimized
+    /// recording). With no recording running and another source asked for, the window is emptied and switches source (F13.2).
+    /// </summary>
+    private void OpenVoice(AudioSourceKind source = AudioSourceKind.Microphone)
     {
+        if (recording is null && !recordingStarting && (voiceSource != source || voiceView is null))
+        {
+            if (voiceSource != source) AbandonVoiceTask();
+            voiceSource = source;
+            SetVoiceView(IdleVoice());
+        }
         voiceView ??= IdleVoice();
         _ = OpenAsync(WindowKind.Voice, activate: true);
     }
@@ -99,7 +114,8 @@ public sealed partial class ShellCoordinator
 
     private async Task<CommandResult> StartRecordingAsync()
     {
-        if (AudioCapture is not { } capture || Resolve(FeatureRegistry.Ids.Voice).State != FeatureState.Available) return new CommandResult(false, "unavailable");
+        var capture = SystemAudioSource ? SystemAudioCapture : AudioCapture;
+        if (capture is null || Resolve(VoiceFeatureId).State != FeatureState.Available) return new CommandResult(false, "unavailable");
         if (recordingStarting) return new CommandResult(false, "busy");
         // Record again: whatever the window held (a recording, a running transcription, kept audio, an old result) is dropped (J01).
         AbandonVoiceTask();
@@ -113,12 +129,12 @@ public sealed partial class ShellCoordinator
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             Diagnostic?.Invoke($"voice.start.exception {e.GetType().Name}");
-            start = RecordingStartResult.Failed(MicFailure.Failed);
+            start = RecordingStartResult.Failed(MicFailure.Failed, voiceSource);
         }
         finally { recordingStarting = false; }
         if (start.Session is not { } session)
         {
-            if (epoch == voiceEpoch) SetVoiceView(IdleVoice() with { Phase = "error", ErrorCode = start.ErrorCode ?? "mic.failed" });
+            if (epoch == voiceEpoch) SetVoiceView(IdleVoice() with { Phase = "error", ErrorCode = start.ErrorCode ?? DefaultStartError });
             return Ok();
         }
         if (epoch != voiceEpoch) { session.Cancel(); session.Dispose(); return new CommandResult(false, "cancelled"); } // closed while the device was opening
@@ -136,7 +152,7 @@ public sealed partial class ShellCoordinator
     {
         RecordingResult result;
         try { result = await session.Completion; }
-        catch (Exception e) when (e is not OutOfMemoryException) { result = new RecordingResult(RecordingStatus.Failed, null, null, "mic.failed"); }
+        catch (Exception e) when (e is not OutOfMemoryException) { result = new RecordingResult(RecordingStatus.Failed, null, null, session.Source == AudioSourceKind.SystemLoopback ? "loopback.failed" : "mic.failed", session.Source); }
         platform.StartTimer(TimeSpan.Zero, () => OnRecordingEnded(session, result));
     }
 
@@ -178,7 +194,7 @@ public sealed partial class ShellCoordinator
                 return;
             case RecordingStatus.Failed:
                 result.Audio?.Dispose();
-                SetVoiceView(WithPhase("error", v => v with { ErrorCode = result.ErrorCode ?? "mic.failed", ElapsedMs = elapsed }));
+                SetVoiceView(WithPhase("error", v => v with { ErrorCode = result.ErrorCode ?? DefaultStartError, ElapsedMs = elapsed }));
                 return;
             case RecordingStatus.Interrupted:
             {

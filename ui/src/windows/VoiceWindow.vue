@@ -18,6 +18,16 @@ function speakCard(serviceId: string, phonetic?: number): void {
   void props.bridge.command(UI_COMMANDS.SpeakCard, phonetic === undefined ? { serviceId } : { serviceId, phonetic });
 }
 const voice = computed(() => props.state.voice);
+// F13.2: the same window records system audio (source systemAudio); its own wording replaces the microphone's where it differs.
+const isSys = computed(() => voice.value?.source === 'systemAudio');
+function vt(key: string, params?: Record<string, string | number>): string {
+  if (isSys.value) {
+    const own = `voice.sys.${key.slice('voice.'.length)}`;
+    const text = t(own, params);
+    if (text !== own) return text;
+  }
+  return t(key, params);
+}
 const phase = computed(() => voice.value?.phase ?? 'idle');
 const root = ref<HTMLElement | null>(null);
 const text = ref('');
@@ -40,30 +50,30 @@ const meta = computed(() => {
   const view = voice.value;
   if (!view || phase.value !== 'transcribed') return '';
   const seconds = view.transcribeMs !== undefined && view.transcribeMs !== null ? (view.transcribeMs / 1000).toFixed(1) : '–';
-  return t('voice.meta', { service: service.value, seconds, n: count.value });
+  return vt('voice.meta', { service: service.value, seconds, n: count.value });
 });
-const micErrors = ['mic.denied', 'mic.noDevice', 'mic.failed', 'mic.busy', 'record.diskFull', 'record.writeFailed'];
+const micErrors = ['loopback.noDevice', 'loopback.denied', 'loopback.failed', 'mic.denied', 'mic.noDevice', 'mic.failed', 'mic.busy', 'record.diskFull', 'record.writeFailed'];
 const errorText = computed(() => {
-  const code = voice.value?.errorCode ?? 'mic.failed';
-  return t(`voice.error.${micErrors.includes(code) ? code : 'mic.failed'}`);
+  const code = voice.value?.errorCode ?? (isSys.value ? 'loopback.failed' : 'mic.failed');
+  return vt(`voice.error.${micErrors.includes(code) ? code : isSys.value ? 'loopback.failed' : 'mic.failed'}`);
 });
-const reasonText = computed(() => t(`voice.reason.${voice.value?.reason ?? 'failed'}`));
+const reasonText = computed(() => vt(`voice.reason.${voice.value?.reason ?? 'failed'}`));
 const statusLine = computed(() => {
   const view = voice.value;
   switch (phase.value) {
-    case 'recording': return view?.silent ? t('voice.status.silent') : t('voice.status.recording', { remaining: remaining.value, limit: limitMinutes.value });
-    case 'paused': return t('voice.status.paused', { elapsed: elapsed.value });
+    case 'recording': return view?.silent ? vt('voice.status.silent') : vt('voice.status.recording', { remaining: remaining.value, limit: limitMinutes.value });
+    case 'paused': return vt('voice.status.paused', { elapsed: elapsed.value });
     case 'transcribing': {
       const progress = view?.chunks && view.chunks > 1 ? ` · ${(view.chunk ?? 0) + 1}/${view.chunks}` : '';
-      return `${t('voice.status.transcribing')}${service.value ? ` · ${service.value}` : ''}${progress}`;
+      return `${vt('voice.status.transcribing')}${service.value ? ` · ${service.value}` : ''}${progress}`;
     }
     case 'interrupted': return reasonText.value;
     case 'error': return errorText.value;
-    case 'noSpeech': return t('voice.noSpeech');
-    case 'failed': return t('voice.failed');
-    case 'unavailable': return t('voice.unavailable');
-    case 'transcribed': return view?.notice === 'limit' ? t('voice.status.limit', { n: limitMinutes.value }) : view?.hotkey ? t('voice.statusHint', { chord: view.hotkey }) : t('voice.statusHintNoChord');
-    default: return view?.hotkey ? t('voice.idleHint', { chord: view.hotkey }) : t('voice.idleHintNoChord');
+    case 'noSpeech': return vt('voice.noSpeech');
+    case 'failed': return vt('voice.failed');
+    case 'unavailable': return vt('voice.unavailable');
+    case 'transcribed': return view?.notice === 'limit' ? vt('voice.status.limit', { n: limitMinutes.value }) : view?.hotkey ? vt('voice.statusHint', { chord: view.hotkey }) : vt('voice.statusHintNoChord');
+    default: return view?.hotkey ? vt('voice.idleHint', { chord: view.hotkey }) : vt('voice.idleHintNoChord');
   }
 });
 
@@ -144,7 +154,7 @@ onBeforeUnmount(() => { observer?.disconnect(); mutations?.disconnect(); if (fra
 
 <template>
   <div ref="root" class="window voice">
-    <TitleBar :title="`Su-Su · ${t('voice.title')}`" show-settings
+    <TitleBar :title="`Su-Su · ${vt('voice.title')}`" show-settings
       @minimize="bridge.command(UI_COMMANDS.Minimize)" @close="bridge.command(UI_COMMANDS.Close)" @settings="bridge.command(UI_COMMANDS.OpenSettings)" />
     <main class="content">
       <section class="source" :class="`phase-${phase}`" :aria-busy="phase === 'transcribing'" data-voice-card>
@@ -160,76 +170,78 @@ onBeforeUnmount(() => { observer?.disconnect(); mutations?.disconnect(); if (fra
           </select>
         </header>
         <div class="label-row">
-          <span class="label">{{ t('voice.source') }}</span>
-          <span v-if="phase === 'transcribing'" class="tag" role="status">{{ t('voice.status.transcribing') }}<template v-if="service"> · {{ service }}</template></span>
-          <span v-else-if="phase === 'transcribed'" class="hint-text small">{{ t('voice.editHint') }}</span>
+          <span class="label">{{ vt('voice.source') }}</span>
+          <span v-if="phase === 'transcribing'" class="tag" role="status">{{ vt('voice.status.transcribing') }}<template v-if="service"> · {{ service }}</template></span>
+          <span v-else-if="phase === 'transcribed'" class="hint-text small">{{ vt('voice.editHint') }}</span>
         </div>
+
+        <p v-if="voice?.ownPlayback" class="hint-text small own-playback" role="note" data-own-playback><Icon name="warning" :size="13" />{{ t('voice.sys.ownPlayback') }}</p>
 
         <!-- microphone ready -->
         <div v-if="phase === 'idle'" class="stage" data-stage="idle">
-          <button type="button" class="mic" :aria-label="t('voice.start')" :title="t('voice.start')" data-start @click="start"><Icon name="mic" :size="22" /></button>
-          <p class="hint-text small">{{ t('voice.idle') }}</p>
+          <button type="button" class="mic" :aria-label="vt('voice.start')" :title="vt('voice.start')" data-start @click="start"><Icon name="mic" :size="22" /></button>
+          <p class="hint-text small">{{ vt('voice.idle') }}</p>
         </div>
 
         <!-- recording and paused: level and time only, never live text (VO1/VO2) -->
         <div v-else-if="live" class="stage" :data-stage="phase">
           <div class="time" role="timer" data-elapsed><span class="now">{{ elapsed }}</span><span class="of"> / {{ mmss(voice?.limitMs ?? 0) }}</span></div>
-          <div class="meter" role="meter" :aria-label="t('voice.level')" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="phase === 'paused' ? 0 : level" data-meter>
+          <div class="meter" role="meter" :aria-label="vt('voice.level')" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="phase === 'paused' ? 0 : level" data-meter>
             <span class="fill" :style="{ width: `${phase === 'paused' ? 0 : level}%` }" />
           </div>
-          <p v-if="phase === 'paused'" class="hint-text small" role="status" data-paused>{{ t('voice.pausedHint') }}</p>
-          <p v-else-if="stalled" class="notice error-text small" role="status" data-silent><Icon name="warning" :size="13" />{{ t('voice.silent') }}</p>
-          <p v-else class="hint-text small" data-limit>{{ t('voice.limitHint', { remaining, n: limitMinutes }) }}</p>
+          <p v-if="phase === 'paused'" class="hint-text small" role="status" data-paused>{{ vt('voice.pausedHint') }}</p>
+          <p v-else-if="stalled" class="notice error-text small" role="status" data-silent><Icon name="warning" :size="13" />{{ vt('voice.silent') }}</p>
+          <p v-else class="hint-text small" data-limit>{{ vt('voice.limitHint', { remaining, n: limitMinutes }) }}</p>
           <div class="controls">
-            <button type="button" class="btn" data-pause @click="pause">{{ phase === 'paused' ? t('voice.resume') : t('voice.pause') }}</button>
-            <button type="button" class="btn primary" data-stop @click="stop"><Icon name="stop" />{{ t('voice.stop') }}</button>
-            <button type="button" class="btn" data-cancel @click="cancel">{{ t('voice.cancel') }}</button>
+            <button type="button" class="btn" data-pause @click="pause">{{ phase === 'paused' ? vt('voice.resume') : vt('voice.pause') }}</button>
+            <button type="button" class="btn primary" data-stop @click="stop"><Icon name="stop" />{{ vt('voice.stop') }}</button>
+            <button type="button" class="btn" data-cancel @click="cancel">{{ vt('voice.cancel') }}</button>
           </div>
         </div>
 
         <!-- transcribing: two skeleton lines, no spinner; the recording is already over -->
         <div v-else-if="phase === 'transcribing'" class="stage" data-stage="transcribing">
           <div class="skeleton" aria-hidden="true"><span class="line dark" /><span class="line light" /></div>
-          <p v-if="voice?.notice === 'limit'" class="hint-text small" data-limit-note>{{ t('voice.status.limit', { n: limitMinutes }) }}</p>
-          <div class="controls"><button type="button" class="btn" data-cancel @click="cancel">{{ t('voice.cancel') }}</button></div>
+          <p v-if="voice?.notice === 'limit'" class="hint-text small" data-limit-note>{{ vt('voice.status.limit', { n: limitMinutes }) }}</p>
+          <div class="controls"><button type="button" class="btn" data-cancel @click="cancel">{{ vt('voice.cancel') }}</button></div>
         </div>
 
         <!-- result -->
         <template v-else-if="phase === 'transcribed'">
-          <label class="sr-only" for="voice-source-text">{{ t('voice.source') }}</label>
+          <label class="sr-only" for="voice-source-text">{{ vt('voice.source') }}</label>
           <textarea id="voice-source-text" v-model="text" class="input selectable" spellcheck="false" maxlength="100000"
             @compositionstart="composing = true" @compositionend="composing = false" @keydown="onKeydown" />
         </template>
 
         <!-- the device went away: what was captured is kept; transcribe it or record again (REC03) -->
         <div v-else-if="phase === 'interrupted'" class="failure" role="alert" data-stage="interrupted">
-          <p class="failure-title">{{ t('voice.interrupted') }}</p>
-          <p class="hint-text small">{{ reasonText }}<template v-if="voice?.canTranscribe"> · {{ t('voice.keptTime', { time: elapsed }) }}</template><template v-else> · {{ t('voice.nothingKept') }}</template></p>
+          <p class="failure-title">{{ vt('voice.interrupted') }}</p>
+          <p class="hint-text small">{{ reasonText }}<template v-if="voice?.canTranscribe"> · {{ vt('voice.keptTime', { time: elapsed }) }}</template><template v-else> · {{ vt('voice.nothingKept') }}</template></p>
           <div class="failure-actions">
-            <button v-if="voice?.canTranscribe" type="button" class="btn primary" data-transcribe-recorded @click="transcribeRecorded">{{ t('voice.transcribeRecorded') }}</button>
-            <button type="button" class="btn" data-rerecord @click="start"><Icon name="mic" />{{ t('voice.rerecord') }}</button>
+            <button v-if="voice?.canTranscribe" type="button" class="btn primary" data-transcribe-recorded @click="transcribeRecorded">{{ vt('voice.transcribeRecorded') }}</button>
+            <button type="button" class="btn" data-rerecord @click="start"><Icon name="mic" />{{ vt('voice.rerecord') }}</button>
           </div>
         </div>
 
         <!-- start/save errors and the service outcomes -->
         <div v-else class="failure" role="alert" :data-stage="phase">
-          <p class="failure-title">{{ t(phase === 'error' ? 'voice.errorTitle' : phase === 'noSpeech' ? 'voice.noSpeech' : phase === 'failed' ? 'voice.failed' : 'voice.unavailable') }}</p>
+          <p class="failure-title">{{ vt(phase === 'error' ? 'voice.errorTitle' : phase === 'noSpeech' ? 'voice.noSpeech' : phase === 'failed' ? 'voice.failed' : 'voice.unavailable') }}</p>
           <p class="hint-text small">
             <template v-if="phase === 'error'">{{ errorText }}</template>
-            <template v-else-if="phase === 'noSpeech'">{{ t('voice.noSpeechDetail') }}</template>
+            <template v-else-if="phase === 'noSpeech'">{{ vt('voice.noSpeechDetail') }}</template>
             <template v-else-if="phase === 'failed'">{{ t(`error.${voice?.errorKind ?? 'unavailable'}`) }}<template v-if="service"> · {{ service }}</template></template>
-            <template v-else>{{ t('voice.unavailableDetail') }}</template>
+            <template v-else>{{ vt('voice.unavailableDetail') }}</template>
           </p>
           <div class="failure-actions">
             <button v-if="phase === 'unavailable' || voice?.errorKind === 'auth' || voice?.errorKind === 'quota'" type="button" class="link" @click="bridge.command(UI_COMMANDS.OpenSettings)">{{ t('capture.link.settings') }}</button>
-            <button v-if="phase !== 'unavailable'" type="button" class="btn" data-rerecord @click="start"><Icon name="mic" />{{ t('voice.rerecord') }}</button>
+            <button v-if="phase !== 'unavailable'" type="button" class="btn" data-rerecord @click="start"><Icon name="mic" />{{ vt('voice.rerecord') }}</button>
           </div>
         </div>
 
         <footer v-if="phase === 'transcribed'" class="foot">
           <span class="meta">{{ meta }}</span>
-          <button type="button" class="icon-btn" :aria-label="t('voice.copy')" :title="t('voice.copy')" :disabled="count === 0" @click="copy(text)"><Icon name="copy" /></button>
-          <button type="button" class="icon-btn" :aria-label="t('voice.rerecord')" :title="t('voice.rerecord')" data-rerecord @click="start"><Icon name="mic" /></button>
+          <button type="button" class="icon-btn" :aria-label="vt('voice.copy')" :title="vt('voice.copy')" :disabled="count === 0" @click="copy(text)"><Icon name="copy" /></button>
+          <button type="button" class="icon-btn" :aria-label="vt('voice.rerecord')" :title="vt('voice.rerecord')" data-rerecord @click="start"><Icon name="mic" /></button>
           <button type="button" class="btn primary translate" :disabled="count === 0" @click="submit">{{ t('main.translate') }}<span class="hint">Ctrl+↵</span></button>
         </footer>
       </section>
@@ -260,6 +272,7 @@ onBeforeUnmount(() => { observer?.disconnect(); mutations?.disconnect(); if (fra
 .small { font-size: 11px; }
 .stage { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 14px 16px; }
 .stage p { margin: 0; text-align: center; }
+.own-playback { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 6px; }
 .mic { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line-accent); background: transparent; color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .mic:hover, .mic:focus-visible { outline: none; border-color: var(--accent); color: var(--accent); }
 .time { font-size: 26px; font-variant-numeric: tabular-nums; color: var(--ink); }

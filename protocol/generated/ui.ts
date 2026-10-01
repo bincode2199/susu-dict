@@ -583,6 +583,8 @@ export interface VoiceView {
   chunk?: number;
   chunks?: number;
   transcribeMs?: number;
+  source?: string;
+  ownPlayback?: boolean;
 }
 
 export type WindowKind = 'Main' | 'Selection' | 'Clipboard' | 'Ocr' | 'Voice' | 'Transcribe' | 'Settings' | 'Error' | 'Tray' | 'Speech';
