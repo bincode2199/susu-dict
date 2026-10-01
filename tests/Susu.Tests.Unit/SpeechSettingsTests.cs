@@ -180,8 +180,10 @@ public class SpeechSettingsTests
         var grants = rig.Config.State.Effective.Accounts.Single(a => a.Id == "openai").Grants;
         Assert.Contains(grants, g => g.Package == "app.susu.openai-asr" && g.Origin == "https://api.openai.com:443" && g.Use == "header:Authorization");
         Assert.Contains(grants, g => g.Package == "app.susu.openai");
-        // Still not ready to record: the voice entry comes in F12.3.
-        Assert.Equal("not-built", rig.Speech.Asr.ReasonKey);
+        // F12.3: with the key saved and granted the recording/audio selection is ready; video waits for F14 (not built).
+        Assert.True(rig.Speech.Asr.Ready);
+        Assert.Null(rig.Speech.Asr.ReasonKey);
+        Assert.Equal("not-built", rig.Speech.VideoAsr.ReasonKey);
     }
 
     [Fact]
