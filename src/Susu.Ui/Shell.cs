@@ -248,6 +248,9 @@ public sealed partial class ShellCoordinator
     /// </summary>
     public IScreenCapture? ScreenCapture { get; set; }
 
+    /// <summary>F12.1 microphone port (ARCHITECTURE 7 <c>IAudioCapture</c>). No entry point reaches it until the Voice feature resolves Available (F12.3).</summary>
+    public IAudioCapture? AudioCapture { get; set; }
+
     /// <summary>A screenshot capture finished (captured, cancelled or failed). A subscriber (F11.2/F11.3) owns and disposes
     /// <see cref="ScreenCaptureResult.Image"/>; with no subscriber the image lease is released at once.</summary>
     public event Action<ScreenCaptureResult>? ScreenCaptured;

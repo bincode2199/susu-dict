@@ -215,6 +215,8 @@ internal static class MainMode
             keepScreenshots: () => config.State.Effective.Ocr.KeepScreenshots,
             overlay: () => new RegionSelectOptions(config.State.Effective.General.UiLanguage == "en" ? ScreenCaptureCoordinator.HintEn : ScreenCaptureCoordinator.HintZh,
                 config.State.Effective.General.Theme == "dark"));
+        // F12.1: microphone recording port (WASAPI). The Voice entry point stays InDevelopment until F12.3; each recording is a WAV file lease.
+        coordinator.AudioCapture = new AudioCaptureCoordinator(new WasapiMicrophone(), new LeasedFiles(leases), clock);
         // F11.2: a captured image goes to the selected OCR service by handle; recognized text enters the OCR window's translation
         // session (T02) when SetOcr "translate after recognition" is on. F11.3: the shell owns each captured image, opens the OCR
         // window and runs this job; closing the window cancels it. Only status is logged, never text.
