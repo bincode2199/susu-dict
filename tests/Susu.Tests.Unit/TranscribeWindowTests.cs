@@ -22,7 +22,7 @@ public sealed class TranscribeWindowTests
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
     private static readonly AsrLimits AsrLimit = new([AsrFormat.Wav16kMono], 24_000_000, 25_000_000, 300, AsrUpload.Multipart, 2048);
 
-    private sealed class FakeAsr(Func<int, CancellationToken, Task<AsrOutcome>> answer, bool timecodes = true) : IAsrProvider
+    internal sealed class FakeAsr(Func<int, CancellationToken, Task<AsrOutcome>> answer, bool timecodes = true) : IAsrProvider
     {
         public int Calls;
         public string InstanceId => "openai-asr";
@@ -32,10 +32,10 @@ public sealed class TranscribeWindowTests
         public Task<AsrOutcome> TranscribeAsync(AsrCall call, CancellationToken ct) => answer(Interlocked.Increment(ref Calls) - 1, ct);
     }
 
-    private static Task<AsrOutcome> Segments(int n, CancellationToken _) => Task.FromResult<AsrOutcome>(new AsrOutcome.Transcribed("segments", "x", [new AsrSegment(0.5, 2, "first"), new AsrSegment(3, 5, "second\nline")]));
-    private static Task<AsrOutcome> AsrQuota(int n, CancellationToken ct) => Task.FromResult<AsrOutcome>(new AsrOutcome.Failure(new ProviderError(ErrorKind.Quota, "daily")));
+    internal static Task<AsrOutcome> Segments(int n, CancellationToken _) => Task.FromResult<AsrOutcome>(new AsrOutcome.Transcribed("segments", "x", [new AsrSegment(0.5, 2, "first"), new AsrSegment(3, 5, "second\nline")]));
+    internal static Task<AsrOutcome> AsrQuota(int n, CancellationToken ct) => Task.FromResult<AsrOutcome>(new AsrOutcome.Failure(new ProviderError(ErrorKind.Quota, "daily")));
 
-    private sealed class ScriptDecoder(Func<MediaProbe> probe) : IMediaDecoder
+    internal sealed class ScriptDecoder(Func<MediaProbe> probe) : IMediaDecoder
     {
         public Func<MediaProbe> Probe { get; set; } = probe;
         public Exception? ProbeFailure;
@@ -49,20 +49,20 @@ public sealed class TranscribeWindowTests
         }
     }
 
-    private sealed class FakePicker(Rig rig) : IMediaPicker
+    internal sealed class FakePicker(Rig rig) : IMediaPicker
     {
         public string? Next;
         public Task<string?> PickAsync(CancellationToken ct) => Task.FromResult(Next is null ? null : rig.Tokens.Issue(Next));
     }
 
-    private sealed class FakeSave : ISubtitleSavePicker
+    internal sealed class FakeSave : ISubtitleSavePicker
     {
         public string? Path;
         public readonly List<(string Name, SubtitleFormat Format)> Asked = [];
         public Task<string?> PickAsync(string name, SubtitleFormat format, CancellationToken ct) { Asked.Add((name, format)); return Task.FromResult(Path); }
     }
 
-    private sealed class Rig : IDisposable
+    internal sealed class Rig : IDisposable
     {
         public readonly TempRoot Root = new();
         public readonly FakePlatform Platform = new();
