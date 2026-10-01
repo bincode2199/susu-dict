@@ -42,6 +42,7 @@ public sealed class VideoJob : IDisposable
     private TaskCompletionSource? resume;
     private bool pauseRequested;
     private int cueSeq, calls, started;
+    private TimeSpan? mediaDuration;
     private VideoJobState state;
     private Task completion = Task.CompletedTask;
 
@@ -66,7 +67,7 @@ public sealed class VideoJob : IDisposable
     public event Action<VideoCue>? CueChanged;
 
     public IReadOnlyList<VideoCue> Cues() { lock (gate) return [.. cues]; }
-    public VideoJobResult Result() { lock (gate) return new VideoJobResult(Id, DisplayName, state, [.. cues]); }
+    public VideoJobResult Result() { lock (gate) return new VideoJobResult(Id, DisplayName, state, [.. cues], mediaDuration); }
 
     /// <summary>Starts the job once; later calls return the same task. The task ends when the job is done, failed or cancelled.</summary>
     public Task Start()
@@ -137,6 +138,7 @@ public sealed class VideoJob : IDisposable
             try { session = await slicer.OpenAsync(token, ct); }
             catch (MediaDecodeException error) { Fail(error.Code); return; }
             var probe = session.Probe;
+            lock (gate) mediaDuration = probe.Duration;
             if (probe.Selected is null) { Fail(probe.AudioStreams.Count == 0 ? MediaErrors.NoAudio : MediaErrors.UnsupportedEncoding); return; }
             TimeSpan sliceLength = options.SliceLength ?? MediaSliceOptions.Default.SliceLength;
             int estimate = Math.Max(1, (int)Math.Ceiling(probe.Duration / sliceLength));

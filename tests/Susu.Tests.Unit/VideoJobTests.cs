@@ -654,6 +654,34 @@ public class VideoJobTests : IDisposable
     }
 
     [Fact]
+    public async Task A_finished_result_is_exported_after_the_window_closed_without_any_new_work()
+    {
+        var rig = NewRig();
+        var asr = new FakeAsr("asr", true);
+        var jobs = new VideoJobs(rig.Tokens, rig.Decoder, files, () => asr, () => new FakeTranslator("tr", ItemsLimits)) { Confirmation = new Confirm() };
+        var job = jobs.Start(rig.Token, "en", "zh", slicing: new MediaSliceOptions(TimeSpan.FromSeconds(10))).Job!;
+        await job.Completion.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        int asrCalls = asr.Calls;
+        jobs.CancelActive(); // the window closes: nothing running, result stays in the process
+        Assert.Equal(TimeSpan.FromSeconds(30), jobs.Results.Get(job.Id)!.MediaDuration);
+
+        var exporter = new SubtitleExporter(jobs.Results);
+        string dir = Path.Combine(root.Root, "export"); Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "movie.bilingual.srt");
+        var r = exporter.ExportTo(job.Id, SubtitleMode.BilingualOriginalFirst, SubtitleFormat.Srt, path);
+        Assert.True(r.Ok);
+        Assert.Equal(6, r.Exported);
+        string text = File.ReadAllText(path);
+        Assert.StartsWith("1\n00:00:00,500 --> 00:00:02,000\ns0a\nT:s0a\n\n", text);
+        Assert.Contains("00:00:23,000 --> 00:00:25,000\ns2b\nline two\nT:s2b\nline two\n", text);
+        Assert.Equal(asrCalls, asr.Calls); // export did not upload or retranslate anything
+
+        Assert.True(jobs.Results.Remove(job.Id)); // gone from the process (as after a restart): no export
+        Assert.Equal(SubtitleExportErrors.UnknownJob, exporter.ExportTo(job.Id, SubtitleMode.Original, SubtitleFormat.Srt, path).Error);
+    }
+
+
+    [Fact]
     public async Task Results_stay_in_the_process_after_cancel_and_after_done_and_are_bounded()
     {
         var rig = NewRig();

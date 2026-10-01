@@ -85,4 +85,15 @@ public sealed record VideoJobState(string JobId, VideoJobPhase Phase, VideoStage
 }
 
 /// <summary>A job's state and cues as kept in the process for reopen and export (F14.3).</summary>
-public sealed record VideoJobResult(string JobId, string DisplayName, VideoJobState State, IReadOnlyList<VideoCue> Cues);
+public sealed record VideoJobResult(string JobId, string DisplayName, VideoJobState State, IReadOnlyList<VideoCue> Cues, TimeSpan? MediaDuration = null);
+
+public enum SubtitleFormat { Srt, Vtt, Txt }
+
+/// <summary>What an export contains. Bilingual puts one line group per cue: first the original (or the translation) and then the other.</summary>
+public enum SubtitleMode { Original, Translation, BilingualOriginalFirst, BilingualTranslationFirst }
+
+/// <summary>The save-file dialog (F14.3). Returns the chosen full path, or null when the user cancelled.</summary>
+public interface ISubtitleSavePicker
+{
+    Task<string?> PickAsync(string suggestedFileName, SubtitleFormat format, CancellationToken cancellationToken);
+}
