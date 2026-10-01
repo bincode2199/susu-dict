@@ -142,6 +142,10 @@ internal static class MainMode
         features.Register(new FeatureDescriptor("update", FeatureState.InDevelopment, "feature.inDevelopment", []));
 
         var usage = new UsageRepository(db, clock);
+        // F15.1: local favorites; Sending rows left by a crash become Uncertain, never resent blindly (DATA06).
+        // The card button and sync consumers arrive in F15.2-F15.4.
+        var favorites = new FavoritesRepository(db, clock);
+        favorites.RecoverInterrupted();
         // F07.2: settings controls come from each package's manifest schema; F07.3: the same schema gates model
         // parameters (temperature) on every plugin call.
         // F10.1: the native SAPI instance has no manifest; its voice/speed controls come from its built-in schema.

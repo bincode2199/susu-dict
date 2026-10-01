@@ -21,10 +21,10 @@ public sealed class DatabaseVersionException(int found, int supported, string? c
 /// </summary>
 public sealed class Database : IDisposable
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
     private const int BusyTimeoutMs = 5000;
 
-    /// <summary>Forward-only migrations. Vocabulary tables arrive as version 2 in F15 (entry point reserved here).</summary>
+    /// <summary>Forward-only migrations. Version 2 (F15.1) adds the vocabulary tables.</summary>
     public static readonly IReadOnlyDictionary<int, string> Migrations = new Dictionary<int, string>
     {
         [1] = """
@@ -41,6 +41,18 @@ public sealed class Database : IDisposable
             CREATE TABLE plugin_kv (installation_id TEXT NOT NULL REFERENCES plugin_installations(installation_id) ON DELETE CASCADE,
                 namespace TEXT NOT NULL, key TEXT NOT NULL, value_json TEXT NOT NULL, bytes INTEGER NOT NULL,
                 PRIMARY KEY (installation_id, namespace, key));
+            """,
+        [2] = """
+            CREATE TABLE vocab_entries (entry_id TEXT PRIMARY KEY, lang TEXT NOT NULL, normalized_text TEXT NOT NULL, display_text TEXT NOT NULL,
+                content_json TEXT NOT NULL, revision INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER,
+                UNIQUE (lang, normalized_text));
+            CREATE TABLE vocab_deliveries (entry_id TEXT NOT NULL REFERENCES vocab_entries(entry_id) ON DELETE CASCADE, target_instance_id TEXT NOT NULL,
+                entry_revision INTEGER NOT NULL, operation_id TEXT NOT NULL, state TEXT NOT NULL, remote_id TEXT, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL,
+                UNIQUE (entry_id, target_instance_id, entry_revision));
+            CREATE INDEX vocab_deliveries_queue ON vocab_deliveries(target_instance_id, state, next_at);
+            CREATE TABLE vocab_exports (export_id TEXT PRIMARY KEY, format TEXT NOT NULL, file_hash TEXT NOT NULL, created_at INTEGER NOT NULL, outcome TEXT NOT NULL);
+            CREATE TABLE vocab_export_items (export_id TEXT NOT NULL REFERENCES vocab_exports(export_id) ON DELETE CASCADE, entry_id TEXT NOT NULL,
+                entry_revision INTEGER NOT NULL, PRIMARY KEY (export_id, entry_id, entry_revision));
             """,
     };
 
@@ -224,8 +236,9 @@ public sealed class Database : IDisposable
 public sealed class WriteContext(SqliteConnection connection, SqliteTransaction? transaction)
 {
     public SqliteConnection Connection { get; } = connection;
-    public int Exec(string sql, params (string Name, object? Value)[] parameters) => Database.Exec(Connection, sql, transaction, parameters);
-    public object? Scalar(string sql, params (string Name, object? Value)[] parameters) => Database.Scalar(Connection, transaction, sql, parameters);
+    public SqliteTransaction? Transaction { get; } = transaction;
+    public int Exec(string sql, params (string Name, object? Value)[] parameters) => Database.Exec(Connection, sql, Transaction, parameters);
+    public object? Scalar(string sql, params (string Name, object? Value)[] parameters) => Database.Scalar(Connection, Transaction, sql, parameters);
 }
 
 /// <summary>
