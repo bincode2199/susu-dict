@@ -9,6 +9,7 @@ using Susu.Ui;
 using Susu.Windows;
 using Susu.Windows.Audio;
 using Susu.Windows.Capture;
+using Susu.Windows.Media;
 using Susu.Windows.Shell;
 
 [assembly: SupportedOSPlatform("windows10.0.19041")]
@@ -238,6 +239,12 @@ internal static class MainMode
             new LeasedFiles(leases), async text => await coordinator.SubmitRecognizedTextAsync(text, WindowKind.Voice), autoTranslate: () => true);
         asrJob.StateChanged += state => log.Event("asr", ("phase", state.Phase.ToString()), ("service", state.ServiceId ?? ""), ("kind", state.Error?.Kind.ToString() ?? ""));
         coordinator.Asr = asrJob;
+        // F14.2: the video job. ASR comes from the video selection (never the microphone voice one); translation is the first enabled
+        // service, one text per request (an items-capable plugin API is not wired yet). The Transcribe window (F14.4) sets Confirmation.
+        coordinator.VideoJobs = new VideoJobs(new MediaTokens(), new MediaFoundationDecoder(), new LeasedFiles(leases),
+            () => translation.Supervisor is { } videoSupervisor ? PluginAsrProviders.Create(config.State.Effective, SpeechSlot.VideoAsr, secrets.Has, videoSupervisor, schemas) : null,
+            () => translation.Providers(config.State.Effective).FirstOrDefault() is { } videoTranslator
+                ? new SingleItemSubtitleProvider(videoTranslator, () => config.State.Effective.Snapshot(), videoTranslator.ServiceId == "mymemory" ? "video.quota.sharedDaily" : null) : null);
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;
@@ -277,6 +284,7 @@ internal static class MainMode
         dispatcher.Run();
 
         coordinator.ReleaseAudio(); // a recording still running (or a minimized one) is discarded and the microphone released (REC02)
+        coordinator.VideoJobs?.CancelActive(); // F14.2: a running video job stops its upload and releases its slices
         log.Event("app.exit");
         translation.Supervisor?.Dispose(); // bounded: kills the plugin-host child process (ARCHITECTURE 5.2)
         smoke?.Finish();

@@ -257,6 +257,8 @@ public sealed partial class ShellCoordinator
 
     /// <summary>F13.2: the same recorder over the system output (WASAPI loopback). The system-audio hotkey and tray entry use it in the voice window.</summary>
     public IAudioCapture? SystemAudioCapture { get; set; }
+    /// <summary>F14.2: the video job service (its own ASR and translation selection, results kept for the process). The Transcribe window (F14.4) answers its upload confirmation.</summary>
+    public VideoJobs? VideoJobs { get; set; }
 
     /// <summary>A screenshot capture finished (captured, cancelled or failed). A subscriber (F11.2/F11.3) owns and disposes
     /// <see cref="ScreenCaptureResult.Image"/>; with no subscriber the image lease is released at once.</summary>

@@ -116,7 +116,7 @@ public class F12VerificationTests
         public bool TryRead(string a, string n, out string v) => values.TryGetValue((a, n), out v!);
     }
 
-    private sealed class Rig : IDisposable
+    internal sealed class Rig : IDisposable
     {
         public required FileLeases Leases { get; init; }
         public required Supervisor<HostSession> Supervisor { get; init; }
@@ -153,7 +153,7 @@ public class F12VerificationTests
         public void Dispose() { Supervisor.Dispose(); Leases.Dispose(); }
     }
 
-    private static Rig? Build(string instanceId, LoopbackHttpServer server)
+    internal static Rig? Build(string instanceId, LoopbackHttpServer server)
     {
         if (staged.Value is not { } dir) return null;
         var package = PluginTranslationProviders.WiredPackages.Single(p => p.InstanceId == instanceId);
