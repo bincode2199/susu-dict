@@ -30,6 +30,7 @@ namespace Susu.Tests.Unit;
 /// pipeline (source scan). One real tone through the real loopback is checked in the WAV. A real ASR service (A08) needs
 /// accounts: not executed.
 /// </summary>
+[Collection(MediaDecodeCollection.Name)]
 public class F13VerificationTests
 {
     private const int Rate = 16000;

@@ -14,6 +14,7 @@ namespace Susu.Tests.Unit;
 /// own TTS notice / microphone never used). A fake output device drives the real recorder; one test plays a tone through the
 /// real output with <see cref="WasapiAudioSink"/> and captures it with the real loopback, and skips with a reason otherwise.
 /// </summary>
+[Collection(MediaDecodeCollection.Name)]
 public class LoopbackRecordingTests : IDisposable
 {
     private const int Rate = 16000;
