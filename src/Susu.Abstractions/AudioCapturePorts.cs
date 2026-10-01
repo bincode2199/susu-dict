@@ -1,5 +1,8 @@
 namespace Susu.Abstractions;
 
+/// <summary>Which device a recording captures (F13.1): the microphone, or the default output device's mix (WASAPI loopback).</summary>
+public enum AudioSourceKind { Microphone, SystemLoopback }
+
 /// <summary>Why the microphone could not start or stopped (F12.1, TEST-PLAN REC01/REC03).</summary>
 public enum MicFailure
 {
@@ -79,8 +82,10 @@ public sealed class RecordedAudio(ILeasedFile file, TimeSpan duration, int sampl
 /// The end of a recording. <see cref="Audio"/> is present for Stopped, LimitReached and Interrupted when anything was captured
 /// (the caller owns and disposes it). Nothing is sent to ASR by the recorder: transcription is requested only after this result.
 /// </summary>
-public sealed record RecordingResult(RecordingStatus Status, RecordedAudio? Audio, MicFailure? Reason = null, string? ErrorCode = null)
+public sealed record RecordingResult(RecordingStatus Status, RecordedAudio? Audio, MicFailure? Reason = null, string? ErrorCode = null, AudioSourceKind Source = AudioSourceKind.Microphone)
 {
+    /// <summary>System loopback also captures Su-Su's own playback (TTS); the UI shows a notice for it (F13.2, REC04).</summary>
+    public bool IncludesOwnPlayback => Source == AudioSourceKind.SystemLoopback;
     public static RecordingResult Cancelled() => new(RecordingStatus.Cancelled, null);
 }
 
@@ -88,6 +93,8 @@ public sealed record RecordingResult(RecordingStatus Status, RecordedAudio? Audi
 public interface IRecordingSession : IDisposable
 {
     RecordingPhase Phase { get; }
+    /// <summary>What is being captured; <see cref="AudioSourceKind.SystemLoopback"/> includes Su-Su's own playback sound.</summary>
+    AudioSourceKind Source => AudioSourceKind.Microphone;
     /// <summary>Captured duration (samples written ÷ rate), excluding paused time.</summary>
     TimeSpan Captured { get; }
     event Action<RecordingLevel>? LevelChanged;
@@ -105,10 +112,13 @@ public interface IRecordingSession : IDisposable
 public sealed record RecordingStartResult(IRecordingSession? Session, string? ErrorCode, MicFailure? Failure)
 {
     public static RecordingStartResult Started(IRecordingSession session) => new(session, null, null);
-    public static RecordingStartResult Failed(MicFailure failure) => new(null, failure switch
+    public static RecordingStartResult Failed(MicFailure failure, AudioSourceKind source = AudioSourceKind.Microphone) => new(null, (source, failure) switch
     {
-        MicFailure.Denied => "mic.denied",
-        MicFailure.NoDevice => "mic.noDevice",
+        (AudioSourceKind.SystemLoopback, MicFailure.NoDevice) => "loopback.noDevice",
+        (AudioSourceKind.SystemLoopback, MicFailure.Denied) => "loopback.denied",
+        (AudioSourceKind.SystemLoopback, _) => "loopback.failed",
+        (_, MicFailure.Denied) => "mic.denied",
+        (_, MicFailure.NoDevice) => "mic.noDevice",
         _ => "mic.failed",
     }, failure);
     public static RecordingStartResult Busy() => new(null, "mic.busy", null);

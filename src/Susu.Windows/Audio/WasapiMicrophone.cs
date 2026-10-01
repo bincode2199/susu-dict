@@ -15,8 +15,15 @@ namespace Susu.Windows.Audio;
 /// capture endpoint is NoDevice at open and DeviceRemoved mid-stream; an invalidated stream is DeviceRemoved, or DefaultChanged
 /// when the default capture endpoint now has another id. The stream never reopens another device by itself.</para>
 /// </summary>
-public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
+public sealed unsafe class WasapiMicrophone(bool loopback = false) : IMicrophoneDevices
 {
+    /// <summary>
+    /// F13.1: captures the default render (output) endpoint's mix instead of the microphone (AUDCLNT_STREAMFLAGS_LOOPBACK). No
+    /// packets arrive while nothing plays, so the stream fills the idle time with silent blocks; a stall of seconds is not filled
+    /// (the recorder then sees the gap and reports sleep). A changed default output ends the stream with DefaultChanged.
+    /// </summary>
+    public static WasapiMicrophone SystemLoopback() => new(true);
+    private const uint LoopbackFlag = 0x00020000;
     public const int CaptureRate = 16000;
     private static readonly Guid ClsidMMDeviceEnumerator = new("BCDE0395-E52F-467C-8E3D-C4579291692E");
     private static readonly Guid IidMMDeviceEnumerator = new("A95664D2-9614-4F35-A746-DE8DB63617E6");
@@ -36,7 +43,7 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
             try
             {
                 enumerator = Com.Create(ClsidMMDeviceEnumerator, IidMMDeviceEnumerator, Com.ClsctxAll);
-                return DefaultCapture(enumerator, out device) >= 0 && device != 0;
+                return DefaultCapture(enumerator, loopback, out device) >= 0 && device != 0;
             }
             catch (COMException) { return false; }
             finally { Com.Release(device); Com.Release(enumerator); }
@@ -45,7 +52,7 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
 
     public IMicrophoneStream Open()
     {
-        var stream = new Stream();
+        var stream = new Stream(loopback);
         stream.Start();
         return stream;
     }
@@ -58,10 +65,10 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
         _ => MicFailure.Failed,
     };
 
-    private static int DefaultCapture(nint enumerator, out nint device)
+    private static int DefaultCapture(nint enumerator, bool render, out nint device)
     {
         nint d = 0;
-        int hr = ((delegate* unmanaged[Stdcall]<nint, int, int, nint*, int>)Com.Slot(enumerator, 4))(enumerator, 1, 0, &d); // eCapture, eConsole
+        int hr = ((delegate* unmanaged[Stdcall]<nint, int, int, nint*, int>)Com.Slot(enumerator, 4))(enumerator, render ? 0 : 1, 0, &d); // eRender/eCapture, eConsole
         device = d;
         return hr;
     }
@@ -78,7 +85,7 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
         if (hr < 0) throw new MicrophoneException(Classify(hr), $"{what} 0x{hr:X8}");
     }
 
-    private sealed class Stream : IMicrophoneStream
+    private sealed class Stream(bool loopback) : IMicrophoneStream
     {
         private readonly Channel<byte[]> blocks = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
         private readonly ManualResetEventSlim stop = new(false);
@@ -114,8 +121,8 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
                 try
                 {
                     enumerator = Com.Create(ClsidMMDeviceEnumerator, IidMMDeviceEnumerator, Com.ClsctxAll);
-                    int hr = DefaultCapture(enumerator, out device);
-                    if (hr < 0 || device == 0) throw new MicrophoneException(MicFailure.NoDevice, $"no default capture device 0x{hr:X8}");
+                    int hr = DefaultCapture(enumerator, loopback, out device);
+                    if (hr < 0 || device == 0) throw new MicrophoneException(MicFailure.NoDevice, $"no default {(loopback ? "render" : "capture")} device 0x{hr:X8}");
                     openedId = DeviceId(device);
                     Guid iid = IidAudioClient;
                     nint* pc = &client;
@@ -124,7 +131,7 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
                     new Span<byte>(wfx, 18).Clear();
                     *(ushort*)wfx = 1; *(ushort*)(wfx + 2) = 1; *(int*)(wfx + 4) = CaptureRate; *(int*)(wfx + 8) = CaptureRate * 2;
                     *(ushort*)(wfx + 12) = 2; *(ushort*)(wfx + 14) = 16;
-                    Check(((delegate* unmanaged[Stdcall]<nint, int, uint, long, long, byte*, Guid*, int>)Com.Slot(client, 3))(client, 0, AutoConvertPcm | SrcDefaultQuality, 2_000_000, 0, wfx, null), "IAudioClient.Initialize");
+                    Check(((delegate* unmanaged[Stdcall]<nint, int, uint, long, long, byte*, Guid*, int>)Com.Slot(client, 3))(client, 0, AutoConvertPcm | SrcDefaultQuality | (loopback ? LoopbackFlag : 0), 2_000_000, 0, wfx, null), "IAudioClient.Initialize");
                     Guid captureId = IidAudioCaptureClient;
                     nint* pcap = &capture;
                         Check(((delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Com.Slot(client, 14))(client, &captureId, pcap), "IAudioClient.GetService");
@@ -137,7 +144,7 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
                 var nextPacket = (delegate* unmanaged[Stdcall]<nint, uint*, int>)Com.Slot(capture, 5);
                 var getBuffer = (delegate* unmanaged[Stdcall]<nint, byte**, uint*, uint*, ulong*, ulong*, int>)Com.Slot(capture, 3);
                 var releaseBuffer = (delegate* unmanaged[Stdcall]<nint, uint, int>)Com.Slot(capture, 4);
-                long nextDefaultCheck = Environment.TickCount64 + 250;
+                long nextDefaultCheck = Environment.TickCount64 + 250, lastEmit = Environment.TickCount64;
                 try
                 {
                     while (!stop.Wait(10))
@@ -153,12 +160,23 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
                             if ((flags & BufferSilent) == 0) new ReadOnlySpan<byte>(data, block.Length).CopyTo(block);
                             Check(releaseBuffer(capture, count), "IAudioCaptureClient.ReleaseBuffer");
                             blocks.Writer.TryWrite(block);
+                            lastEmit = Environment.TickCount64;
+                        }
+                        if (loopback)
+                        {
+                            long idle = Environment.TickCount64 - lastEmit;
+                            if (idle >= 20)
+                            {
+                                // Nothing is playing: keep the timeline with silence (a multi-second stall is sleep: one short block lets the recorder see the gap).
+                                lastEmit = Environment.TickCount64;
+                                blocks.Writer.TryWrite(new byte[idle <= 1000 ? (int)(idle * CaptureRate / 1000) * 2 : 320]);
+                            }
                         }
                         if (Environment.TickCount64 >= nextDefaultCheck)
                         {
                             nextDefaultCheck = Environment.TickCount64 + 250;
                             nint current = 0;
-                            int hr = DefaultCapture(enumerator, out current);
+                            int hr = DefaultCapture(enumerator, loopback, out current);
                             try
                             {
                                 if (hr < 0 || current == 0) throw new MicrophoneException(MicFailure.DeviceRemoved, "default capture device is gone");
@@ -178,7 +196,7 @@ public sealed unsafe class WasapiMicrophone : IMicrophoneDevices
                         nint current = 0;
                         try
                         {
-                            if (DefaultCapture(enumerator, out current) >= 0 && current != 0 && DeviceId(current) != openedId)
+                            if (DefaultCapture(enumerator, loopback, out current) >= 0 && current != 0 && DeviceId(current) != openedId)
                                 failure = new MicrophoneException(MicFailure.DefaultChanged, "default capture device changed");
                         }
                         finally { Com.Release(current); }

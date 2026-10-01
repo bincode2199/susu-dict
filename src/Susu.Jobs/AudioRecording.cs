@@ -9,11 +9,16 @@ namespace Susu.Jobs;
 /// <see cref="RecordingSession"/> at a time. Samples go straight into a WAV file lease; nothing is transcribed while recording
 /// (F12.2 requests ASR only from the finished result).
 ///
+/// <para>F13.1: the same coordinator and session record system audio when given a loopback <see cref="IMicrophoneDevices"/> and
+/// <see cref="AudioSourceKind.SystemLoopback"/>; only the start error codes (<c>loopback.*</c>) and the own-playback flag differ.
+/// A loopback device delivers no packets while nothing plays, so its stream supplies silent blocks (the silence notice path); a
+/// gap here would otherwise be mistaken for sleep.</para>
+///
 /// <para>The 10-minute limit counts captured samples, not wall time, so pauses do not use it up. A removed device, a changed
 /// default device or a stall of several seconds (sleep) ends the recording with the captured part kept and the reason set; the
 /// recorder never reopens another device. Cancel and failure leave no file. The device is released whenever a recording ends.</para>
 /// </summary>
-public sealed class AudioCaptureCoordinator(IMicrophoneDevices devices, ILeasedFileFactory files, IClock clock, TimeSpan? limit = null) : IAudioCapture
+public sealed class AudioCaptureCoordinator(IMicrophoneDevices devices, ILeasedFileFactory files, IClock clock, TimeSpan? limit = null, AudioSourceKind source = AudioSourceKind.Microphone) : IAudioCapture
 {
     public static readonly TimeSpan MaxDuration = TimeSpan.FromMinutes(10);
     private readonly TimeSpan limit = limit ?? MaxDuration;
@@ -34,14 +39,14 @@ public sealed class AudioCaptureCoordinator(IMicrophoneDevices devices, ILeasedF
             cancellationToken.ThrowIfCancellationRequested();
             IMicrophoneStream stream;
             try { stream = await Task.Run(devices.Open, CancellationToken.None); }
-            catch (MicrophoneException e) { return RecordingStartResult.Failed(e.Failure); }
-            catch (Exception e) when (e is not OperationCanceledException) { return RecordingStartResult.Failed(MicFailure.Failed); }
+            catch (MicrophoneException e) { return RecordingStartResult.Failed(e.Failure, source); }
+            catch (Exception e) when (e is not OperationCanceledException) { return RecordingStartResult.Failed(MicFailure.Failed, source); }
             if (cancellationToken.IsCancellationRequested) { stream.Dispose(); cancellationToken.ThrowIfCancellationRequested(); }
             ILeasedFile file;
             try { file = files.Create("record", "audio/wav", "wav"); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { stream.Dispose(); return RecordingStartResult.Failed(MicFailure.Failed); }
-            var session = new RecordingSession(stream, file, clock, limit);
-            if (!session.TryBegin()) return RecordingStartResult.Failed(MicFailure.Failed);
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { stream.Dispose(); return RecordingStartResult.Failed(MicFailure.Failed, source); }
+            var session = new RecordingSession(stream, file, clock, limit, source);
+            if (!session.TryBegin()) return RecordingStartResult.Failed(MicFailure.Failed, source);
             started = true;
             _ = session.Completion.ContinueWith(_ => Volatile.Write(ref busy, 0), TaskScheduler.Default);
             return RecordingStartResult.Started(session);
@@ -74,13 +79,15 @@ public sealed class RecordingSession : IRecordingSession
     private RecordingStatus? requested;
     private bool finished;
 
-    internal RecordingSession(IMicrophoneStream stream, ILeasedFile file, IClock clock, TimeSpan limit)
+    internal RecordingSession(IMicrophoneStream stream, ILeasedFile file, IClock clock, TimeSpan limit, AudioSourceKind source = AudioSourceKind.Microphone)
     {
+        Source = source;
         this.stream = stream; this.file = file; this.clock = clock;
         rate = stream.SampleRate;
         limitSamples = (long)(limit.TotalSeconds * rate);
     }
 
+    public AudioSourceKind Source { get; }
     public RecordingPhase Phase => (RecordingPhase)Volatile.Read(ref phase);
     public TimeSpan Captured => TimeSpan.FromSeconds(Interlocked.Read(ref samples) / (double)rate);
     public Task<RecordingResult> Completion => done.Task;
@@ -203,7 +210,7 @@ public sealed class RecordingSession : IRecordingSession
         catch { file.Dispose(); throw; }
         finally { cts.Dispose(); }
         PhaseChanged?.Invoke(RecordingPhase.Finished);
-        done.TrySetResult(new RecordingResult(status, audio, status == RecordingStatus.Interrupted ? reason : null, error));
+        done.TrySetResult(new RecordingResult(status, audio, status == RecordingStatus.Interrupted ? reason : null, error, Source));
     }
 
     private static bool IsDiskFull(IOException e) => (e.HResult & 0xFFFF) is 0x27 or 0x70;
