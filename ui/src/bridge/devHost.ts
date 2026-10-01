@@ -154,6 +154,11 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     id: 1, phase: 'recognized', serviceId: 'tencent-ocr', text: 'Rendering is the art of failing better.\nE = mc^2', blocks: [{ text: 'Rendering is the art of failing better.', kind: 'text' }, { text: 'E = mc^2', kind: 'formula' }],
     width: 832, height: 264, translated: true, autoTranslate: true, hotkey: 'Alt+S', elapsedMs: 800,
   };
+  // F12.3 fixture: a transcribed voice window (dev preview only; nothing is recorded or sent).
+  const voiceView = {
+    id: 1, phase: 'transcribed', elapsedMs: 4200, limitMs: 600000, level: 0, silent: false, serviceId: 'openai-asr', text: 'Rendering is the art of failing better.',
+    translated: true, hotkey: 'Alt+V', canTranscribe: false, transcribeMs: 1200,
+  };
   const project = (): SettingsView => {
     settings.services = [
       service('mymemory/translate', []), service('deepl/translate', ['apiKey']), service('tencent-translate/translate', ['secretId', 'secretKey']), service('openai/translate', ['apiKey']),
@@ -177,7 +182,8 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         kind: 'Snapshot',
         payload: {
           window: { kind, uiLanguage: language, theme: 'light', maximized: false, pinned: false, devPreview: true, features: ['input-translation'] },
-          translation: kind === 'Main' || kind === 'Ocr' ? translation : undefined,
+          translation: kind === 'Main' || kind === 'Ocr' || kind === 'Voice' ? translation : undefined,
+          voice: kind === 'Voice' ? voiceView : undefined,
           ocr: kind === 'Ocr' ? ocrView : undefined,
           settings: kind === 'Settings' ? project() : undefined,
           tray: kind === 'Tray' ? { items: ['input-translation', 'clipboard', 'ocr', 'voice', 'system-audio', 'transcription', 'settings', 'check-update', 'exit'].map((id, i) => ({ id, chord: ['Alt+A', 'Alt+D', 'Alt+S', 'Alt+V', 'Alt+B'][i] ?? '', enabled: id === 'input-translation' || id === 'settings' || id === 'exit', reasonKey: ['settings', 'exit', 'input-translation'].includes(id) ? undefined : 'feature.inDevelopment', separatorBefore: id === 'settings' })) } : undefined,
@@ -295,6 +301,11 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         ok(project());
         return;
       }
+      case 'Audio.StartRecording':
+      case 'Audio.PauseRecording':
+      case 'Audio.StopRecording':
+      case 'Audio.CancelRecording':
+      case 'Audio.TranscribeRecorded':
       case 'Capture.BeginCapture':
         ok();
         return;

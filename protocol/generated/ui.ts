@@ -31,6 +31,8 @@ export const UI_COMMANDS = {
   StartRecording: 'Audio.StartRecording',
   PauseRecording: 'Audio.PauseRecording',
   StopRecording: 'Audio.StopRecording',
+  CancelRecording: 'Audio.CancelRecording',
+  TranscribeRecorded: 'Audio.TranscribeRecorded',
   PickMedia: 'Transcription.PickMedia',
   StartTranscription: 'Transcription.Start',
   PauseTranscription: 'Transcription.Pause',
@@ -522,6 +524,7 @@ export interface TrayItemView {
   enabled: boolean;
   reasonKey?: string;
   separatorBefore?: boolean;
+  status?: string;
 }
 
 export interface TrayOpenRequest {
@@ -554,10 +557,32 @@ export interface UiSnapshot {
   speech?: SpeechStateView;
   speechBar?: SpeechBarView;
   ocr?: OcrView;
+  voice?: VoiceView;
 }
 
 export interface ValidateProviderRequest {
   serviceId: string;
+}
+
+export interface VoiceView {
+  id: number;
+  phase: string;
+  elapsedMs: number;
+  limitMs: number;
+  level: number;
+  silent: boolean;
+  reason?: string;
+  errorCode?: string;
+  serviceId?: string;
+  text?: string;
+  errorKind?: ErrorKind;
+  translated: boolean;
+  hotkey: string;
+  canTranscribe: boolean;
+  notice?: string;
+  chunk?: number;
+  chunks?: number;
+  transcribeMs?: number;
 }
 
 export type WindowKind = 'Main' | 'Selection' | 'Clipboard' | 'Ocr' | 'Voice' | 'Transcribe' | 'Settings' | 'Error' | 'Tray' | 'Speech';

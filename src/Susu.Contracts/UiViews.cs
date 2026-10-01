@@ -5,7 +5,7 @@ namespace Susu.Contracts;
 /// <summary>First message to a page after Ready; later changes arrive as Patch/Event.</summary>
 [TsExport("ui")]
 public sealed record UiSnapshot(WindowView Window, TranslationSnapshot? Translation = null, SettingsView? Settings = null, TrayView? Tray = null,
-    CaptureView? Capture = null, ErrorBarView? ErrorBar = null, SpeechStateView? Speech = null, SpeechBarView? SpeechBar = null, OcrView? Ocr = null);
+    CaptureView? Capture = null, ErrorBarView? ErrorBar = null, SpeechStateView? Speech = null, SpeechBarView? SpeechBar = null, OcrView? Ocr = null, VoiceView? Voice = null);
 
 /// <summary>
 /// The one player's state as the pages show it (F10.2). Phase: idle, loading (synthesis or download), playing,
@@ -70,6 +70,19 @@ public sealed record OcrView(long Id, string Phase, string? ServiceId, string? T
 public sealed record OcrBlockView(string Text, string Kind);
 
 /// <summary>
+/// The voice window (F12.3, DESIGN Voice artboard, REC01-REC03). Phase: idle (microphone ready), recording, paused, transcribing,
+/// transcribed, noSpeech, failed (the ASR service failed: ErrorKind), unavailable (no usable ASR service), interrupted (the
+/// device went away: Reason is deviceRemoved | defaultChanged | sleep | failed, CanTranscribe says whether captured audio is kept)
+/// or error (the microphone could not start or the recording could not be saved: ErrorCode is mic.denied, mic.noDevice, mic.failed,
+/// mic.busy, record.diskFull or record.writeFailed). ElapsedMs is captured time (a pause does not count) against LimitMs; Level is
+/// the 0..1 peak for the meter; Silent shows the "no voice detected" notice. Nothing is transcribed while recording: Text appears
+/// only after the recording ended. Notice: "limit" when the recording stopped at the 10-minute limit. The page never gets audio or a path.
+/// </summary>
+[TsExport("ui")]
+public sealed record VoiceView(long Id, string Phase, long ElapsedMs, long LimitMs, double Level, bool Silent, string? Reason, string? ErrorCode, string? ServiceId,
+    string? Text, ErrorKind? ErrorKind, bool Translated, string Hotkey, bool CanTranscribe, string? Notice = null, int? Chunk = null, int? Chunks = null, long? TranscribeMs = null);
+
+/// <summary>
 /// The failure bar (DESIGN 9 "悬浮条", Error artboard 01): one 34 DIP row per line near the pointer, gone after 4 s.
 /// Key is a UI resource key (texts come from the host resource table, never from a plugin); Link is "settings" or null.
 /// </summary>
@@ -91,7 +104,7 @@ public sealed record TrayView(TrayItemView[] Items);
 
 /// <summary>A tray menu entry; unimplemented or unconfigured features are listed disabled with a reason, never as a dead link.</summary>
 [TsExport("ui")]
-public sealed record TrayItemView(string Id, string Chord, bool Enabled, string? ReasonKey = null, bool SeparatorBefore = false);
+public sealed record TrayItemView(string Id, string Chord, bool Enabled, string? ReasonKey = null, bool SeparatorBefore = false, string? Status = null);
 
 [TsExport("ui")]
 public sealed record SettingsView(

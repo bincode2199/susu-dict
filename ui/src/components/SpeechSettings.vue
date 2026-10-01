@@ -36,6 +36,8 @@ const modelLabel = (id: string, timecodes: boolean) => `${id} · ${t(timecodes ?
 /** Status of the selected service: why it cannot be used yet (not installed, not built, key missing, ...). */
 function status(slot: SpeechSlotView): string {
   if (slot.ready) return t('speech.reason.ready');
+  // Video transcription is built in F14: until then a complete selection still says so (the voice entry does not wait for it).
+  if (slot.slot === 'videoAsr' && slot.reasonKey === 'not-built') return t('speech.reason.videoNotBuilt');
   const choice = choiceOf(slot);
   return t(`speech.reason.${slot.reasonKey ?? 'none-selected'}`, { plan: choice?.plan ?? '' });
 }

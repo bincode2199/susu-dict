@@ -53,6 +53,7 @@ namespace Susu.Contracts;
 [JsonSerializable(typeof(TrayView))]
 [JsonSerializable(typeof(CaptureView))]
 [JsonSerializable(typeof(OcrView))]
+[JsonSerializable(typeof(VoiceView))]
 [JsonSerializable(typeof(ErrorBarView))]
 [JsonSerializable(typeof(SpeechStateView))]
 [JsonSerializable(typeof(SpeechBarView))]

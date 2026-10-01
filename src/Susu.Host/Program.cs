@@ -132,8 +132,10 @@ internal static class MainMode
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Pronunciation, FeatureState.Available, null, [Capability.Tts]));
         // F11.3: screenshot OCR is available once an OCR service can run (enabled, credentials saved and granted).
         features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Ocr, FeatureState.Available, null, [Capability.Ocr]));
+        // F12.3: voice translation (hotkey, tray, window) is available once the selected recording/audio ASR service can run.
+        features.Register(new FeatureDescriptor(FeatureRegistry.Ids.Voice, FeatureState.Available, null, [Capability.Asr]));
         foreach (var id in new[] {
-                     FeatureRegistry.Ids.Voice, FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, "update" })
+                     FeatureRegistry.Ids.SystemAudio, FeatureRegistry.Ids.Transcription, "update" })
             features.Register(new FeatureDescriptor(id, FeatureState.InDevelopment, "feature.inDevelopment", []));
 
         var usage = new UsageRepository(db, clock);
@@ -160,6 +162,7 @@ internal static class MainMode
             Capability.Translate => translation.Providers(config.State.Effective).Count > 0,
             Capability.Tts => speechPort is { } port && port.Tts(config.State.Effective, config.State.Effective.Speech.Tts.Instance) is not null,
             Capability.Ocr => translation.Supervisor is { } ocrHost && PluginOcrProviders.Resolve(config.State.Effective, secrets.Has, ocrHost, schemas) is not null,
+            Capability.Asr => translation.Supervisor is { } asrHost && PluginAsrProviders.Create(config.State.Effective, SpeechSlot.Asr, secrets.Has, asrHost, schemas) is not null,
             _ => false,
         };
         // F10.1 native SAPI (no plugin host). F10.3: its phase timings are logged (no text), and the engine is warmed once, off the
@@ -215,7 +218,7 @@ internal static class MainMode
             keepScreenshots: () => config.State.Effective.Ocr.KeepScreenshots,
             overlay: () => new RegionSelectOptions(config.State.Effective.General.UiLanguage == "en" ? ScreenCaptureCoordinator.HintEn : ScreenCaptureCoordinator.HintZh,
                 config.State.Effective.General.Theme == "dark"));
-        // F12.1: microphone recording port (WASAPI). The Voice entry point stays InDevelopment until F12.3; each recording is a WAV file lease.
+        // F12.1: microphone recording port (WASAPI); each recording is a WAV file lease (F12.3 opens it from the voice entry).
         coordinator.AudioCapture = new AudioCaptureCoordinator(new WasapiMicrophone(), new LeasedFiles(leases), clock);
         // F11.2: a captured image goes to the selected OCR service by handle; recognized text enters the OCR window's translation
         // session (T02) when SetOcr "translate after recognition" is on. F11.3: the shell owns each captured image, opens the OCR
@@ -224,6 +227,13 @@ internal static class MainMode
             async text => await coordinator.SubmitRecognizedTextAsync(text), autoTranslate: () => config.State.Effective.Ocr.AutoTranslate);
         ocr.StateChanged += state => log.Event("ocr", ("phase", state.Phase.ToString()), ("service", state.ServiceId ?? ""), ("kind", state.Error?.Kind.ToString() ?? ""));
         coordinator.Ocr = ocr;
+        // F12.2/F12.3: a finished recording goes to the selected ASR service by handle, chunk by chunk; the text enters the voice
+        // window's translation session (T02). The shell owns each recording: closing the window or exiting cancels it and releases
+        // the microphone. Only status is logged, never audio or text.
+        var asrJob = new AsrJob(() => translation.Supervisor is { } asrSupervisor ? PluginAsrProviders.Create(config.State.Effective, SpeechSlot.Asr, secrets.Has, asrSupervisor, schemas) : null,
+            new LeasedFiles(leases), async text => await coordinator.SubmitRecognizedTextAsync(text, WindowKind.Voice), autoTranslate: () => true);
+        asrJob.StateChanged += state => log.Event("asr", ("phase", state.Phase.ToString()), ("service", state.ServiceId ?? ""), ("kind", state.Error?.Kind.ToString() ?? ""));
+        coordinator.Asr = asrJob;
 
         using var tray = new TrayIcon(dispatcher, assets);
         platform.WindowRequested += coordinator.OnWindowRequest;
@@ -236,6 +246,9 @@ internal static class MainMode
         dispatcher.ActivateRequested += coordinator.OnActivateRequest;
         tray.DoubleClick += coordinator.OnTrayDoubleClick;
         tray.MenuRequested += coordinator.OnTrayMenu;
+        // F12.3: a recording that continues in a minimized (hidden) voice window stays visible as the icon's tooltip (DESIGN 窗口关闭).
+        coordinator.RecordingStatusChanged += (phase, captured) =>
+            tray.SetTip(phase is null ? "Su-Su" : $"Su-Su · {(config.State.Effective.General.UiLanguage == "en" ? (phase == "paused" ? "Recording paused" : "Recording") : (phase == "paused" ? "录音已暂停" : "录音中"))} {(int)captured.TotalMinutes}:{captured.Seconds:00}");
         bool exiting = false;
         platform.ExitRequested += () => { if (!exiting) { exiting = true; dispatcher.Quit(); } };
 
@@ -259,6 +272,7 @@ internal static class MainMode
 
         dispatcher.Run();
 
+        coordinator.ReleaseAudio(); // a recording still running (or a minimized one) is discarded and the microphone released (REC02)
         log.Event("app.exit");
         translation.Supervisor?.Dispose(); // bounded: kills the plugin-host child process (ARCHITECTURE 5.2)
         smoke?.Finish();

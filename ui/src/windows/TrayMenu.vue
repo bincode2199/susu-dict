@@ -42,7 +42,8 @@ watch(() => props.state.tray, focusFirst);
             :title="item.reasonKey ? t(item.reasonKey) : undefined" @click="open(item.id)">
             <Icon :name="icons[item.id] ?? 'settings'" />
             <span class="label">{{ t(`tray.${item.id}`) }}</span>
-            <span class="shortcut">{{ item.id === 'settings' ? t('tray.settingsHint') : item.enabled ? item.chord : item.reasonKey ? t(item.reasonKey) : '' }}</span>
+            <span v-if="item.status" class="status" :data-status="item.status" role="status"><span class="dot" aria-hidden="true" />{{ t(`tray.status.${item.status}`) }}</span>
+            <span v-else class="shortcut">{{ item.id === 'settings' ? t('tray.settingsHint') : item.enabled ? item.chord : item.reasonKey ? t(item.reasonKey) : '' }}</span>
           </button>
         </li>
       </template>
@@ -58,5 +59,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 .item:disabled, .item:disabled .shortcut { color: var(--disabled); }
 .label { flex: 1; font-size: 12px; }
 .shortcut { font-size: 10.5px; color: var(--hint); }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--error); }
+.status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status[data-status='paused'] { color: var(--hint); }
 .separator { height: 1px; background: var(--line); margin: 4px 6px; }
 </style>

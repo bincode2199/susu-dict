@@ -39,6 +39,15 @@ public sealed unsafe class TrayIcon : IDisposable
         return true;
     }
 
+    /// <summary>Replaces the icon's tooltip (F12.3: the recording state of a minimized voice window). No-op before the icon is added.</summary>
+    public void SetTip(string text)
+    {
+        if (!added) return;
+        var data = Data(NIF_TIP | NIF_SHOWTIP);
+        CopyTo(text, data.Tip, 128);
+        Shell_NotifyIcon(NIM_MODIFY, ref data);
+    }
+
     /// <summary>A Windows notification with a title and one line of body text (no content from user data).</summary>
     public void Notify(string title, string body)
     {

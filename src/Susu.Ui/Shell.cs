@@ -190,6 +190,7 @@ public sealed partial class ShellCoordinator
             case WindowOutcome.HideCancelTask:
                 if (translations.Remove(kind, out var slot)) _ = slot.Session.CloseAsync(TimeSpan.FromSeconds(3));
                 if (kind == WindowKind.Ocr) Ocr?.Cancel(); // Esc/close stops the recognition too; its image lease goes as it unwinds
+                if (kind == WindowKind.Voice) CancelVoice(); // Esc/close discards the recording, stops transcription and releases the microphone
                 break;
         }
         HideWindow(kind);
@@ -231,10 +232,12 @@ public sealed partial class ShellCoordinator
         {
             // Unavailable: no action (PLAN 1.2). A registered OCR chord whose service became unusable says why (DESIGN 9).
             if (feature == FeatureRegistry.Ids.Ocr && featureState == FeatureState.Unavailable && Ocr is not null) ReportOcrUnavailable(reasonKey);
+            if (feature == FeatureRegistry.Ids.Voice && featureState == FeatureState.Unavailable && Asr is not null) ReportVoiceUnavailable(reasonKey);
             return;
         }
         hotkeyAt = System.Diagnostics.Stopwatch.GetTimestamp();
         if (feature == FeatureRegistry.Ids.InputTranslation) Open(WindowKind.Main);
+        else if (feature == FeatureRegistry.Ids.Voice) OpenVoice();
         // F08.2: selection/clipboard capture. The foreground snapshot is taken synchronously here, before any Su-Su
         // window can take focus; no Su-Su window is shown or activated until the capture has finished (UI03, SEL02).
         else if (feature == FeatureRegistry.Ids.Ocr) StartScreenCapture();
@@ -280,12 +283,12 @@ public sealed partial class ShellCoordinator
     /// F11.2: recognized OCR text enters the common translation pipeline (T02): the OCR result window's own session, with the
     /// same services, chunking and cards as typed input. Marshalled to the UI thread; F11.3 shows the window and its cards.
     /// </summary>
-    public Task<CommandResult> SubmitRecognizedTextAsync(string text)
+    public Task<CommandResult> SubmitRecognizedTextAsync(string text, WindowKind window = WindowKind.Ocr)
     {
         var done = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         platform.StartTimer(TimeSpan.Zero, async () =>
         {
-            try { done.SetResult(await SubmitAsync(WindowKind.Ocr, text)); }
+            try { done.SetResult(await SubmitAsync(window, text)); }
             catch (Exception error) { done.SetException(error); }
         });
         return done.Task;
@@ -389,7 +392,8 @@ public sealed partial class ShellCoordinator
             kind == WindowKind.Error ? errorBar : null,
             kind == WindowKind.Speech || UiCommands.IsAllowed(kind, UiCommands.SpeakCard) ? speechState : null,
             kind == WindowKind.Speech ? speechBar : null,
-            kind == WindowKind.Ocr ? ocrView : null);
+            kind == WindowKind.Ocr ? ocrView : null,
+            kind == WindowKind.Voice ? voiceView : null);
         session.Ready = true;
         session.PendingCards.Clear();
         Send(kind, session, UiMessageKind.Snapshot, null, null, JsonSerializer.SerializeToElement(payload, ContractsJson.Default.UiSnapshot));
@@ -471,6 +475,11 @@ public sealed partial class ShellCoordinator
             case UiCommands.SelectSpeech: return SelectSpeech(Read(payload, ContractsJson.Default.SpeechSelectRequest));
             case UiCommands.SaveOcr: return SaveOcr(Read(payload, ContractsJson.Default.OcrSaveRequest));
             case UiCommands.BeginCapture: return Recapture();
+            case UiCommands.StartRecording: return await StartRecordingAsync();
+            case UiCommands.PauseRecording: return await PauseRecordingAsync();
+            case UiCommands.StopRecording: return await StopRecordingAsync();
+            case UiCommands.CancelRecording: return CancelVoiceCommand();
+            case UiCommands.TranscribeRecorded: return TranscribeRecorded();
             case UiCommands.SpeakCard: return await SpeakCardAsync(kind, Read(payload, ContractsJson.Default.SpeakCardRequest));
             case UiCommands.SpeechPlay: return PlayBarService(Read(payload, ContractsJson.Default.SpeechPlayRequest).Instance);
             case UiCommands.SpeechStop: Speech?.Player.Stop(); return Ok();
@@ -1100,13 +1109,20 @@ public sealed partial class ShellCoordinator
             return new SpeechChoiceView(p.InstanceId, p.Native, p.Installed, p.Plan, p.Timecodes, reason is null, availability,
                 [.. p.Models.Select(m => new SpeechModelView(m.Id, m.Timecodes, SpeechCatalog.Encodable(m) && (slot != SpeechSlot.VideoAsr || m.Timecodes)))], reason);
         }).ToArray();
-        string? why = null;
-        if (SpeechCatalog.Find(selection.Instance) is not { } package) why = slot == SpeechSlot.VideoAsr ? SpeechCatalog.NeedsTimecodes : "none-selected";
-        else if (SpeechCatalog.Check(slot, selection) is { } problem) why = problem;
-        else if (!package.Installed) why = "not-installed";
-        else if (package.Credentials.Count > 0 && !SpeechCredentialsReady(s, package)) why = "missing-credential";
-        else if (slot != SpeechSlot.Tts) why = "not-built"; // pronunciation plays since F10.2; recording and transcription come in F12
+        // Pronunciation plays since F10.2 and voice/audio recording transcribes since F12.3; video transcription comes in F14.
+        string? why = SpeechProblem(s, slot) ?? (slot == SpeechSlot.VideoAsr ? "not-built" : null);
         return new SpeechSlotView(speechSlotNames[slot], selection.Instance, selection.Model, choices, why is null, why);
+    }
+
+    /// <summary>Why the selection of a slot cannot be used (not selected, no timecodes for video, not installed, key missing); null when it can.</summary>
+    private string? SpeechProblem(AppSettings s, SpeechSlot slot)
+    {
+        var selection = s.Speech[slot];
+        if (SpeechCatalog.Find(selection.Instance) is not { } package) return slot == SpeechSlot.VideoAsr ? SpeechCatalog.NeedsTimecodes : "none-selected";
+        if (SpeechCatalog.Check(slot, selection) is { } problem) return problem;
+        if (!package.Installed) return "not-installed";
+        if (package.Credentials.Count > 0 && !SpeechCredentialsReady(s, package)) return "missing-credential";
+        return null;
     }
 
     /// <summary>
@@ -1134,6 +1150,9 @@ public sealed partial class ShellCoordinator
             if (item.Feature is null) return new TrayItemView(item.Id, "", true, null, item.SeparatorBefore);
             var (state, reason) = Resolve(item.Feature);
             string chord = item.Hotkey is not null && chords.TryGetValue(item.Hotkey, out var c) ? c : "";
+            // A recording in progress keeps its entry usable (and marked) so the window can be brought back from the tray.
+            if (item.Id == "voice" && recording is { } active)
+                return new TrayItemView(item.Id, chord, true, null, item.SeparatorBefore, active.Phase == RecordingPhase.Paused ? "paused" : "recording");
             return new TrayItemView(item.Id, chord, state == FeatureState.Available, state == FeatureState.Available ? null : reason, item.SeparatorBefore);
         })]);
     }
@@ -1142,7 +1161,7 @@ public sealed partial class ShellCoordinator
     {
         var item = trayLayout.FirstOrDefault(t => t.Id == id);
         if (item.Id is null) throw new ArgumentException("unknown-item");
-        if (item.Feature is not null && Resolve(item.Feature).State != FeatureState.Available) return new CommandResult(false, "unavailable");
+        if (item.Feature is not null && Resolve(item.Feature).State != FeatureState.Available && !(id == "voice" && recording is not null)) return new CommandResult(false, "unavailable");
         HideWindow(WindowKind.Tray);
         switch (id)
         {
@@ -1154,6 +1173,9 @@ public sealed partial class ShellCoordinator
             case "clipboard":
                 if (capture is null) return new CommandResult(false, "unavailable");
                 _ = CaptureAsync(capture, capture.CaptureAsync(CaptureTrigger.Clipboard));
+                break;
+            case "voice":
+                OpenVoice();
                 break;
             case "ocr":
                 if (ScreenCapture is null) return new CommandResult(false, "unavailable");
@@ -1167,6 +1189,10 @@ public sealed partial class ShellCoordinator
     {
         var (state, reason) = features.Resolve(feature, capabilityReady);
         if (state == FeatureState.InDevelopment && options.DevPreview) return (FeatureState.Available, null);
+        // A03: video transcription needs a service that returns timecodes. Voice and audio entries do not (text-only is fine), so
+        // with only a text-only service the video entry stays greyed with that prerequisite, never an invented start/end.
+        if (feature == FeatureRegistry.Ids.Transcription && state != FeatureState.Available && SpeechProblem(config.State.Effective, SpeechSlot.VideoAsr) is not null)
+            return (FeatureState.Unavailable, "feature.noService.videoAsr");
         return (state, reason);
     }
 
