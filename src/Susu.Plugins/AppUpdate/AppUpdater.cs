@@ -22,9 +22,9 @@ public sealed record UpdateFileEntry(string Path, string Sha256, long Size);
 /// folder and database path decide what is touched.
 /// </summary>
 public sealed record UpdateJournal(string Id, string Stage, string FromVersion, string ToVersion, long Sequence, string PackageFile, string PackageSha256, long PackageSize,
-    UpdateFileEntry[] Files, string? Error);
+    UpdateFileEntry[] Files, string? Error, string? InstallDir = null);
 
-public sealed record BackupIndex(string Version, UpdateFileEntry[] Files, bool HadDatabase, string DatabaseCopySha256);
+public sealed record BackupIndex(string Version, UpdateFileEntry[] Files, bool HadDatabase, string DatabaseCopySha256, string? InstallDir = null);
 
 public enum UpdateExitOutcome { NotRunning, Exited, TimedOut }
 
@@ -76,6 +76,13 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
     private string BackupIndexPath => Path.Combine(BackupFolder, "backup.json");
 
     // ===== journal =====
+    /// <summary>The install folder as the journal and the backup index record it (full path, no trailing separator). The helper refuses a journal or a backup pair made for another folder (UPD08).</summary>
+    private string InstallKey => Path.GetFullPath(installDirectory).TrimEnd(Path.DirectorySeparatorChar);
+
+    private bool SameInstall(string? recorded) => recorded is null || string.Equals(recorded.TrimEnd(Path.DirectorySeparatorChar), InstallKey, StringComparison.OrdinalIgnoreCase);
+
+    private static bool PathsPlain(IEnumerable<UpdateFileEntry>? files) => files is not null && files.All(f => f.Path is not null && NormalizePath(f.Path) is not null);
+
 
     public UpdateJournal? Read()
     {
@@ -85,7 +92,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
             {
                 if (!File.Exists(path)) continue;
                 var journal = JsonSerializer.Deserialize(File.ReadAllBytes(path), AppUpdateJson.Default.UpdateJournal);
-                if (journal is { Files: not null, Stage: not null }) return journal;
+                if (journal is { Files: not null, Stage: not null } && PathsPlain(journal.Files)) return journal; // a journal naming a path outside the install folder is treated as damaged
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { }
         }
@@ -120,7 +127,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
     {
         Discard();
         Directory.CreateDirectory(DownloadsFolder);
-        Write(new UpdateJournal(Guid.NewGuid().ToString("N"), UpdateStages.Downloading, fromVersion, offer.Version, offer.Sequence, offer.FileName, offer.Sha256, offer.Size, [], null));
+        Write(new UpdateJournal(Guid.NewGuid().ToString("N"), UpdateStages.Downloading, fromVersion, offer.Version, offer.Sequence, offer.FileName, offer.Sha256, offer.Size, [], null, InstallKey));
         faults?.Hit("download:begin");
         return DownloadsFolder;
     }
@@ -259,6 +266,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
         try
         {
             if (!WorkFoldersPlain()) { Discard(); return new ApplyResult("not-staged", "stage-failed"); } // a junction in the work folders: nothing is applied
+            if (!SameInstall(journal.InstallDir)) return new ApplyResult("not-staged", "install-dir-mismatch"); // staged for another folder: nothing is replaced here
             if (!StageIntact(journal)) { Discard(); return new ApplyResult("not-staged", "stage-corrupt"); }
             if (!HasRoomFor(journal)) return Abort(ref journal, "disk-full"); // before the app is stopped
             Enter(ref journal, UpdateStages.Exiting);
@@ -392,7 +400,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
             dbHash = AtomicFile.HashOf(BackupDatabasePath);
             faults?.Hit("backup:db");
         }
-        var index = new BackupIndex(journal.FromVersion, [.. files], hadDb, dbHash);
+        var index = new BackupIndex(journal.FromVersion, [.. files], hadDb, dbHash, InstallKey);
         AtomicFile.Write(BackupIndexPath, JsonSerializer.SerializeToUtf8Bytes(index, AppUpdateJson.Default.BackupIndex));
         faults?.Hit("backup:index");
     }
@@ -526,7 +534,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
             BackupIndex? index = null;
             try { index = JsonSerializer.Deserialize(File.ReadAllBytes(BackupIndexPath), AppUpdateJson.Default.BackupIndex); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { }
-            if (index?.Files is null) return new ApplyResult("no-backup", "backup-damaged");
+            if (index?.Files is null || !PathsPlain(index.Files) || !SameInstall(index.InstallDir)) return new ApplyResult("no-backup", "backup-damaged");
             string version = journal?.ToVersion ?? rolledBackVersion ?? Guard.Read()?.Version ?? "unknown";
             if (version == "?") version = rolledBackVersion ?? "unknown";
             if (env.StopApp(exitTimeout) == UpdateExitOutcome.TimedOut) return new ApplyResult("aborted", "exit-timeout");
@@ -549,7 +557,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
 
     private string[] ReadInstalledList()
     {
-        try { return File.Exists(InstalledListPath) ? JsonSerializer.Deserialize(File.ReadAllBytes(InstalledListPath), AppUpdateJson.Default.StringArray) ?? [] : []; }
+        try { return File.Exists(InstalledListPath) ? (JsonSerializer.Deserialize(File.ReadAllBytes(InstalledListPath), AppUpdateJson.Default.StringArray) ?? []).Where(p => p is not null && NormalizePath(p) is not null).ToArray() : []; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return []; }
     }
 
@@ -561,7 +569,8 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
         BackupIndex? index = null;
         try { index = JsonSerializer.Deserialize(File.ReadAllBytes(BackupIndexPath), AppUpdateJson.Default.BackupIndex); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { }
-        if (index?.Files is null) throw new UpdateStepException("rollback-incomplete", "no backup index");
+        if (index?.Files is null || !PathsPlain(index.Files)) throw new UpdateStepException("rollback-incomplete", "no backup index");
+        if (!SameInstall(index.InstallDir)) throw new UpdateStepException("rollback-incomplete", "backup belongs to another install folder");
         // The backup must be intact before anything is overwritten from it.
         foreach (var f in index.Files)
             if (!FileMatches(Path.Combine(BackupAppFolder, f.Path.Replace('/', Path.DirectorySeparatorChar)), f)) throw new UpdateStepException("rollback-incomplete", "backup damaged");

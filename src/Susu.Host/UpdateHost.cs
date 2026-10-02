@@ -125,7 +125,7 @@ internal static class UpdateHost
             // No pair to go back to (or it is damaged): the failing start is not retried forever; the guard is released and the version on disk starts as it is.
             if (code == NoBackup && reason == AppUpdater.FirstStartFailed) updater.Guard.Clear();
             if (code == RolledBack && reason == AppUpdater.FirstStartFailed && !noRestart && report is null)
-                Win32Prompt.Error("Su-Su", "The new version could not start twice in a row, so Su-Su went back to the previous version. Your data from before the update was restored; what you saved in the new version is kept in the updates folder.\n新版本连续两次无法启动，Su-Su 已回到上一个版本，并恢复了更新前的数据；新版本中保存的内容保留在 updates 文件夹中。");
+                Susu.Windows.Shell.Win32Prompt.Error("Su-Su", "The new version could not start twice in a row, so Su-Su went back to the previous version. Your data from before the update was restored; what you saved in the new version is kept in the updates folder.\n新版本连续两次无法启动，Su-Su 已回到上一个版本，并恢复了更新前的数据；新版本中保存的内容保留在 updates 文件夹中。");
         }
         else
         {

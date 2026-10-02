@@ -119,7 +119,7 @@ public class F18UpdateHostTests
     public void The_probe_commands_of_the_published_exe_migrate_the_database_and_check_the_expected_version()
     {
         string? publish = Publish();
-        if (publish is null) return;
+        if (publish is null) Assert.Skip("Needs the NativeAOT publish output of susu.exe (see PluginHostIntegrationTests).");
         string exe = Path.Combine(publish, "susu.exe");
         string root = TestTemp.NewDir("susu-f18-probe");
         var paths = AppPaths.Resolve(root, development: false).EnsureCreated();
@@ -139,7 +139,7 @@ public class F18UpdateHostTests
     public void The_real_helper_stops_nothing_replaces_the_files_migrates_with_the_new_exe_and_commits()
     {
         string? publish = Publish();
-        if (publish is null) return;
+        if (publish is null) Assert.Skip("Needs the NativeAOT publish output of susu.exe (see PluginHostIntegrationTests).");
         string probe = Path.Combine(publish, "susu.exe");
         var rig = NewRig(publish, VersionOf(probe));
         var run = Run(rig.HelperCopy, "--apply-update", "--install-dir", rig.Install, "--data-root", rig.Root, "--no-restart");
@@ -158,7 +158,7 @@ public class F18UpdateHostTests
     public void A_failed_health_check_of_the_real_new_exe_restores_the_old_files_and_the_old_database_together()
     {
         string? publish = Publish();
-        if (publish is null) return;
+        if (publish is null) Assert.Skip("Needs the NativeAOT publish output of susu.exe (see PluginHostIntegrationTests).");
         var rig = NewRig(publish, "9.9.9"); // the journal expects 9.9.9; the package's exe is another version, so its health probe fails
         var run = Run(rig.HelperCopy, "--apply-update", "--install-dir", rig.Install, "--data-root", rig.Root, "--no-restart");
         Assert.Equal(30, run.Exit);
@@ -175,7 +175,7 @@ public class F18UpdateHostTests
     public void A_helper_started_for_recovery_finishes_a_replacement_that_was_cut_off()
     {
         string? publish = Publish();
-        if (publish is null) return;
+        if (publish is null) Assert.Skip("Needs the NativeAOT publish output of susu.exe (see PluginHostIntegrationTests).");
         var rig = NewRig(publish, VersionOf(Path.Combine(publish, "susu.exe")), new FaultAt("replace:2"));
         Assert.Throws<SimulatedCrash>(() => rig.Updater.Apply()); // the process "died" with the install folder half replaced
         Assert.True(File.Exists(Path.Combine(rig.Install, "NEW-MARKER.txt")) || rig.Updater.Read()!.Stage == UpdateStages.Replacing);
@@ -195,7 +195,7 @@ public class F18UpdateHostTests
     public void The_helper_refuses_bad_arguments_a_missing_install_folder_and_a_second_helper()
     {
         string? publish = Publish();
-        if (publish is null) return;
+        if (publish is null) Assert.Skip("Needs the NativeAOT publish output of susu.exe (see PluginHostIntegrationTests).");
         string exe = Path.Combine(publish, "susu.exe");
         string root = TestTemp.NewDir("susu-f18-args");
         Assert.Equal(2, Run(exe, "--apply-update", "--data-root", root).Exit); // no install folder
@@ -203,7 +203,10 @@ public class F18UpdateHostTests
         Assert.Equal(2, Run(exe, "--apply-update", "--unknown-flag").Exit);
         // While another helper holds the update lock, a second one does not run.
         var holder = UpdateLockForTest(root);
-        try { Assert.Equal(34, Run(exe, "--apply-update", "--install-dir", publish, "--data-root", root, "--no-restart").Exit); }
+        string helperDir = Path.Combine(AppPaths.Resolve(root, false).Updates, "helper", "lock"); Directory.CreateDirectory(helperDir);
+        string install = Path.Combine(TestTemp.NewDir("susu-f18-lockinstall"), "app"); CopyProgramFiles(publish, install);
+        File.Copy(exe, Path.Combine(helperDir, "susu-update.exe")); File.Copy(Path.Combine(publish, "e_sqlite3.dll"), Path.Combine(helperDir, "e_sqlite3.dll"));
+        try { Assert.Equal(34, Run(Path.Combine(helperDir, "susu-update.exe"), "--apply-update", "--install-dir", install, "--data-root", root, "--no-restart").Exit); }
         finally { holder.ReleaseMutex(); holder.Dispose(); }
     }
 
@@ -214,5 +217,112 @@ public class F18UpdateHostTests
         var mutex = new Mutex(false, "Local\\Su-Su.Update." + suffix);
         Assert.True(mutex.WaitOne(0));
         return mutex;
+    }
+
+    private static int RunRaw(string exe, params string[] args)
+    {
+        var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true };
+        foreach (string a in args) info.ArgumentList.Add(a);
+        using var process = Process.Start(info)!;
+        Assert.True(process.WaitForExit(120_000));
+        return process.ExitCode;
+    }
+
+    private static int Cmd(string command)
+    {
+        using var p = Process.Start(new ProcessStartInfo("cmd.exe", "/c " + command) { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true })!;
+        p.StandardOutput.ReadToEnd();
+        p.WaitForExit();
+        return p.ExitCode;
+    }
+
+    [Fact] // UPD08: tampered helper command lines are refused (exit 2) and nothing is replaced, run or deleted
+    public void A_tampered_helper_command_line_is_refused_before_anything_changes()
+    {
+        string? publish = Publish();
+        if (publish is null) Assert.Skip("Needs the NativeAOT publish output of susu.exe (see PluginHostIntegrationTests).");
+        var rig = NewRig(publish, VersionOf(Path.Combine(publish, "susu.exe")));
+        string helper = rig.HelperCopy, root = rig.Root, install = rig.Install;
+        string link = Path.Combine(rig.Root, "install-link");
+        Assert.Equal(0, Cmd($"mklink /J \"{link}\" \"{install}\""));
+        var cases = new List<string[]>
+        {
+            new[] { "--apply-update", "--install-dir", "app", "--data-root", root },
+            new[] { "--apply-update", "--install-dir", Path.Combine(install, "..", Path.GetFileName(install)), "--data-root", root },
+            new[] { "--apply-update", "--install-dir", @"\\localhost\C$\Windows", "--data-root", root },
+            new[] { "--apply-update", "--install-dir", @"\\?\" + install, "--data-root", root },
+            new[] { "--apply-update", "--install-dir", @"\\.\" + install, "--data-root", root },
+            new[] { "--apply-update", "--install-dir", install + ":evil", "--data-root", root },
+            new[] { "--apply-update", "--install-dir", link, "--data-root", root },
+            new[] { "--apply-update", "--install-dir", Path.GetPathRoot(install)!, "--data-root", root },
+            new[] { "--apply-update", "--install-dir", Environment.GetFolderPath(Environment.SpecialFolder.Windows), "--data-root", root },
+            new[] { "--apply-update", "--install-dir", install + "\" --data-root C:\\x", "--data-root", root }, // quote and option injection inside one value
+            new[] { "--apply-update", "--install-dir", install + " --no-restart", "--data-root", root }, // spaces: not a folder
+            new[] { "--apply-update", "--install-dir", "--no-restart", "--data-root", root }, // an option as a value
+            new[] { "--apply-update", "--install-dir", install, "--install-dir", install, "--data-root", root }, // duplicate option
+            new[] { "--apply-update", "--install-dir" }, // value missing
+            new[] { "--apply-update", "--install-dir", install, "--exe", @"C:\Windows\System32\calc.exe", "--data-root", root }, // unknown option
+            new[] { "--apply-update", "--install-dir", install, "--data-root", @"..\x" },
+            new[] { "--apply-update", "--install-dir", install, "--data-root", @"\\localhost\c$\x" },
+            new[] { "--apply-update", "--install-dir", install, "--data-root", root, "--reason", "user-rollback" },
+            new[] { "--apply-update", "--install-dir", install, "--data-root", root, "--expect-version", "1.0.0" },
+            new[] { "--rollback-update", "--install-dir", install, "--data-root", root },
+            new[] { "--rollback-update", "--install-dir", install, "--data-root", root, "--reason", "bogus" },
+            new[] { "--rollback-update", "--install-dir", install, "--data-root", root, "--reason", "user-rollback; calc" },
+            new[] { "--recover-update", "--install-dir", install, "--data-root", root, "--reason", "user-rollback" },
+            new[] { "--apply-update", "--install-dir", install, "--data-root", root, "--report", Path.Combine(root, "report.txt") }, // not a .json report
+            new[] { "--apply-update", "--install-dir", install, "--data-root", root, "--report", Path.Combine(install, "report.json") }, // inside the install folder
+            new[] { "--apply-update", "--install-dir", install, "--data-root", root, "--report", "report.json" },
+            new[] { "--apply-update", "--install-dir", install, "--data-root", root, "--report", Path.Combine(root, "report.json:stream") },
+            new[] { "--update-health", "--expect-version", "1.0;calc", "--data-root", root },
+            new[] { "--update-health", "--expect-version", "1.0.0", "--install-dir", install, "--data-root", root },
+            new[] { "--update-migrate", "--reason", "user-rollback", "--data-root", root },
+        };
+        foreach (var args in cases) Assert.True(RunRaw(helper, [.. args, "--no-restart"]) == 2, string.Join(' ', args));
+        // The same valid command line from a path that is not the helper folder is refused too (it must be the copy the app made).
+        Assert.Equal(2, RunRaw(Path.Combine(publish, "susu.exe"), "--apply-update", "--install-dir", install, "--data-root", root, "--no-restart"));
+        Assert.Equal(2, RunRaw(Path.Combine(install, "susu.exe"), "--apply-update", "--install-dir", install, "--data-root", root, "--no-restart"));
+        // Nothing happened: still staged, nothing replaced, database at the old schema.
+        Assert.Equal(UpdateStages.Staged, rig.Updater.Read()!.Stage);
+        Assert.False(File.Exists(Path.Combine(install, "NEW-MARKER.txt")));
+        Assert.Equal(Database.SchemaVersion - 1, Database.PeekVersion(rig.Paths.Database));
+        Assert.False(Directory.Exists(rig.Updater.BackupFolder));
+    }
+
+    [Fact] // F18.3: the real helper goes back to the previous version after failed first starts; the failed version is remembered; a second run has nothing to restore
+    public void The_real_helper_rolls_back_after_failed_first_starts_and_keeps_the_new_data_aside()
+    {
+        string? publish = Publish();
+        if (publish is null) Assert.Skip("Needs the NativeAOT publish output of susu.exe (see PluginHostIntegrationTests).");
+        string version = VersionOf(Path.Combine(publish, "susu.exe"));
+        var rig = NewRig(publish, version);
+        var apply = Run(rig.HelperCopy, "--apply-update", "--install-dir", rig.Install, "--data-root", rig.Root, "--no-restart");
+        Assert.True(apply.Exit == 0, apply.Report);
+        var guard = rig.Updater.Guard;
+        Assert.Equal(version, guard.Read()!.Version);
+        using (var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = rig.Paths.Database, Pooling = false }.ToString()))
+        {
+            c.Open();
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = "INSERT INTO notes(text) VALUES ('saved in the new version');";
+            cmd.ExecuteNonQuery();
+        }
+        Assert.Equal(StartDecision.Proceed, guard.OnStart(version));
+        Assert.Equal(StartDecision.Proceed, guard.OnStart(version));
+        Assert.Equal(StartDecision.Fallback, guard.OnStart(version));
+
+        var back = Run(rig.HelperCopy, "--rollback-update", "--reason", "first-start-failed", "--install-dir", rig.Install, "--data-root", rig.Root, "--no-restart");
+        Assert.Equal(30, back.Exit);
+        Assert.Contains("rolled-back:first-start-failed", back.Report);
+        Assert.False(File.Exists(Path.Combine(rig.Install, "NEW-MARKER.txt")));
+        Assert.Equal(Database.SchemaVersion - 1, Database.PeekVersion(rig.Paths.Database));
+        Assert.Equal(["user data one", "user data two"], Rows(rig.Paths.Database));
+        Assert.Equal(["user data one", "user data two", "saved in the new version"], Rows(Path.Combine(rig.Paths.Updates, "rolled-back-data", $"susu-{version}.db")));
+        Assert.True(guard.IsFailed(version));
+        Assert.Null(guard.Read());
+        Assert.Equal(0, Run(rig.Exe, "--update-migrate", "--data-root", rig.Root).Exit); // the restored old exe runs
+        // nothing left to go back to
+        var again = Run(rig.HelperCopy, "--rollback-update", "--reason", "user-rollback", "--install-dir", rig.Install, "--data-root", rig.Root, "--no-restart");
+        Assert.Equal(35, again.Exit);
     }
 }

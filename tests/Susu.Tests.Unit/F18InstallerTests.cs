@@ -156,7 +156,7 @@ public class F18InstallerTests
     public void Uninstall_keeps_user_data_by_default_and_deletes_it_only_when_asked()
     {
         string root = TestTemp.NewDir("susu-f18-data");
-        string roaming = Path.Combine(root, "Roaming"), local = Path.Combine(root, "Local");
+        string roaming = Path.Combine(root, "Roaming", "Su-Su"), local = Path.Combine(root, "Local", "Su-Su");
         foreach (string f in new[] { roaming, local }) { Directory.CreateDirectory(f); File.WriteAllText(Path.Combine(f, "keep.txt"), "x"); }
         string prefix = $"Susu.F18Test.{Guid.NewGuid():N}.";
         string runKey = $@"Software\Susu.F18Test.{Guid.NewGuid():N}\Run";
@@ -340,7 +340,7 @@ public class F18InstallerTests
     public async Task Published_exe_installer_commands_work_against_a_real_running_instance()
     {
         string? output = PluginHostIntegrationTests.FindHostBuildOutput();
-        if (output is null) return;
+        if (output is null) Assert.Skip("The NativeAOT publish output of susu.exe is not present; publish the host first (see PluginHostIntegrationTests).");
         string exe = Path.Combine(output, "susu.exe");
         string root = TestTemp.NewDir("susu-f18-root");
 
@@ -377,7 +377,7 @@ public class F18InstallerTests
                 query = RunHost(exe, "--installer-query", "--data-root", running);
                 if (query.Exit < 100) await Task.Delay(200, TestContext.Current.CancellationToken);
             }
-            if (app.HasExited && query.Exit < 100) return; // no usable desktop or WebView2 runtime here: the app exits on its own, nothing to coordinate
+            if (app.HasExited && query.Exit < 100) Assert.Skip("The app exited on its own (no usable desktop or WebView2 runtime here), so there is no running instance to coordinate with."); // no usable desktop or WebView2 runtime here: the app exits on its own, nothing to coordinate
             Assert.Equal(100, query.Exit); // running, nothing in flight
             Assert.Contains("\"state\":\"running\"", query.Report);
             // uninstall refuses while the instance runs
@@ -398,7 +398,7 @@ public class F18InstallerTests
     public async Task Killing_the_parent_process_leaves_no_orphan_plugin_host()
     {
         string? staged = PluginHostIntegrationTests.StageHost();
-        if (staged is null) return; // needs the NativeAOT publish (see PluginHostIntegrationTests)
+        if (staged is null) Assert.Skip("Needs the NativeAOT publish output (see PluginHostIntegrationTests).");
         string pidFile = Path.Combine(TestTemp.NewDir("susu-f18-x06"), "child.pid");
         var info = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         info.ArgumentList.Add("-method");
@@ -429,7 +429,7 @@ public class F18InstallerTests
     public void X06_parent_role_helper()
     {
         string? role = Environment.GetEnvironmentVariable(ParentRole);
-        if (role is null) return;
+        if (role is null) return; // a child-process role launched by the X06 parent test; run directly it has nothing to do
         string[] parts = role.Split('|');
         string host = Path.Combine(parts[1], "susu.exe");
         var session = HostSession.Start(new HostSession.Options(host, parts[1], "quickjs", KeepProfile: false));
@@ -442,7 +442,7 @@ public class F18InstallerTests
     public void Closing_the_session_ends_the_child_and_a_tiny_memory_budget_fails_visibly()
     {
         string? staged = PluginHostIntegrationTests.StageHost();
-        if (staged is null) return;
+        if (staged is null) Assert.Skip("Needs the NativeAOT publish output (see PluginHostIntegrationTests).");
         string host = Path.Combine(staged, "susu.exe");
         var session = HostSession.Start(new HostSession.Options(host, staged, "quickjs", KeepProfile: false));
         using var child = Process.GetProcessById(session.ChildPid);
@@ -452,5 +452,31 @@ public class F18InstallerTests
 
         var error = Record.Exception(() => { using var tiny = HostSession.Start(new HostSession.Options(host, staged, "quickjs", MemoryLimit: 4UL << 20, KeepProfile: false)); });
         Assert.NotNull(error);
+    }
+
+    [Fact] // UPD07/UPD08: the uninstall command refuses a tampered data root and, with a valid one, deletes only the app's own Su-Su folders
+    public void Published_exe_uninstall_refuses_tampered_data_roots_and_deletes_only_its_own_folders()
+    {
+        string? output = PluginHostIntegrationTests.FindHostBuildOutput();
+        if (output is null) Assert.Skip("The NativeAOT publish output of susu.exe is not present; publish the host first (see PluginHostIntegrationTests).");
+        string exe = Path.Combine(output, "susu.exe");
+        string root = TestTemp.NewDir("susu-f18-uninstall-root");
+        string own = Path.Combine(root, "Roaming", "Su-Su"), local = Path.Combine(root, "Local", "Su-Su");
+        Directory.CreateDirectory(own);
+        Directory.CreateDirectory(local);
+        File.WriteAllText(Path.Combine(own, "settings.json"), "{}");
+        File.WriteAllText(Path.Combine(root, "Roaming", "other-app.txt"), "keep");
+        string prefix = $"Susu.F18Test.{Guid.NewGuid():N}.";
+        foreach (string bad in new[] { "relative", @"..\x", root + @"\..\" + Path.GetFileName(root), @"\\localhost\c$\x", @"\\?\" + root, root + ":stream", "C:\\x\" --delete-user-data" })
+        {
+            Assert.Equal(2, RunHost(exe, "--installer-uninstall", "--delete-user-data", "--profile-prefix", prefix, "--data-root", bad).Exit);
+            Assert.True(File.Exists(Path.Combine(own, "settings.json")), bad);
+        }
+        Assert.Equal(0, RunHost(exe, "--installer-uninstall", "--profile-prefix", prefix, "--data-root", root).Exit); // default: keep
+        Assert.True(File.Exists(Path.Combine(own, "settings.json")));
+        Assert.Equal(0, RunHost(exe, "--installer-uninstall", "--delete-user-data", "--profile-prefix", prefix, "--data-root", root).Exit);
+        Assert.False(Directory.Exists(own));
+        Assert.False(Directory.Exists(local));
+        Assert.True(File.Exists(Path.Combine(root, "Roaming", "other-app.txt"))); // nothing outside Su-Su's own folders
     }
 }

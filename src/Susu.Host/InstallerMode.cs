@@ -35,6 +35,11 @@ internal static class InstallerMode
                 default: return BadArguments;
             }
         }
+        if (dataRoot is not null)
+        {
+            dataRoot = Susu.Plugins.AppUpdate.UpdatePathRules.PlainAbsolute(dataRoot); // UPD08: a tampered path (relative, .., UNC, device, stream) is refused before anything runs
+            if (dataRoot is null) return BadArguments;
+        }
         string instance = MainMode.InstanceName(dataRoot);
         int code;
         string json;
@@ -61,8 +66,8 @@ internal static class InstallerMode
                 {
                     var paths = AppPaths.Resolve(dataRoot, development: false);
                     var result = InstallerSupport.Uninstall([paths.Roaming, paths.Local], deleteData, profilePrefix, removeAutostart: dataRoot is null); // a custom data root never wrote the login entry
-                    code = 0;
-                    json = $"{{\"state\":\"done\",\"profilesRemoved\":{result.ProfilesRemoved},\"autostartRemoved\":{(result.AutostartRemoved ? "true" : "false")},\"userDataDeleted\":{(result.UserDataDeleted ? "true" : "false")}}}";
+                    code = result.FoldersRefused > 0 ? Failed : 0; // a data folder that is not Su-Su's own by name is never deleted
+                    json = $"{{\"state\":\"done\",\"profilesRemoved\":{result.ProfilesRemoved},\"autostartRemoved\":{(result.AutostartRemoved ? "true" : "false")},\"userDataDeleted\":{(result.UserDataDeleted ? "true" : "false")},\"foldersRefused\":{result.FoldersRefused}}}";
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {

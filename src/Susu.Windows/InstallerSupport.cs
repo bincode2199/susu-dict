@@ -87,18 +87,44 @@ public static partial class InstallerSupport
         int profiles = DeleteContainerProfiles(profilePrefix);
         bool autostart = removeAutostart && RemoveAutostart(autostartValue, runKeyPath);
         bool data = false;
+        int refused = 0;
         if (deleteUserData)
             foreach (string folder in dataFolders)
             {
                 if (!Directory.Exists(folder)) continue;
-                // A reparse point at the data folder is removed as a link, never followed into its target.
+                // UPD08/DATA: only a folder that is Su-Su's own by name is ever deleted (a tampered --data-root cannot point the deletion at another folder), and links inside it are
+                // unlinked, never followed.
+                if (!IsOwnDataFolder(folder)) { refused++; continue; }
                 var info = new DirectoryInfo(folder);
                 if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) info.Delete();
-                else Directory.Delete(folder, recursive: true);
+                else DeleteTreeWithoutFollowing(folder);
                 data = true;
             }
-        return new UninstallResult(profiles, autostart, data);
+        return new UninstallResult(profiles, autostart, data, refused);
     }
 
-    public sealed record UninstallResult(int ProfilesRemoved, bool AutostartRemoved, bool UserDataDeleted);
+    /// <summary>The data folders are always <c>...\Su-Su</c> (<c>AppPaths</c>); anything else is not ours to delete.</summary>
+    public static bool IsOwnDataFolder(string folder)
+    {
+        string full = Path.GetFullPath(folder).TrimEnd('\\');
+        return string.Equals(Path.GetFileName(full), "Su-Su", StringComparison.OrdinalIgnoreCase) && Path.GetDirectoryName(full) is not null;
+    }
+
+    private static void DeleteTreeWithoutFollowing(string folder)
+    {
+        foreach (string entry in Directory.EnumerateFileSystemEntries(folder))
+        {
+            var attributes = File.GetAttributes(entry);
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                if ((attributes & FileAttributes.Directory) != 0) Directory.Delete(entry, recursive: false); // a junction or directory symlink: only the link goes
+                else { File.SetAttributes(entry, FileAttributes.Normal); File.Delete(entry); }
+            }
+            else if ((attributes & FileAttributes.Directory) != 0) DeleteTreeWithoutFollowing(entry);
+            else { File.SetAttributes(entry, FileAttributes.Normal); File.Delete(entry); }
+        }
+        Directory.Delete(folder, recursive: false);
+    }
+
+    public sealed record UninstallResult(int ProfilesRemoved, bool AutostartRemoved, bool UserDataDeleted, int FoldersRefused = 0);
 }
