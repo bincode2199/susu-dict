@@ -25,7 +25,8 @@ public sealed record PackageManifest(
     IReadOnlyList<string> Hosts,
     IReadOnlyList<string> CredentialUse,
     string Entry,
-    IReadOnlyList<Susu.Domain.ConfigField>? Config = null)
+    IReadOnlyList<Susu.Domain.ConfigField>? Config = null,
+    string? Version = null)
 {
     /// <summary>The schema's properties in declaration order (empty when the package declares no config).</summary>
     public IReadOnlyList<Susu.Domain.ConfigField> ConfigFields => Config ?? [];
@@ -61,9 +62,15 @@ public sealed record PackageManifest(
                 issues.Add(new ManifestIssue("capabilities", "unknown", $"'{c}' is not a published capability"));
         if (!LooksLikeSafeRelativePath(entry)) issues.Add(new ManifestIssue("entry", "invalid", $"'{entry}' is not a safe relative path"));
         var config = ParseConfig(root.Get("config"), credentialUse, issues);
+        string? version = null;
+        if (root.Get("version") is { } versionNode)
+        {
+            if (versionNode is YScalar vs && Susu.Plugins.Install.PackageVersion.TryParse(vs.Value, out _)) version = vs.Value;
+            else issues.Add(new ManifestIssue("version", "invalid", "version must be major.minor.patch (digits only)"));
+        }
 
         if (issues.Count > 0 || id is null || name is null) return (null, issues);
-        return (new PackageManifest(id, name, apiVersion, minHost, capabilities, hosts, credentialUse, entry, config), issues);
+        return (new PackageManifest(id, name, apiVersion, minHost, capabilities, hosts, credentialUse, entry, config, version), issues);
     }
 
     public const int MaxConfigFields = 64;
