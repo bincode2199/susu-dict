@@ -104,11 +104,11 @@ describe('Plugins page', () => {
   });
 
   it('lists why a package was refused, translating known codes', async () => {
-    const last: PluginOutcomeView = { action: 'preview', error: 'install.rejected', issues: [{ path: '../evil.js', code: 'path-escape' }, { path: 'x', code: 'weird-new-code' }] };
+    const last: PluginOutcomeView = { action: 'preview', error: 'install.rejected', issues: [{ path: '../evil.js', code: 'traversal' }, { path: 'x', code: 'weird-new-code' }] };
     const { wrapper } = await mountPage(plugins({ last }));
     expect(wrapper.find('[data-plugin-error]').text()).toBe(t('plugins.rejected'));
     const issues = wrapper.findAll('[data-plugin-issue]').map((i) => i.text());
-    expect(issues[0]).toContain(t('plugins.issue.path-escape'));
+    expect(issues[0]).toContain(t('plugins.issue.traversal'));
     expect(issues[0]).toContain('../evil.js');
     expect(issues[1]).toContain(t('plugins.issue.other', { code: 'weird-new-code' }));
   });
