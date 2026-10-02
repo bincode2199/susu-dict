@@ -315,6 +315,7 @@ public static class BackupImport
         byte[] settingsBytes = File.ReadAllBytes(Path.Combine(dir, "settings.yaml"));
         if (SettingsYaml.Read(Decode(settingsBytes)).Settings is null) return false;
         byte[] secretsBytes = File.Exists(Path.Combine(dir, "secrets.dat")) ? File.ReadAllBytes(Path.Combine(dir, "secrets.dat")) : SecretStore.BuildFile(protector, []);
+        if (!SecretStore.IsValidFile(secretsBytes)) return false; // F17V-4: a damaged restore point is never offered
         string token = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
         var pending = new BackupPending(token, "Ready", AtomicFile.Hash(settingsBytes), AtomicFile.Hash(secretsBytes), null, 0, clock.UtcNow.UtcDateTime.ToString("O"), "undo", 0);
         Stage(p, pending, settingsBytes, secretsBytes, faults);
@@ -352,6 +353,7 @@ public static class BackupImport
             byte[] secretsBytes = File.ReadAllBytes(Path.Combine(StageDir(paths), "secrets.dat"));
             var (settings, _) = SettingsYaml.Read(Decode(staged));
             if (settings is null) return Fail(paths, clock, "settings-invalid", pending.Token, pending.Source);
+            if (!SecretStore.IsValidFile(secretsBytes)) return Fail(paths, clock, "settings-invalid", pending.Token, pending.Source);
 
             // The final settings bytes (revision moved past the current file's) are fixed once and recorded, so a retry after a power loss compares
             // against the same bytes and recognises a commit that already happened.
@@ -359,8 +361,11 @@ public static class BackupImport
             byte[] finalBytes;
             if (pending.FinalSettingsHash is null)
             {
-                long revision = Math.Max(CurrentRevision(paths), settings.Revision) + 1;
-                finalBytes = Encoding.UTF8.GetBytes(SettingsYaml.Write(settings with { Revision = revision }));
+                long top = Math.Max(CurrentRevision(paths), settings.Revision);
+                if (top < 0 || top >= long.MaxValue - 1) return Fail(paths, clock, "settings-invalid", pending.Token, pending.Source); // F17V-3: no overflow
+                finalBytes = Encoding.UTF8.GetBytes(SettingsYaml.Write(settings with { Revision = top + 1 }));
+                // never write a settings.yaml the loader would reject
+                if (SettingsYaml.Read(Decode(finalBytes)).Settings is null) return Fail(paths, clock, "settings-invalid", pending.Token, pending.Source);
                 if (File.Exists(finalPath)) File.Delete(finalPath);
                 AtomicFile.WriteFlushed(finalPath, finalBytes);
                 pending = pending with { FinalSettingsHash = AtomicFile.Hash(finalBytes) };
@@ -377,7 +382,7 @@ public static class BackupImport
             {
                 EnsureRestorePoint(paths, pending.Token, clock, faults);
                 faults?.Hit("import:before-commit");
-                new ConfigTransaction(paths.Transactions, faults).Commit([(paths.Settings, finalBytes), (paths.Secrets, secretsBytes)]);
+                new ConfigTransaction(paths, faults).Commit([(paths.Settings, finalBytes), (paths.Secrets, secretsBytes)]);
             }
             try
             {
@@ -399,7 +404,7 @@ public static class BackupImport
         {
             // Disk full or a locked file: ConfigTransaction has put the old pair back. If even that rollback failed it is finished here, so this start never
             // runs on a half-switched pair (the journal is also recovered at every start). The import is dropped, the user can try again.
-            try { new ConfigTransaction(paths.Transactions).Recover(); } catch (Exception r) when (r is IOException or UnauthorizedAccessException) { }
+            try { new ConfigTransaction(paths).Recover(); } catch (Exception r) when (r is IOException or UnauthorizedAccessException) { }
             return Fail(paths, clock, FailureCode(e, "io"), pending.Token, pending.Source);
         }
     }

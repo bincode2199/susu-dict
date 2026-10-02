@@ -100,8 +100,10 @@ public static class StorageErrors
     public static bool IsDiskFull(IOException e) => (e.HResult & 0xFFFF) is 0x27 or 0x70;
 }
 
-public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint? faults = null)
+public sealed class ConfigTransaction(AppPaths paths, IFaultPoint? faults = null)
 {
+    private readonly string transactionsDirectory = paths.Transactions;
+
     public sealed record Journal(string State, JournalFile[] Files);
     public sealed record JournalFile(string Target, bool HadOld);
 
@@ -137,23 +139,45 @@ public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint?
         catch (IOException) when (!committed)
         {
             // A real I/O failure (disk full, sharing violation) in this process: undo now rather than at next start.
-            if (prepared) RecoverOne(dir, faults);
+            if (prepared) RecoverOne(dir);
             else TryDelete(dir);
             throw;
         }
     }
 
-    /// <summary>Run at startup before settings/secrets are loaded. Returns how many transactions were rolled back.</summary>
+    /// <summary>
+    /// Run at startup before settings/secrets are loaded. Returns how many transactions were rolled back. Never throws: a damaged
+    /// or planted journal (F17V-5, F17V-6) is deleted unused, and a transaction that fails on a real I/O error is kept for the next start.
+    /// </summary>
     public int Recover()
     {
-        if (!Directory.Exists(transactionsDirectory)) return 0;
         int rolledBack = 0;
-        foreach (var dir in Directory.GetDirectories(transactionsDirectory))
-            if (RecoverOne(dir, faults)) rolledBack++;
+        string[] dirs;
+        try
+        {
+            if (!Directory.Exists(transactionsDirectory)) return 0;
+            dirs = Directory.GetDirectories(transactionsDirectory);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return 0; }
+        foreach (var dir in dirs)
+        {
+            try { if (RecoverOne(dir)) rolledBack++; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* a locked file: keep the transaction and retry at the next start */ }
+            catch (Exception) { TryDelete(dir); /* damaged or hostile journal: nothing in it is trusted */ }
+        }
         return rolledBack;
     }
 
-    private static bool RecoverOne(string dir, IFaultPoint? faults = null)
+    private bool IsExpectedTarget(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target) || target.Contains('\0')) return false;
+        string full;
+        try { full = Path.GetFullPath(target); } catch (Exception) { return false; }
+        return string.Equals(full, Path.GetFullPath(paths.Settings), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(full, Path.GetFullPath(paths.Secrets), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool RecoverOne(string dir)
     {
         string journalPath = Path.Combine(dir, "journal.json");
         Journal? journal = null;
@@ -165,6 +189,14 @@ public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint?
         bool rolledBack = false;
         if (journal?.State == "Prepared")
         {
+            // Validate the whole journal before touching any file: every target must be exactly the settings or secrets file.
+            if (journal.Files is null) throw new InvalidDataException("journal without files");
+            for (int i = 0; i < journal.Files.Length; i++)
+            {
+                var f = journal.Files[i];
+                if (f is null || !IsExpectedTarget(f.Target)) throw new InvalidDataException("journal target is not a config file");
+                if (f.HadOld && !File.Exists(Path.Combine(dir, $"{i}.old"))) throw new InvalidDataException("journal without its old copy");
+            }
             for (int i = 0; i < journal.Files.Length; i++)
             {
                 var file = journal.Files[i];

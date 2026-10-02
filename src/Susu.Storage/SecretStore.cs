@@ -137,9 +137,45 @@ public sealed class SecretStore : ISecretStore
     private static List<SecretEntry> Load(string path)
     {
         if (!File.Exists(path)) return [];
-        var file = JsonSerializer.Deserialize(File.ReadAllBytes(path), StorageJson.Default.SecretFile)
-            ?? throw new InvalidDataException("secrets.dat is empty");
+        return Parse(File.ReadAllBytes(path));
+    }
+
+    private static List<SecretEntry> Parse(byte[] bytes)
+    {
+        SecretFile? file;
+        try { file = JsonSerializer.Deserialize(bytes, StorageJson.Default.SecretFile); }
+        catch (JsonException e) { throw new InvalidDataException("secrets.dat is damaged", e); }
+        if (file is null) throw new InvalidDataException("secrets.dat is empty");
         if (file.Version != 1) throw new InvalidDataException($"secrets.dat version {file.Version} is not supported");
+        if (file.Entries is null) throw new InvalidDataException("secrets.dat has no entries");
+        foreach (var e in file.Entries)
+        {
+            if (e is null || string.IsNullOrWhiteSpace(e.Account) || string.IsNullOrWhiteSpace(e.Name) || e.Blob is null)
+                throw new InvalidDataException("secrets.dat has a damaged entry");
+            try { Convert.FromBase64String(e.Blob); } catch (FormatException f) { throw new InvalidDataException("secrets.dat has a damaged entry", f); }
+        }
         return [.. file.Entries];
+    }
+
+    /// <summary>True when <paramref name="bytes"/> are a readable secrets.dat; used before a file is staged or committed (F17V-4).</summary>
+    public static bool IsValidFile(byte[] bytes)
+    {
+        try { Parse(bytes); return true; }
+        catch (InvalidDataException) { return false; }
+    }
+
+    /// <summary>
+    /// Opens the store at start. A damaged secrets.dat must not stop the application from starting (F17V-4): it is moved aside as
+    /// <c>secrets.dat.damaged</c> and the store opens empty, with <paramref name="damaged"/> set so the host can tell the user.
+    /// </summary>
+    public static SecretStore OpenOrQuarantine(string path, ISecretProtector protector, out bool damaged)
+    {
+        damaged = false;
+        try { return new SecretStore(path, protector); }
+        catch (InvalidDataException) { }
+        damaged = true;
+        try { File.Move(path, path + ".damaged", overwrite: true); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { try { File.Delete(path); } catch (Exception d) when (d is IOException or UnauthorizedAccessException) { } }
+        return new SecretStore(path, protector);
     }
 }

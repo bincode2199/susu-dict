@@ -43,7 +43,7 @@ internal sealed class BackupRig : IDisposable
     {
         Store?.Dispose();
         Store = new SettingsStore(Paths, Clock);
-        Secrets = new SecretStore(Paths.Secrets, Protector);
+        Secrets = SecretStore.OpenOrQuarantine(Paths.Secrets, Protector, out _);
         Service = new BackupService(Paths, Store, Secrets, Protector, Clock, new BackupHost("1.2.3", () => Available, () => UserPlugins, () => Local));
     }
 
@@ -69,7 +69,7 @@ internal sealed class BackupRig : IDisposable
     public BackupApplyResult? Restart(IFaultPoint? faults = null, bool recover = true)
     {
         Store.Dispose();
-        if (recover) new ConfigTransaction(Paths.Transactions).Recover();
+        if (recover) new ConfigTransaction(Paths).Recover();
         var result = BackupImport.ApplyPending(Paths, Clock, faults);
         Open();
         return result;
@@ -687,7 +687,7 @@ public class F17BackupTests
         target.Store.Dispose();
         Assert.Throws<SimulatedCrash>(() => BackupImport.ApplyPending(target.Paths, target.Clock, new FaultAt(stage)));
         // Restart step 1: the journal rolls an unfinished switch back.
-        new ConfigTransaction(target.Paths.Transactions).Recover();
+        new ConfigTransaction(target.Paths).Recover();
         bool oldPair = target.SettingsHash == oldSettings && target.SecretsHash == oldSecrets;
         string? newSettings = oldPair ? null : target.SettingsHash;
         bool newPair = !oldPair && target.SecretsHash != oldSecrets && target.SettingsHash != oldSettings;
@@ -718,7 +718,7 @@ public class F17BackupTests
         for (int i = 0; i < 3; i++)
         {
             Assert.Throws<SimulatedCrash>(() => BackupImport.ApplyPending(target.Paths, target.Clock, new FaultAt("import:begin")));
-            new ConfigTransaction(target.Paths.Transactions).Recover();
+            new ConfigTransaction(target.Paths).Recover();
         }
         var result = BackupImport.ApplyPending(target.Paths, target.Clock);
         Assert.Equal("Failed", result!.State);

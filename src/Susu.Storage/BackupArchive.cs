@@ -145,7 +145,9 @@ internal static class BackupArchive
 
     private static byte[] DeriveKey(string password, byte[] salt, int iterations)
     {
-        byte[] pw = Encoding.UTF8.GetBytes(password.Normalize(NormalizationForm.FormC));
+        byte[] pw;
+        try { pw = Encoding.UTF8.GetBytes(password.Normalize(NormalizationForm.FormC)); }
+        catch (ArgumentException) { throw new BackupException("password-invalid"); } // a lone surrogate (F17V-1)
         try { return Rfc2898DeriveBytes.Pbkdf2(pw, salt, iterations, HashAlgorithmName.SHA256, KeyBytes); }
         finally { CryptographicOperations.ZeroMemory(pw); }
     }
@@ -193,6 +195,7 @@ internal static class BackupArchive
         if (settings is null)
             throw new BackupException(issues.Any(i => i.Code == "newer-schema") ? "schema-newer" : "settings-invalid");
 
+        if (settings.Revision < 0 || settings.Revision >= long.MaxValue - 1) throw new BackupException("settings-invalid"); // F17V-3: the revision must be able to move past this file's
         var plugins = Array.Empty<BackupPluginRef>();
         if (entries.TryGetValue(PluginsName, out var pluginBytes))
         {

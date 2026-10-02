@@ -67,7 +67,7 @@ public sealed class SettingsStore : ISettingsStore, IDisposable
             try
             {
                 PreserveInvalidFile();
-                new ConfigTransaction(paths.Transactions, faults).Commit([(paths.Settings, check.Bytes!), (paths.Secrets, secretBytes)]);
+                new ConfigTransaction(paths, faults).Commit([(paths.Settings, check.Bytes!), (paths.Secrets, secretBytes)]);
             }
             catch (IOException e)
             {

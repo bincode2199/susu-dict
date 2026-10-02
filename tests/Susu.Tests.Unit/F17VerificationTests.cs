@@ -302,11 +302,10 @@ public sealed class F17VerificationTests : IDisposable
         string composed = "pässwörd-é-密码", decomposed = composed.Normalize(NormalizationForm.FormD);
         Assert.True(rig.Service.Export(path, new BackupExportOptions(false, composed)).Ok);
         Assert.NotNull(rig.Service.Preview(path, decomposed));
-        // DEFECT F17V-1 (low): a password with a lone surrogate makes string.Normalize throw ArgumentException from Preview and Export instead of a BackupException
-        // code; the shell's generic catch turns it into a generic failure. When fixed, expect BackupException("decrypt-failed") / "password-invalid" here.
+        // F17V-1 (fixed): a lone surrogate password is a BackupException code, never a raw ArgumentException.
         rig.Service.Discard();
-        Assert.IsType<ArgumentException>(Record.Exception(() => rig.Service.Preview(path, "\ud800 lone surrogate password")));
-        Assert.IsType<ArgumentException>(Record.Exception(() => rig.Service.Export(path, new BackupExportOptions(false, "\ud800 lone surrogate"))));
+        Assert.Equal("password-invalid", Code(() => rig.Service.Preview(path, "\ud800 lone surrogate password")));
+        Assert.Equal("password-invalid", rig.Service.Export(path, new BackupExportOptions(false, "\ud800 lone surrogate")).Error);
         Assert.False(Staged(rig));
     }
 
@@ -698,23 +697,21 @@ public sealed class F17VerificationTests : IDisposable
     }
 
     [Fact]
-    public void A_backup_with_the_largest_revision_still_restores_to_a_loadable_config_with_a_larger_revision()
+    public void A_backup_whose_revision_cannot_be_moved_past_is_refused_and_the_live_config_stays_valid()
     {
         var source = Labelled("Big", "sk-big-KEYKEY", "acct-big");
         string yaml = Encoding.UTF8.GetString(F17BackupTests.ValidSettings()).Replace("revision: 3", $"revision: {long.MaxValue}", StringComparison.Ordinal);
         Assert.Contains(long.MaxValue.ToString(), yaml, StringComparison.Ordinal);
         byte[] file = F17BackupTests.Craft(f => f["settings.yaml"] = Json(yaml));
         var target = Labelled("T", "sk-t-KEYKEY", "acct-t");
-        var preview = target.Service.Preview(Put(target, file), null);
-        Assert.True(target.Service.Apply(preview.Token));
+        long revisionBefore = target.Store.State.Revision;
+        Assert.Equal("settings-invalid", Code(() => target.Service.Preview(Put(target, file), null)));
         var result = target.Restart();
         long revision = target.Store.State.Revision;
-        // DEFECT F17V-3 (low-medium; needs a crafted file): max(current, backup)+1 overflows a long, the applied settings.yaml carries a negative revision, the
-        // loader rejects it ("range" on revision), and the result still says Applied. The app then runs on the last valid state with an invalid live file.
-        // Records today's behaviour; when fixed expect FileInvalid false and a positive revision.
-        Assert.Equal("Applied", result?.State);
-        Assert.True(target.Store.State.FileInvalid);
-        Assert.Contains(target.Store.State.Issues, i => i.Code == "range");
+        // F17V-3 (fixed): max(current, backup)+1 would overflow; the import is refused and the live settings.yaml stays valid and untouched.
+        Assert.NotEqual("Applied", result?.State);
+        Assert.False(target.Store.State.FileInvalid);
+        Assert.Equal(revisionBefore, revision);
     }
 
     [Fact]
@@ -847,18 +844,25 @@ public sealed class F17VerificationTests : IDisposable
         File.WriteAllText(Path.Combine(rp, "meta.json"), "garbage");
         // secrets.dat damaged: the stage is hash-consistent (made from the damaged bytes), so the damage is committed. Observe what the app then does with it.
         File.WriteAllBytes(Path.Combine(rp, "secrets.dat"), [1, 2, 3, 4, 5]);
-        bool scheduled = target.Service.ScheduleUndo();
+        // F17V-4 (fixed): the restore point's key file is parsed before it is staged, so a damaged one is refused up front and the live keys stay.
         string liveBefore = target.SecretsHash;
-        if (scheduled)
+        Assert.False(target.Service.ScheduleUndo());
+        Assert.Equal("None", target.Service.Status().State);
+        Assert.Equal(liveBefore, target.SecretsHash);
+        Assert.Null(target.Restart());
+        Assert.Equal(liveBefore, target.SecretsHash);
+        // and a damaged live secrets.dat (any cause) no longer stops the start: it is moved aside and the store opens empty
+        File.WriteAllBytes(target.Paths.Secrets, [1, 2, 3, 4, 5]);
+        var opened = SecretStore.OpenOrQuarantine(target.Paths.Secrets, target.Protector, out bool damaged);
+        Assert.True(damaged);
+        Assert.Empty(opened.Entries());
+        Assert.True(File.Exists(target.Paths.Secrets + ".damaged"));
+        Assert.False(File.Exists(target.Paths.Secrets));
+        foreach (var junk in new[] { "{}", "{\"version\":2,\"entries\":[]}", "{\"version\":1,\"entries\":[null]}", "{\"version\":1,\"entries\":[{\"account\":\"a\",\"name\":\"n\",\"blob\":\"%%%\"}]}", "", "null" })
         {
-            // DEFECT F17V-4 (low): the restore point's secrets.dat is not parsed before it is staged and committed, so a damaged restore point replaces the
-            // live key file with unreadable bytes (the keys are lost; the settings come back). The result is recorded here, not asserted away.
-            // The restart is the host's: recover, ApplyPending, then open the stores. Opening throws JsonException on the damaged secrets.dat, which the host
-            // (Program.cs, `new SecretStore(...)`) does not catch: the application cannot start until the file is removed by hand.
-            var ex = Record.Exception(() => target.Restart());
-            Assert.NotEqual(liveBefore, target.SecretsHash);
-            Assert.IsType<System.Text.Json.JsonException>(ex);
-            Assert.Equal("Applied", BackupImport.ReadResult(target.Paths)?.State);
+            File.WriteAllText(target.Paths.Secrets, junk);
+            Assert.Empty(SecretStore.OpenOrQuarantine(target.Paths.Secrets, target.Protector, out bool d2).Entries());
+            Assert.True(d2, junk);
         }
     }
 
@@ -1026,13 +1030,12 @@ public sealed class F17VerificationTests : IDisposable
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "0.old"), "overwritten by recovery");
         File.WriteAllText(Path.Combine(dir, "journal.json"), JsonSerializer.Serialize(new { state = "Prepared", files = new[] { new { target = victim, hadOld = true } } }));
-        var ex = Record.Exception(() => new ConfigTransaction(rig.Paths.Transactions).Recover());
+        var ex = Record.Exception(() => new ConfigTransaction(rig.Paths).Recover());
         string now = File.Exists(victim) ? File.ReadAllText(victim) : "<deleted>";
-        // DEFECT F17V-5 (low-medium, defense in depth; the same shape as F16's journal.json finding): recovery trusts the Target path recorded in the journal, so a
-        // journal planted in %LOCALAPPDATA%\Su-Su\transactions overwrites (hadOld) or deletes (not hadOld) any file the user can write. Targets should be limited to
-        // the settings and secrets paths. This assertion records today's behaviour; when fixed the victim must stay "original victim".
+        // F17V-5 (fixed): recovery accepts only the settings and secrets paths as targets; a planted journal is deleted unused.
         Assert.Null(ex);
-        Assert.Equal("overwritten by recovery", now);
+        Assert.Equal("original victim", now);
+        Assert.Empty(Directory.GetDirectories(rig.Paths.Transactions));
     }
 
     [Theory]
@@ -1054,12 +1057,9 @@ public sealed class F17VerificationTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "journal.json"), journal);
         string s = rig.SettingsHash;
         var ex = Record.Exception(() => rig.Restart());
-        // DEFECT F17V-6 (low-medium): a Prepared journal with no files list, a null entry (NullReferenceException) or whose .old copy is missing (FileNotFoundException)
-        // throws out of ConfigTransaction.Recover(); Program.cs calls Recover() before anything else with no catch, so the host cannot start until someone deletes the
-        // transactions folder by hand. Such a journal should be treated as damaged: delete it and go on. The exception type is recorded so the fix can be verified.
-        bool crashes = ex is not null;
-        if (crashes) Assert.True(ex is NullReferenceException or ArgumentException or InvalidOperationException or IOException or NotSupportedException, ex!.GetType().Name);
-        else Assert.Equal(s, rig.SettingsHash);
+        // F17V-6 (fixed): Recover never throws; a damaged journal is deleted and the config is left alone.
+        Assert.Null(ex);
+        Assert.Equal(s, rig.SettingsHash);
         Assert.True(File.Exists(rig.Paths.Settings));
     }
 
@@ -1463,35 +1463,41 @@ public sealed class F17VerificationTests : IDisposable
         Assert.True(TryJunction(Path.Combine(rig.Paths.Cache, "99999999-7"), outside));
         Assert.True(TryJunction(Path.Combine(rig.Paths.Cache, "99999999-5", "inner"), outside));
         Assert.True(TryJunction(Path.Combine(rig.Paths.Cache, "linked-folder"), outside));
-        var usage = rig.Clean.Items().Single(i => i.Kind == DataCleanKinds.Caches);
+        _ = rig.Clean.Items(); // the usage count must not walk into the junction targets either (checked by the clear below leaving them intact)
         var outcome = rig.Clean.Clear(DataCleanKinds.Caches);
         bool survived = File.Exists(Path.Combine(outside, "precious.txt")) && File.Exists(Path.Combine(outside, "sub", "deep.txt"));
-        // DEFECT F17V-9 (low-medium, needs a junction planted in the user's own cache folder): FileLeases.Sweep lists a dead-session directory with
-        // GetFiles("*", AllDirectories) and deletes each file before it deletes the directory, so a junction at the session level makes the clean delete files in the
-        // junction's target. The directory delete itself is safe. Records today's behaviour; when fixed `survived` must be true and the usage count must not count the target.
+        // F17V-9 (fixed): the sweep never follows a reparse point; the link is removed and what it pointed to is left alone and not counted.
         Assert.True(outcome.Ok);
+        Assert.True(survived, "a file behind a junction in the cache was deleted");
         Assert.False(Directory.Exists(Path.Combine(rig.Paths.Cache, "99999999-7")));
-        Assert.False(survived, "F17V-9 appears fixed: replace this record with an assertion that the target survives (usage " + usage.Count + ")");
+        Assert.False(Directory.Exists(Path.Combine(rig.Paths.Cache, "linked-folder")));
+        Assert.True(Directory.Exists(outside));
     }
 
     [Fact]
-    public void Deleting_accounts_leaves_the_previous_copies_of_the_key_file_and_the_settings()
+    public void Deleting_accounts_leaves_no_key_or_account_in_the_previous_copies()
     {
         var rig = NewClean();
         SeedClean(rig);
         rig.Secrets.Write("acct-deepl", "apiKey", "sk-clean-KEYKEY-2"); // a second write so a .prev exists
+        string prev = rig.Paths.Secrets + ".prev";
+        Assert.True(File.Exists(prev));
+        // every stored key blob (the seeded bytes) before the clear, from the live file and the previous copy
+        var blobs = new List<string>();
+        foreach (string f in new[] { rig.Paths.Secrets, prev })
+            blobs.AddRange(System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(f), "\"blob\":\"([^\"]+)\"").Select(m => m.Groups[1].Value));
+        Assert.NotEmpty(blobs);
         Assert.True(rig.Clean.Clear(DataCleanKinds.Accounts).Ok);
         Assert.Empty(rig.Secrets.Entries());
-        string prev = rig.Paths.Secrets + ".prev";
-        // DEFECT F17V-10 (medium-low, privacy): AtomicFile.Write keeps the previous version of secrets.dat and settings.yaml as ".prev". "Delete accounts and keys"
-        // goes through that path, so secrets.dat.prev still holds the keys (DPAPI ciphertext for this user, but readable by this user) and settings.yaml.prev still
-        // holds the accounts and grants; neither the About page nor the data-clean text mentions them. Records today's behaviour; when fixed the .prev files must
-        // be gone or hold no key and no account.
-        Assert.True(File.Exists(prev));
-        var old = new SecretStore(prev, new XorProtector());
-        Assert.True(old.TryRead("acct-deepl", "apiKey", out string key) || old.TryRead(NetworkSettings.ProxyAccountId, "password", out key), "the previous key file holds no key (defect fixed?)");
-        Assert.NotEmpty(key);
-        Assert.Contains("acct-deepl", File.ReadAllText(rig.Paths.Settings + ".prev"), StringComparison.Ordinal);
+        // F17V-10 (fixed): no file under the data root holds a seeded key blob, and the settings copies hold no account
+        foreach (string f in Directory.EnumerateFiles(rig.Root.Root, "*", SearchOption.AllDirectories).Where(x => !x.EndsWith(".db", StringComparison.OrdinalIgnoreCase) && !x.Contains("-wal") && !x.Contains("-shm")))
+        {
+            string text = File.ReadAllText(f, Encoding.Latin1);
+            foreach (string b in blobs) Assert.DoesNotContain(b, text, StringComparison.Ordinal);
+            if (Path.GetFileName(f).StartsWith("settings.yaml", StringComparison.Ordinal)) Assert.DoesNotContain("acct-deepl", text, StringComparison.Ordinal);
+        }
+        Assert.False(File.Exists(prev));
+        Assert.False(File.Exists(rig.Paths.Settings + ".prev") && File.ReadAllText(rig.Paths.Settings + ".prev").Contains("acct-deepl", StringComparison.Ordinal));
     }
 
     [Fact]

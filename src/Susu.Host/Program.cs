@@ -101,7 +101,7 @@ internal static class MainMode
             return 3;
         }
 
-        int rolledBack = new ConfigTransaction(paths.Transactions).Recover();
+        int rolledBack = new ConfigTransaction(paths).Recover();
         if (rolledBack > 0) log.Event("config.recovered", ("count", rolledBack));
         // F17.1: a confirmed backup import is switched here, after the journal is recovered and before settings and secrets are read.
         try
@@ -112,7 +112,14 @@ internal static class MainMode
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log.Event("backup.import-failed", ("code", e.GetType().Name)); }
         using var settings = new SettingsStore(paths, clock);
         settings.StartWatching();
-        var secrets = new SecretStore(paths.Secrets, new DpapiProtector());
+        // F17V-4: a damaged secrets.dat is moved aside and the store opens empty; the host starts and the user is told, never a crash loop.
+        var secrets = SecretStore.OpenOrQuarantine(paths.Secrets, new DpapiProtector(), out bool secretsDamaged);
+        if (secretsDamaged)
+        {
+            log.Event("secrets.damaged", ("kept", "secrets.dat.damaged"));
+            if (mode.SmokeReport is null)
+                Win32Prompt.Error("Su-Su", "The saved keys file was damaged and has been set aside as secrets.dat.damaged. Su-Su started without saved keys; enter them again in Settings.\n保存密钥的文件已损坏，已另存为 secrets.dat.damaged。Su-Su 已在没有保存密钥的状态下启动，请在设置中重新输入。");
+        }
         var config = new ConfigService(settings, secrets);
         // F17.2: everything the log must never show (saved keys, user and machine names, account names, proxy host and user) is masked in every encoding from here on.
         SensitiveRegistry.Attach(log.Literals, secrets, settings, [MachineGuid()]);

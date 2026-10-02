@@ -266,7 +266,7 @@ public class ConfigTransactionTests
             byte[] newSecrets = secrets.Prepare([("tencent", "secretKey", "NEW-SECRET-VALUE")]);
             Assert.Throws<SimulatedCrash>(() => store.SaveWithSecrets(WithAccount(store.State.Effective), store.State.Revision, store.State.FileHash, secrets, newSecrets));
 
-            int rolledBack = new ConfigTransaction(root.Paths.Transactions).Recover(); // next start
+            int rolledBack = new ConfigTransaction(root.Paths).Recover(); // next start
             Assert.Empty(Directory.GetDirectories(root.Paths.Transactions));
             var restarted = new SecretStore(root.Paths.Secrets, new XorProtector());
             Assert.True(restarted.TryRead("tencent", "secretKey", out var value));

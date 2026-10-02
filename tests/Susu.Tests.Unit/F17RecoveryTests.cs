@@ -379,7 +379,7 @@ public class F17RecoveryTests
         Assert.Equal(journal, JournalState(target)); // the real ConfigTransaction journal is what the crash left behind
         Assert.Equal(halfSwitched, target.SettingsHash != oldS && target.SecretsHash == oldK); // without the journal this would be a new settings.yaml beside old keys
 
-        Assert.Equal(rolledBack, new ConfigTransaction(target.Paths.Transactions).Recover());
+        Assert.Equal(rolledBack, new ConfigTransaction(target.Paths).Recover());
         AssertNoTransactionLeft(target);
         if (pair == "old") { Assert.Equal(oldS, target.SettingsHash); Assert.Equal(oldK, target.SecretsHash); }
         else { Assert.NotEqual(oldS, target.SettingsHash); Assert.NotEqual(oldK, target.SecretsHash); }
@@ -405,7 +405,7 @@ public class F17RecoveryTests
         File.WriteAllBytes(target.Paths.Settings, now[..(now.Length / 2 * keepHalf)]);
         Assert.Null(SettingsYaml.Read(File.ReadAllText(target.Paths.Settings)).Settings); // really unreadable
 
-        Assert.Equal(1, new ConfigTransaction(target.Paths.Transactions).Recover());
+        Assert.Equal(1, new ConfigTransaction(target.Paths).Recover());
         Assert.Equal(oldS, target.SettingsHash);
         Assert.Equal(oldK, target.SecretsHash);
         target.Open();

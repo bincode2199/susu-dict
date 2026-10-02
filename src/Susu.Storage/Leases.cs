@@ -104,6 +104,8 @@ public sealed class FileLeases : IDisposable
     /// <summary>F17.2 data clean: deletes what <see cref="CacheUsage"/> reports. Only files inside the cache folder are touched.</summary>
     public (int Files, long Bytes) ClearCache() => Sweep(delete: true);
 
+    private static bool IsLink(FileSystemInfo i) => (i.Attributes & FileAttributes.ReparsePoint) != 0;
+
     private (int Files, long Bytes) Sweep(bool delete)
     {
         int files = 0; long bytes = 0;
@@ -111,10 +113,26 @@ public sealed class FileLeases : IDisposable
         lock (gate) held = new(leases.Values.Select(l => Path.GetFullPath(l.FilePath)), StringComparer.OrdinalIgnoreCase);
         void Take(FileInfo f)
         {
+            // A link (symbolic link or junction) is never followed (F17V-9): it is deleted itself and neither it nor its target is counted.
+            if (IsLink(f)) { if (delete) { try { f.Delete(); } catch (IOException) { } catch (UnauthorizedAccessException) { } } return; }
             if (held.Contains(f.FullName)) return;
             long length = f.Length;
             if (delete) { try { f.Delete(); } catch (IOException) { return; } catch (UnauthorizedAccessException) { return; } }
             files++; bytes += length;
+        }
+        void DeleteLink(DirectoryInfo d)
+        {
+            if (!delete) return;
+            try { d.Delete(recursive: false); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+        void Walk(DirectoryInfo d)
+        {
+            foreach (var f in d.GetFiles()) Take(f);
+            foreach (var sub in d.GetDirectories())
+            {
+                if (IsLink(sub)) DeleteLink(sub);
+                else Walk(sub);
+            }
         }
         var root = new DirectoryInfo(cacheDirectory);
         if (!root.Exists) return (0, 0);
@@ -123,7 +141,8 @@ public sealed class FileLeases : IDisposable
         {
             bool own = dir.Name == SessionId;
             if (!own && IsAlive(dir.Name)) continue;
-            foreach (var f in dir.GetFiles("*", SearchOption.AllDirectories)) Take(f);
+            if (IsLink(dir)) { if (!own) DeleteLink(dir); continue; }
+            Walk(dir);
             if (delete && !own) { try { dir.Delete(recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
         }
         return (files, bytes);

@@ -134,7 +134,22 @@ public sealed class DataCleanService(AppPaths paths, IClock clock, IConfigServic
             Instances = [.. current.Instances.Select(i => i with { AccountBindings = new Dictionary<string, string>() })],
         };
         var saved = config.SaveWithSecrets(next, state.Revision, state.FileHash, [.. keys.Select(k => (k.Account, k.Name, (string?)null))]);
+        if (saved.Status == SaveStatus.Saved) RemovePreviousCopies(); // F17V-10: the .prev copies hold the old keys and accounts
         return saved.Status == SaveStatus.Saved ? new(DataCleanKinds.Accounts, true, null, current.Accounts.Count + keys.Count(k => !current.Accounts.Any(a => a.Id == k.Account)), 0, 0)
             : new(DataCleanKinds.Accounts, false, saved.Status == SaveStatus.Conflict ? "conflict" : "failed", 0, 0, 0);
+    }
+
+    /// <summary>
+    /// Every atomic write keeps the previous version as <c>.prev</c>; after "delete accounts and keys" those copies still hold the old key file and the
+    /// accounts, so they are deleted too (F17V-10). A copy that is locked is emptied instead; only a copy that cannot be touched at all stays.
+    /// </summary>
+    private void RemovePreviousCopies()
+    {
+        foreach (string file in new[] { paths.Secrets + ".prev", paths.Settings + ".prev", paths.Secrets + ".damaged" })
+        {
+            try { if (File.Exists(file)) File.Delete(file); }
+            catch (IOException) { try { File.WriteAllBytes(file, []); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 }
