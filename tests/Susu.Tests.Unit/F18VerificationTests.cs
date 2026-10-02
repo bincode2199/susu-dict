@@ -22,7 +22,7 @@ namespace Susu.Tests.Unit;
 /// a real power cut, a real update of an installed running app.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public class F18VerificationTests
+public partial class F18VerificationTests
 {
     private static readonly byte[] Zip = Encoding.UTF8.GetBytes("pretend package bytes for the verification tests");
 
