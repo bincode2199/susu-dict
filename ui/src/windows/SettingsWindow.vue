@@ -15,15 +15,16 @@ import PromptSettings from '../components/PromptSettings.vue';
 import SpeechSettings from '../components/SpeechSettings.vue';
 import OcrSettings from '../components/OcrSettings.vue';
 import VocabSettings from '../components/VocabSettings.vue';
+import PluginSettings from '../components/PluginSettings.vue';
 import { t, serviceName } from '../locales/i18n';
 
 // Settings 900×700 (DESIGN 9): centered each time, 190 px navigation, content padding 20/26. F03 provides the
 // minimal pages (DEV-PLAN F03.4); pages of features not built yet are not offered. Credentials are one-way.
 const props = defineProps<{ bridge: Bridge; state: UiState }>();
-type Page = 'general' | 'hotkeys' | 'engines' | 'ai' | 'prompt' | 'ocr' | 'speech' | 'vocab' | 'network';
+type Page = 'general' | 'hotkeys' | 'engines' | 'ai' | 'prompt' | 'ocr' | 'speech' | 'vocab' | 'plugins' | 'network';
 const pages: { id: Page; icon: IconName }[] = [
   { id: 'general', icon: 'settings' }, { id: 'hotkeys', icon: 'keyboard' }, { id: 'engines', icon: 'grid' }, { id: 'ai', icon: 'sparkle' }, { id: 'prompt', icon: 'prompt' },
-  { id: 'ocr', icon: 'ocr' }, { id: 'speech', icon: 'audio' }, { id: 'vocab', icon: 'book' }, { id: 'network', icon: 'globe' },
+  { id: 'ocr', icon: 'ocr' }, { id: 'speech', icon: 'audio' }, { id: 'vocab', icon: 'book' }, { id: 'plugins', icon: 'plus' }, { id: 'network', icon: 'globe' },
 ];
 const page = ref<Page>('general');
 const clearToken = ref(0); // bumps on page change and window hide: unsaved secret input is dropped
@@ -346,6 +347,7 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
         </section>
         <OcrSettings v-if="page === 'ocr' && view.ocr" ref="ocrSettings" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
         <VocabSettings v-if="page === 'vocab' && view.vocab" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
+        <PluginSettings v-if="page === 'plugins' && view.plugins" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
 
         <ul v-if="issues.length" class="issues error-text">
           <li v-for="issue in issues" :key="issue.path + issue.code">{{ issue.path }}: {{ issue.message }}</li>

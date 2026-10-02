@@ -152,6 +152,12 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
   const favorited = new Set<string>();
   let vocabRows: NonNullable<SettingsView['vocab']>['rows'] = [{ entryId: 'e1', word: 'serendipity', target: 'eudic', revision: 1, state: 'Uncertain', attempts: 1 }];
   let vocabExport: NonNullable<SettingsView['vocab']>['export'];
+  // F16.1 fixture: one pick stages a package that overrides nothing; confirm installs it; uninstall removes it (dev preview only).
+  type PluginsFixture = NonNullable<SettingsView['plugins']>;
+  let pluginInstalled: PluginsFixture['installed'] = [];
+  let pluginPending: PluginsFixture['pending'];
+  let pluginLast: PluginsFixture['last'];
+  const pluginsView = (): PluginsFixture => ({ installed: pluginInstalled, pending: pluginPending, last: pluginLast, canPick: true });
   const vocabView = (): NonNullable<SettingsView['vocab']> => ({
     favorites: 3 + favorited.size, canExport: true, rows: vocabRows, export: vocabExport,
     targets: [
@@ -184,6 +190,7 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     // F15.4 fixture: SetVocab with one enabled-looking target and one row to check (dev preview only; nothing is sent or written).
     settings.services.push(...(['ankiconnect/vocab', 'eudic/vocab'] as const).map((id) => ({ ...service(id, ['apiKey']), capability: 'vocab', page: 'vocab', enabled: id.startsWith('anki'), availability: id.startsWith('anki') ? 'Ready' : 'Disabled', order: -1 })));
     settings.vocab = vocabView();
+    settings.plugins = pluginsView();
     return structuredClone(settings);
   };
 
@@ -328,6 +335,26 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         return;
       case 'Vocab.Resolve':
         vocabRows = vocabRows.filter((r) => !(r.entryId === payload?.entryId && r.target === payload?.target));
+        ok(project());
+        return;
+      case 'Plugin.Pick':
+        pluginLast = undefined;
+        pluginPending = { token: 'dev', id: 'dev.sample', name: 'Sample', version: '1.0.0', signerKind: 'thirdParty', signer: 'a1b2c3d4e5f60718293a', against: 'none', addedCapabilities: ['dictionary'], removedCapabilities: [], addedOrigins: ['https://example.com'], removedOrigins: [], addedSecrets: [], removedSecrets: [] };
+        ok(project());
+        return;
+      case 'Plugin.Confirm':
+        if (pluginPending) pluginInstalled = [...pluginInstalled, { id: pluginPending.id, name: pluginPending.name, version: pluginPending.version, signerKind: pluginPending.signerKind, signer: pluginPending.signer, capabilities: pluginPending.addedCapabilities, origins: pluginPending.addedOrigins, secrets: [] }];
+        pluginLast = { action: 'install', id: pluginPending?.id, version: pluginPending?.version, issues: [] };
+        pluginPending = undefined;
+        ok(project());
+        return;
+      case 'Plugin.Discard':
+        pluginPending = undefined;
+        ok(project());
+        return;
+      case 'Plugin.Uninstall':
+        pluginInstalled = pluginInstalled.filter((p) => p.id !== payload?.id);
+        pluginLast = { action: 'uninstall', id: String(payload?.id), issues: [] };
         ok(project());
         return;
       case 'Vocab.Sync':
