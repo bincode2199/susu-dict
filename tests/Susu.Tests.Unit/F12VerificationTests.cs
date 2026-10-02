@@ -39,9 +39,15 @@ public class F12VerificationTests
         private readonly Channel<byte[]> blocks = Channel.CreateUnbounded<byte[]>();
         public int SampleRate => Rate;
         public bool Disposed { get; private set; }
-        public void Push(byte[] block) => blocks.Writer.TryWrite(block);
+        private int reads;
+        /// <summary>ReadAsync calls so far: the pump asks for block n+1 only after finishing block n, which orders the test against the pump without sleeping.</summary>
+        private int pushed;
+        /// <summary>True once the pump has handled every pushed block and is waiting for the next (one read per block, plus the pending one).</summary>
+        public bool Idle => Volatile.Read(ref reads) >= Volatile.Read(ref pushed) + 1;
+        public void Push(byte[] block) { Interlocked.Increment(ref pushed); blocks.Writer.TryWrite(block); }
         public async Task<byte[]?> ReadAsync(CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref reads);
             try { return await blocks.Reader.ReadAsync(cancellationToken); }
             catch (ChannelClosedException e) { if (e.InnerException is MicrophoneException m) throw m; return null; }
         }
@@ -582,9 +588,9 @@ public class F12VerificationTests
         async Task Feed(int ms, int count) { for (int i = 0; i < count && !session.Completion.IsCompleted; i++) { var before = session.Captured; stream.Push(Block(ms, 6000)); for (int w = 0; w < 2000 && session.Captured == before && !session.Completion.IsCompleted; w++) await Task.Delay(1, Ct); clock.Advance(TimeSpan.FromMilliseconds(ms)); } }
         await Feed(1000, 300);
         session.Pause();
+        clock.Advance(TimeSpan.FromMinutes(45)); // far past the limit in wall time (before the paused blocks, so the pump's last-seen time moves with them and no sleep gap is read after Resume)
         for (int i = 0; i < 20; i++) stream.Push(Block(100, 6000)); // dropped while paused
-        clock.Advance(TimeSpan.FromMinutes(45)); // far past the limit in wall time
-        await Task.Delay(100, Ct);
+        await Until(() => stream.Idle, 3000); // the pump has dropped all 20 and asked for more, still paused (no fixed sleep)
         Assert.Equal(RecordingPhase.Paused, session.Phase);
         Assert.True(session.Captured < TimeSpan.FromSeconds(300.001));
         session.Resume();

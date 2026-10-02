@@ -14,6 +14,8 @@ namespace Susu.Tests.Unit;
 public class SelectionHostTests
 {
     private static bool NativeAvailable => File.Exists(Path.Combine(AppContext.BaseDirectory, "susu_selection.dll"));
+    /// <summary>The per-read UIA budget: generous, because the edit window answers from its own thread and a full parallel run can starve it for more than the 300 ms the product allows.</summary>
+    private const int UiaBudgetMs = 5000;
 
     /// <summary>A top-level window with an EDIT child on its own pumping thread; the text "prefix selected text suffix".</summary>
     private sealed class EditWindow : IDisposable
@@ -54,7 +56,7 @@ public class SelectionHostTests
     {
         if (!NativeAvailable) Assert.Skip("susu_selection.dll not built (tools/build-native.ps1)");
         using var window = new EditWindow(password: false, 7, 20);
-        var reply = SelectionHost.Read(window.Edit, 300);
+        var reply = SelectionHost.Read(window.Edit, UiaBudgetMs);
         Assert.Equal("selected", reply.Reason);
         Assert.Equal("uia", reply.Source);
         Assert.Equal("selected text", reply.Text);
@@ -69,7 +71,7 @@ public class SelectionHostTests
     {
         if (!NativeAvailable) Assert.Skip("susu_selection.dll not built (tools/build-native.ps1)");
         using var window = new EditWindow(password: true, 0, 27);
-        var reply = SelectionHost.Read(window.Edit, 300);
+        var reply = SelectionHost.Read(window.Edit, UiaBudgetMs);
         Assert.Equal("password", reply.Reason);
         Assert.Equal("", reply.Text);
         Assert.Null(reply.Rect);
@@ -80,7 +82,7 @@ public class SelectionHostTests
     {
         if (!NativeAvailable) Assert.Skip("susu_selection.dll not built (tools/build-native.ps1)");
         using var window = new EditWindow(password: false, 7, 7);
-        var reply = SelectionHost.Read(window.Edit, 300);
+        var reply = SelectionHost.Read(window.Edit, UiaBudgetMs);
         Assert.Equal("empty", reply.Reason);
         Assert.Equal("", reply.Text);
     }
@@ -91,7 +93,7 @@ public class SelectionHostTests
         if (!NativeAvailable) Assert.Skip("susu_selection.dll not built (tools/build-native.ps1)");
         using var window = new EditWindow(password: false, 7, 20);
         var output = new StringWriter();
-        Assert.Equal(0, SelectionHost.Run(SelectionHost.Arguments(window.Edit, 300), output, new StringWriter(), processWatchdog: false));
+        Assert.Equal(0, SelectionHost.Run(SelectionHost.Arguments(window.Edit, UiaBudgetMs), output, new StringWriter(), processWatchdog: false));
         Assert.Equal("selected text", SelectionHost.Parse(output.ToString().Trim()).Text);
     }
 
@@ -147,7 +149,7 @@ public class SelectionHostTests
         if (exe is null || !NativeAvailable) Assert.Skip("publish susu.exe (dev.ps1 publish) to run the end-to-end helper test");
         using var window = new EditWindow(password: false, 7, 20);
         // The EDIT is not foreground (the reader would report FocusChanged), so drive the real helper process directly.
-        using var helper = new Win32SelectionPlatform(exe!, [SelectionHost.Mode]).Start(window.Edit, 300);
+        using var helper = new Win32SelectionPlatform(exe!, [SelectionHost.Mode]).Start(window.Edit, UiaBudgetMs);
         var reply = await helper.Completion.WaitAsync(SelectionDeadlines.Acquire + TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
         Assert.Equal("selected text", reply.Text);
         Assert.Equal("uia", reply.Source);

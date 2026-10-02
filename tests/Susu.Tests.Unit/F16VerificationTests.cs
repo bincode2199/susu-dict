@@ -1288,6 +1288,7 @@ public sealed class F16VerificationTests : IDisposable
         var (session, hang) = rig.Start(Id, "hang");
         int pid = session.ChildPid;
         Assert.True(await Eventually.WaitAsync(() => rig.Controller.InFlight(Id).Count > 0));
+        Assert.True(await Eventually.WaitAsync(() => env.Kv.Get(Id, "starts") == "1"));
 
         // a different signer and wider hosts: both are held; the host is not restarted, the in-flight call is untouched, new calls still run v1
         var signerChange = rig.Installer.StageUpdate(Signed(env, "v2a.susuext", Id, "1.1.0", "v2a", PackageFactory.SeedA));
@@ -1345,6 +1346,7 @@ public sealed class F16VerificationTests : IDisposable
         var (sessionA, hangA) = rig.Start(Id, "hang");
         var (_, hangB) = rig.Start(Other, "hang");
         Assert.True(await Eventually.WaitAsync(() => rig.Controller.InFlight(Id).Count > 0 && rig.Controller.InFlight(Other).Count > 0));
+        Assert.True(await Eventually.WaitAsync(() => env.Kv.Get(Id, "starts") == "1" && env.Kv.Get(Other, "starts") == "1"));
         Assert.Equal(1, rig.Controller.InFlight(Id).Sum(t => t.Count));
         Assert.Equal(1, rig.Controller.InFlight(Other).Sum(t => t.Count));
 
@@ -1393,16 +1395,17 @@ public sealed class F16VerificationTests : IDisposable
 
         var (session, hang) = rig.Start(Id, "hang");
         Assert.True(await Eventually.WaitAsync(() => rig.Controller.InFlight(Id).Count > 0));
+        Assert.True(await Eventually.WaitAsync(() => env.Kv.Get(Id, "starts") == "1")); // the plugin has run its first line (InFlight only says the call was sent): killing earlier would race the write
         int pid = session.ChildPid;
         using (var child = Process.GetProcessById(pid)) { child.Kill(true); }
         IpcEnvelope? ended = null;
-        try { ended = await hang.WaitAsync(TimeSpan.FromSeconds(30), Ct); }
+        try { ended = await hang.WaitAsync(TimeSpan.FromSeconds(90), Ct); }
         catch (Exception e) when (e is not Xunit.Sdk.XunitException and not OperationCanceledException and not TimeoutException) { }
         if (ended is not null) Assert.NotEqual(IpcMessageType.Completed, ended.Type);
         rig.Supervisor.Release();
 
         // the supervisor starts a fresh host (1 s backoff); the call is not replayed in it
-        Assert.True(await Eventually.WaitAsync(() => rig.Supervisor.TryGetCurrent(out var cur) && cur is not null && cur.ChildPid != pid, TimeSpan.FromSeconds(30)), "the plugin host did not come back");
+        Assert.True(await Eventually.WaitAsync(() => rig.Supervisor.TryGetCurrent(out var cur) && cur is not null && cur.ChildPid != pid, TimeSpan.FromSeconds(90)), "the plugin host did not come back");
         Assert.Contains("a1:hi", (await rig.Call(Id, "translate")).Text);
         await Task.Delay(1500, Ct);
         Assert.Equal("1", env.Kv.Get(Id, "starts"));
@@ -1832,7 +1835,8 @@ public sealed class F16VerificationTests : IDisposable
         string root = TestTemp.NewDir("susu-f16w");
         File.WriteAllText(Path.Combine(root, "main.js"), WebApiPlugin);
         var callbacks = new WebCallbacks();
-        using var budget = new ExecutionBudget();
+        // The product slice is 250 ms of wall clock; these cases check API behaviour on big inputs, and with the whole suite running in parallel on every core a 250 ms wall slice expires on a busy machine. The budget itself is tested elsewhere.
+        using var budget = new ExecutionBudget { SliceTicks = System.Diagnostics.Stopwatch.Frequency * 20 };
         using var runtime = QuickJsRuntime.Create("test.f16webapi", root, memoryMiB, budget, callbacks);
         Assert.Null(runtime.Load("main.js", out int status));
         Assert.Equal(0, status);

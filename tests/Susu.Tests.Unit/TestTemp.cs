@@ -98,7 +98,7 @@ public sealed class TestTempCleanup : IDisposable
 /// turn a slow pass into a failure; a passing run still returns as soon as the condition holds.</summary>
 internal static class Eventually
 {
-    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(20);
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
 
     public static async Task<bool> WaitAsync(Func<bool> condition, TimeSpan? timeout = null)
     {

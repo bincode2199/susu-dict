@@ -45,10 +45,9 @@ public sealed class AudioCaptureCoordinator(IMicrophoneDevices devices, ILeasedF
             ILeasedFile file;
             try { file = files.Create("record", "audio/wav", "wav"); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { stream.Dispose(); return RecordingStartResult.Failed(MicFailure.Failed, source); }
-            var session = new RecordingSession(stream, file, clock, limit, source);
+            var session = new RecordingSession(stream, file, clock, limit, source, () => Volatile.Write(ref busy, 0));
             if (!session.TryBegin()) return RecordingStartResult.Failed(MicFailure.Failed, source);
             started = true;
-            _ = session.Completion.ContinueWith(_ => Volatile.Write(ref busy, 0), TaskScheduler.Default);
             return RecordingStartResult.Started(session);
         }
         finally { if (!started) Volatile.Write(ref busy, 0); }
@@ -78,10 +77,11 @@ public sealed class RecordingSession : IRecordingSession
     private int phase; // RecordingPhase
     private RecordingStatus? requested;
     private bool finished;
+    private readonly Action? released; // frees the coordinator's busy flag before Completion is visible, so a start right after the result is never refused as busy
 
-    internal RecordingSession(IMicrophoneStream stream, ILeasedFile file, IClock clock, TimeSpan limit, AudioSourceKind source = AudioSourceKind.Microphone)
+    internal RecordingSession(IMicrophoneStream stream, ILeasedFile file, IClock clock, TimeSpan limit, AudioSourceKind source = AudioSourceKind.Microphone, Action? released = null)
     {
-        Source = source;
+        Source = source; this.released = released;
         this.stream = stream; this.file = file; this.clock = clock;
         rate = stream.SampleRate;
         limitSamples = (long)(limit.TotalSeconds * rate);
@@ -209,6 +209,7 @@ public sealed class RecordingSession : IRecordingSession
         }
         catch { file.Dispose(); throw; }
         finally { cts.Dispose(); }
+        released?.Invoke();
         PhaseChanged?.Invoke(RecordingPhase.Finished);
         done.TrySetResult(new RecordingResult(status, audio, status == RecordingStatus.Interrupted ? reason : null, error, Source));
     }

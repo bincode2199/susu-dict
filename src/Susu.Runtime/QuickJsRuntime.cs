@@ -47,12 +47,12 @@ public sealed unsafe partial class QuickJsRuntime : IPluginRuntime
         if (engine == 0) { self.Free(); throw new InvalidOperationException("QuickJS plugin runtime creation failed."); }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)]), MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static int Interrupt(long* cell) => System.Diagnostics.Stopwatch.GetTimestamp() >= Volatile.Read(ref cell[0]) ? 1 : 0;
 
     private static QuickJsRuntime From(long* cell) => (QuickJsRuntime)GCHandle.FromIntPtr((nint)cell[1]).Target!;
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)]), MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static int Host(long* cell, int kind, int id, byte* json, nuint length)
     {
         try
@@ -71,7 +71,7 @@ public sealed unsafe partial class QuickJsRuntime : IPluginRuntime
         catch { return 1; }
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)]), MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static int ReadModule(long* cell, byte* name, byte** data, nuint* length)
     {
         try
