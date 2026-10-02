@@ -25,7 +25,7 @@ public sealed partial class RedactingLog : IDisposable
     private readonly IClock clock;
     private readonly long maxTotalBytes;
     private readonly object gate = new();
-    private readonly List<string> secrets = [];
+    private readonly SensitiveLiterals literals = new();
     private readonly Dictionary<string, (long Second, int Count, long Dropped)> pluginRate = new(StringComparer.Ordinal);
     private static readonly JsonWriterOptions writerOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
@@ -39,24 +39,14 @@ public sealed partial class RedactingLog : IDisposable
 
     public long DroppedFields { get; private set; }
 
-    /// <summary>Registers a secret value so it, its URL encoding and Base64 forms never reach the log.</summary>
-    public void RegisterSecret(string value)
-    {
-        if (value.Length < 4) return;
-        lock (gate)
-        {
-            foreach (var form in new[] { value, Uri.EscapeDataString(value), Convert.ToBase64String(Encoding.UTF8.GetBytes(value)), Convert.ToBase64String(Encoding.UTF8.GetBytes(value)).TrimEnd('=') })
-                if (!secrets.Contains(form)) secrets.Add(form);
-            secrets.Sort((a, b) => b.Length.CompareTo(a.Length));
-        }
-    }
+    /// <summary>The registry of values that must never be written; the diagnostics export checks its output against the same set.</summary>
+    public SensitiveLiterals Literals => literals;
 
-    public string Redact(string text)
-    {
-        text = UrlQuery().Replace(text, m => m.Groups[1].Value);
-        lock (gate) foreach (var secret in secrets) text = text.Replace(secret, "[redacted]", StringComparison.Ordinal);
-        return text;
-    }
+    /// <summary>Registers a secret value (or an identity such as the user name) so it and its URL, JSON, Base64 and hex forms never reach the log.</summary>
+    public void RegisterSecret(string value) => literals.Add(value);
+
+    /// <summary>Masks registered values in every known form, then credentials, e-mail and IP addresses by pattern (<see cref="SensitiveText.Standard"/>).</summary>
+    public string Redact(string text) => SensitiveText.Standard(literals.Mask(text));
 
     public void Event(string name, params (string Key, object? Value)[] fields)
     {
@@ -85,6 +75,7 @@ public sealed partial class RedactingLog : IDisposable
     /// <summary>Plugin <c>$log</c>: returns false when the message was dropped by the rate limit.</summary>
     public bool Plugin(string installationId, string level, string message)
     {
+        message = SensitiveText.Strong(message);
         long second = clock.NowMilliseconds / 1000;
         long droppedBefore;
         lock (gate)

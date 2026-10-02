@@ -212,5 +212,16 @@ public sealed class FavoritesRepository(Database db, IClock clock, IFaultPoint? 
 
     public int ActiveCount() => db.Read(c => Database.Scalar(c, null, "SELECT count(*) FROM vocab_entries WHERE deleted_at IS NULL;") is long n ? (int)n : 0);
 
+    /// <summary>F17.2 data clean: removes every favorite, its deliveries and the export records. Returns the number of entries removed. Nothing outside the database is touched.</summary>
+    public int ClearAll() => db.Write(w =>
+    {
+        int count = Convert.ToInt32(w.Scalar("SELECT count(*) FROM vocab_entries;"), System.Globalization.CultureInfo.InvariantCulture);
+        w.Exec("DELETE FROM vocab_export_items;");
+        w.Exec("DELETE FROM vocab_exports;");
+        w.Exec("DELETE FROM vocab_deliveries;");
+        w.Exec("DELETE FROM vocab_entries;");
+        return count;
+    });
+
     public int RecoverInterrupted() => db.Write(w => w.Exec("UPDATE vocab_deliveries SET state='Uncertain' WHERE state='Sending';"));
 }

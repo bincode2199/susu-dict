@@ -100,7 +100,7 @@ public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint?
 
     public void Commit(IReadOnlyList<(string Target, byte[] Bytes)> files)
     {
-        Directory.CreateDirectory(transactionsDirectory);
+        PrivateFolder.Ensure(transactionsDirectory);
         string dir = Path.Combine(transactionsDirectory, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         bool prepared = false;

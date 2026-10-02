@@ -173,7 +173,8 @@ public sealed record SettingsView(
     OcrSettingsView? Ocr = null,
     VocabSettingsView? Vocab = null,
     PluginsView? Plugins = null,
-    BackupView? Backup = null);
+    BackupView? Backup = null,
+    AboutView? About = null);
 
 [TsExport("ui")]
 public sealed record SettingsIssueView(string Path, string Code, string Message, int Line);
@@ -552,3 +553,31 @@ public sealed record BackupUnlockRequest(string Password);
 
 [TsExport("ui")]
 public sealed record BackupTokenRequest(string Token);
+
+/// <summary>
+/// The About page (F17.2): version facts, the log folder (LogLocation is display text in environment-variable form; opening it is a command with no path),
+/// the diagnostics export, the licenses of what the app ships, and the data-clean entries. Diagnostics and Cleaned are the last result of each action.
+/// No path, key, account name or machine name is ever in this view.
+/// </summary>
+[TsExport("ui")]
+public sealed record AboutView(string Version, string Build, string Os, string Runtime, string LogLocation, int LogFiles, long LogBytes,
+    bool CanOpenLogs, bool CanExport, DiagnosticsResultView? Diagnostics, LicenseView[] Licenses, DataCleanView[] Data, DataCleanResultView? Cleaned);
+
+/// <summary>Error is a stable key (disk-full, write-failed, leak-detected, picker) or null. FileName only (no folder).</summary>
+[TsExport("ui")]
+public sealed record DiagnosticsResultView(string? Error, string? FileName, int LogFiles, int LogLines, int DroppedLines, long Bytes);
+
+/// <summary>Kind: nuget | native | npm. Ships says where it ends up.</summary>
+[TsExport("ui")]
+public sealed record LicenseView(string Name, string Version, string License, string Kind, string Ships);
+
+/// <summary>Kind: caches | logs | screenshots | favorites | settings | accounts. Count and Bytes: what a clear would remove now.</summary>
+[TsExport("ui")]
+public sealed record DataCleanView(string Kind, int Count, long Bytes, bool Available);
+
+[TsExport("ui")]
+public sealed record DataCleanResultView(string Kind, string? Error, int Removed, long Bytes, int Skipped);
+
+/// <summary>Data.Clear. Confirm must be true: the page asks the user first, and the host refuses a request without it.</summary>
+[TsExport("ui")]
+public sealed record DataCleanRequest(string Kind, bool Confirm);

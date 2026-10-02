@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.Versioning;
 using Susu.Abstractions;
 using Susu.Contracts;
@@ -113,6 +114,8 @@ internal static class MainMode
         settings.StartWatching();
         var secrets = new SecretStore(paths.Secrets, new DpapiProtector());
         var config = new ConfigService(settings, secrets);
+        // F17.2: everything the log must never show (saved keys, user and machine names, account names, proxy host and user) is masked in every encoding from here on.
+        SensitiveRegistry.Attach(log.Literals, secrets, settings, [MachineGuid()]);
         Database database;
         try { database = Database.Open(paths.Database); }
         catch (DatabaseVersionException e)
@@ -296,6 +299,21 @@ internal static class MainMode
             () => [.. installationRows.ActiveRecords().Select(r => new BackupPluginRef(r.PackageId, r.Version, r.Signer, r.Hash))],
             () => new BackupLocalData(vocabService.Count(), vocabService.Status([.. VocabCatalog.All.Select(v => v.InstanceId)]).Sum(s => s.Pending + s.Retrying + s.Failed + s.Uncertain))));
         coordinator.BackupPicker = new Win32BackupPicker();
+        // F17.2: About (facts, log folder, diagnostics export) and the data-clean entries. The diagnostics file is built by allow-listing log fields and is checked against the
+        // same secret/identity set the log masks with (saved keys, user and machine names, account names, proxy host and user), kept current by SensitiveRegistry.
+        var about = new AboutInfo(typeof(Program).Assembly.GetName().Version?.ToString() ?? "0",
+            (typeof(Program).Assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0").Split('+')[0],
+            System.Runtime.InteropServices.RuntimeInformation.OSDescription, System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription, "");
+        var diagnosticsExporter = new DiagnosticsExporter(paths, clock, log.Literals, () =>
+        {
+            var s = config.State.Effective;
+            return new DiagnosticsInfo(about.Version, about.Build, about.Os, about.Runtime, s.General.UiLanguage, s.Network.ProxyMode.ToString().ToLowerInvariant(),
+                s.Accounts.Count, secrets.Entries().Count, s.Instances.Count, s.Services.Count(x => x.Enabled), favorites.ActiveCount(),
+                File.Exists(paths.Database) ? new FileInfo(paths.Database).Length : 0);
+        });
+        coordinator.About = new AboutService(about, paths, diagnosticsExporter, Win32FolderOpener.Open);
+        coordinator.DiagnosticsPicker = new Win32DiagnosticsPicker();
+        coordinator.DataClean = new DataCleanService(paths, clock, config, secrets, leases, keptScreenshots.Store, favorites);
         coordinator.PluginInstaller = pluginInstaller;
         coordinator.PluginUpdates = new Susu.Plugins.Install.PluginUpdateService(pluginInstaller, source: null, Path.Combine(paths.UserPlugins, ".downloads")); // no update feed is specified yet (DEV-PLAN F16.2): no source, so the page offers no check
         coordinator.PluginPicker = new Win32PluginPackagePicker();
@@ -430,6 +448,13 @@ internal static class MainMode
     {
         try { WindowPlatform.SetLaunchAtStartup(enabled, Environment.ProcessPath!); }
         catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>The Windows machine id (registered with the log's masking set so it never appears in a log or a diagnostics file). Null when it cannot be read.</summary>
+    private static string? MachineGuid()
+    {
+        try { return OperatingSystem.IsWindows() ? Microsoft.Win32.Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography", "MachineGuid", null) as string : null; }
+        catch (Exception e) when (e is System.Security.SecurityException or IOException or UnauthorizedAccessException) { return null; }
     }
 
     /// <summary>One instance per user; a separate data root (tests, development) is its own instance.</summary>

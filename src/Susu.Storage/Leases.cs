@@ -98,6 +98,37 @@ public sealed class FileLeases : IDisposable
         catch (System.ComponentModel.Win32Exception) { return true; } // exists but not inspectable: do not delete
     }
 
+    /// <summary>The files in cache/ that a clear would remove: finished sessions of this app and files no lease holds. Active leases and live sessions are skipped.</summary>
+    public (int Files, long Bytes) CacheUsage() => Sweep(delete: false);
+
+    /// <summary>F17.2 data clean: deletes what <see cref="CacheUsage"/> reports. Only files inside the cache folder are touched.</summary>
+    public (int Files, long Bytes) ClearCache() => Sweep(delete: true);
+
+    private (int Files, long Bytes) Sweep(bool delete)
+    {
+        int files = 0; long bytes = 0;
+        HashSet<string> held;
+        lock (gate) held = new(leases.Values.Select(l => Path.GetFullPath(l.FilePath)), StringComparer.OrdinalIgnoreCase);
+        void Take(FileInfo f)
+        {
+            if (held.Contains(f.FullName)) return;
+            long length = f.Length;
+            if (delete) { try { f.Delete(); } catch (IOException) { return; } catch (UnauthorizedAccessException) { return; } }
+            files++; bytes += length;
+        }
+        var root = new DirectoryInfo(cacheDirectory);
+        if (!root.Exists) return (0, 0);
+        foreach (var f in root.GetFiles()) Take(f);
+        foreach (var dir in root.GetDirectories())
+        {
+            bool own = dir.Name == SessionId;
+            if (!own && IsAlive(dir.Name)) continue;
+            foreach (var f in dir.GetFiles("*", SearchOption.AllDirectories)) Take(f);
+            if (delete && !own) { try { dir.Delete(recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+        }
+        return (files, bytes);
+    }
+
     public void Dispose()
     {
         lock (gate) leases.Clear();

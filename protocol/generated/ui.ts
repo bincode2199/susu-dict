@@ -38,6 +38,10 @@ export const UI_COMMANDS = {
   BackupDiscard: 'Backup.Discard',
   BackupUndo: 'Backup.Undo',
   BackupDismiss: 'Backup.Dismiss',
+  AboutOpenLogs: 'About.OpenLogs',
+  AboutExportDiagnostics: 'About.ExportDiagnostics',
+  AboutDismiss: 'About.Dismiss',
+  DataClear: 'Data.Clear',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -70,6 +74,22 @@ export const UI_COMMANDS = {
 } as const;
 
 export type UiCommandName = (typeof UI_COMMANDS)[keyof typeof UI_COMMANDS];
+
+export interface AboutView {
+  version: string;
+  build: string;
+  os: string;
+  runtime: string;
+  logLocation: string;
+  logFiles: number;
+  logBytes: number;
+  canOpenLogs: boolean;
+  canExport: boolean;
+  diagnostics?: DiagnosticsResultView;
+  licenses: LicenseView[];
+  data: DataCleanView[];
+  cleaned?: DataCleanResultView;
+}
 
 export interface AccountView {
   id: string;
@@ -241,6 +261,35 @@ export interface CredentialTargetView {
   granted: boolean;
 }
 
+export interface DataCleanRequest {
+  kind: string;
+  confirm: boolean;
+}
+
+export interface DataCleanResultView {
+  kind: string;
+  error?: string;
+  removed: number;
+  bytes: number;
+  skipped: number;
+}
+
+export interface DataCleanView {
+  kind: string;
+  count: number;
+  bytes: number;
+  available: boolean;
+}
+
+export interface DiagnosticsResultView {
+  error?: string;
+  fileName?: string;
+  logFiles: number;
+  logLines: number;
+  droppedLines: number;
+  bytes: number;
+}
+
 export interface DictionaryEntryView {
   word: string;
   phonetics: DictionaryPhoneticView[];
@@ -314,6 +363,14 @@ export interface InstalledPluginView {
   secrets: string[];
   overridesBuiltIn?: string;
   inFlight?: PluginTaskView[];
+}
+
+export interface LicenseView {
+  name: string;
+  version: string;
+  license: string;
+  kind: string;
+  ships: string;
 }
 
 export interface LoadOptionsRequest {
@@ -628,6 +685,7 @@ export interface SettingsView {
   vocab?: VocabSettingsView;
   plugins?: PluginsView;
   backup?: BackupView;
+  about?: AboutView;
 }
 
 export interface SpeakCardRequest {

@@ -3,4 +3,7 @@
     <ProjectReference Include="../Susu.Jobs/Susu.Jobs.csproj" />
     <ProjectReference Include="../Susu.Abstractions/Susu.Abstractions.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../LICENSES/third-party.json" LogicalName="third-party.json" />
+  </ItemGroup>
 </Project>

@@ -218,6 +218,7 @@ public static class BackupImport
     internal static void Stage(AppPaths p, BackupPending pending, byte[] settingsBytes, byte[] secretsBytes)
     {
         ClearStage(p);
+        PrivateFolder.Ensure(p.Imports);
         Directory.CreateDirectory(StageDir(p));
         AtomicFile.WriteFlushed(Path.Combine(StageDir(p), "settings.yaml"), settingsBytes);
         AtomicFile.WriteFlushed(Path.Combine(StageDir(p), "secrets.dat"), secretsBytes);
@@ -241,7 +242,7 @@ public static class BackupImport
 
     private static void WriteReplacing(string path, byte[] bytes)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        PrivateFolder.Ensure(Path.GetDirectoryName(path)!);
         string temp = $"{path}.{Guid.NewGuid():N}.tmp";
         AtomicFile.WriteFlushed(temp, bytes);
         File.Move(temp, path, overwrite: true);
@@ -365,6 +366,7 @@ public static class BackupImport
         catch (JsonException) { }
         string temp = dir + ".tmp";
         if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
+        PrivateFolder.Ensure(paths.Imports);
         Directory.CreateDirectory(temp);
         bool hadSettings = File.Exists(paths.Settings), hadSecrets = File.Exists(paths.Secrets);
         if (hadSettings) AtomicFile.WriteFlushed(Path.Combine(temp, "settings.yaml"), File.ReadAllBytes(paths.Settings));

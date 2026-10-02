@@ -31,6 +31,9 @@ public sealed class SecretStore : ISecretStore
         entries = Load(path);
     }
 
+    /// <summary>Raised with the plaintext when a value is prepared for storage, so loggers can mask it from then on (never persisted by the subscriber).</summary>
+    public event Action<string>? ValueStored;
+
     public bool Has(string accountId, string secretName) { lock (gate) return entries.Any(e => e.Account == accountId && e.Name == secretName); }
 
     /// <summary>Every stored (account, name) pair, for a backup that includes keys (F17.1). Values are read one by one with <see cref="TryRead"/>.</summary>
@@ -116,6 +119,7 @@ public sealed class SecretStore : ISecretStore
         {
             int length = Encoding.UTF8.GetBytes(value, buffer);
             string blob = Convert.ToBase64String(protector.Protect(buffer.AsSpan(0, length)));
+            ValueStored?.Invoke(new string(value));
             var next = current.Where(e => !(e.Account == accountId && e.Name == secretName)).ToList();
             next.Add(new SecretEntry(accountId, secretName, blob));
             return next;
