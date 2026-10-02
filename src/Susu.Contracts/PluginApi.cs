@@ -66,7 +66,7 @@ public enum Capability
 [TsExport("plugin")] public sealed record OptionItem(string Value, string Label);
 [TsExport("plugin")] public sealed record OptionsResult(OptionItem[] Items, string? NextCursor = null);
 
-[TsExport("plugin")] public sealed record VocabRequest(string OperationId, string Action, long EntryRevision, string Word, string Lang, JsonElement? Content = null);
+[TsExport("plugin")] public sealed record VocabRequest(string OperationId, string Action, long EntryRevision, string Word, string Lang, JsonElement? Content = null, string? EntryId = null);
 /// <summary><c>status</c>: applied | found | absent | unknown.</summary>
 [TsExport("plugin")] public sealed record VocabResult(string Status, string? RemoteId = null);
 

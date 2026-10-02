@@ -19,7 +19,7 @@ public interface ICredentialPackage
 public static class CredentialPackages
 {
     public static ICredentialPackage? Find(string instanceId)
-        => (ICredentialPackage?)TranslationPackages.Find(instanceId) ?? (SpeechCatalog.Find(instanceId) is { Credentials.Count: > 0 } speech ? speech : OcrCatalog.Find(instanceId));
+        => (ICredentialPackage?)TranslationPackages.Find(instanceId) ?? (SpeechCatalog.Find(instanceId) is { Credentials.Count: > 0 } speech ? speech : (ICredentialPackage?)OcrCatalog.Find(instanceId) ?? VocabCatalog.Find(instanceId));
 
     /// <summary>Saved/granted state of each credential target of <paramref name="instance"/> under its current config.</summary>
     public static IReadOnlyList<CredentialTargetState> States(AppSettings settings, ICredentialPackage package, InstanceSettings instance, Func<string, string, bool> hasSecret)

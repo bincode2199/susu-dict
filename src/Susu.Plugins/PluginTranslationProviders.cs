@@ -25,6 +25,7 @@ public static class PluginTranslationProviders
         .. TranslationPackages.All.Select(p => new WiredPackage(p.InstanceId, p.PackageId, p.Directory, p)),
         .. SpeechCatalog.InstalledPlugins.Select(p => new WiredPackage(p.InstanceId, p.PackageId, p.Directory, p)),
         .. OcrCatalog.All.Select(p => new WiredPackage(p.InstanceId, p.PackageId, p.Directory, p)),
+        .. VocabCatalog.All.Select(p => new WiredPackage(p.InstanceId, p.PackageId, p.Directory, p)),
     ];
 
     public static IReadOnlyList<ITranslationProvider> Build(AppSettings settings, Func<string, string, bool> hasSecret, Supervisor<HostSession> supervisor,

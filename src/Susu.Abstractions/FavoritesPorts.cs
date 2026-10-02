@@ -34,6 +34,10 @@ public interface IFavorites
     VocabDelivery? Claim(string targetInstanceId);
     /// <summary>Records the consumer result for a Sending row; <paramref name="retryAfter"/> applies to RetryWait.</summary>
     bool Complete(string entryId, string targetInstanceId, long entryRevision, DeliveryState outcome, string? remoteId = null, TimeSpan? retryAfter = null);
+    /// <summary>F15.3: moves the oldest Uncertain row of the target to Sending so a lookup can confirm or back-fill it (attempts unchanged); a crash in between returns it to Uncertain.</summary>
+    VocabDelivery? ClaimUncertain(string targetInstanceId);
+    /// <summary>F15.3 manual check: an Uncertain or Failed row becomes Succeeded (the user confirms it is on the remote) or Pending (resend, same operationId, attempts reset).</summary>
+    bool Resolve(string entryId, string targetInstanceId, long entryRevision, bool delivered);
     /// <summary>At start-up: Sending rows become Uncertain (never blindly resent). Returns the count.</summary>
     int RecoverInterrupted();
 }

@@ -165,5 +165,27 @@ public sealed class FavoritesRepository(Database db, IClock clock, IFaultPoint? 
             ("$s", outcome.ToString()), ("$rid", remoteId), ("$n", next), ("$e", entryId), ("$t", targetInstanceId), ("$r", entryRevision)) == 1);
     }
 
+    public VocabDelivery? ClaimUncertain(string targetInstanceId) => db.Write(w =>
+    {
+        VocabDelivery? d;
+        using (var cmd = w.Connection.CreateCommand())
+        {
+            cmd.Transaction = w.Transaction;
+            cmd.CommandText = DeliveryColumns + " WHERE target_instance_id=$t AND state='Uncertain' ORDER BY rowid LIMIT 1;";
+            cmd.Parameters.AddWithValue("$t", targetInstanceId);
+            using var r = cmd.ExecuteReader();
+            d = r.Read() ? Delivery(r) : null;
+        }
+        if (d is null) return null;
+        w.Exec("UPDATE vocab_deliveries SET state='Sending' WHERE entry_id=$e AND target_instance_id=$t AND entry_revision=$r;", ("$e", d.EntryId), ("$t", d.TargetInstanceId), ("$r", d.EntryRevision));
+        return d with { State = DeliveryState.Sending };
+    });
+
+    public bool Resolve(string entryId, string targetInstanceId, long entryRevision, bool delivered) => db.Write(w => w.Exec(
+        delivered
+            ? "UPDATE vocab_deliveries SET state='Succeeded', next_at=0 WHERE entry_id=$e AND target_instance_id=$t AND entry_revision=$r AND state IN ('Uncertain','Failed');"
+            : "UPDATE vocab_deliveries SET state='Pending', attempts=0, next_at=0 WHERE entry_id=$e AND target_instance_id=$t AND entry_revision=$r AND state IN ('Uncertain','Failed');",
+        ("$e", entryId), ("$t", targetInstanceId), ("$r", entryRevision)) == 1);
+
     public int RecoverInterrupted() => db.Write(w => w.Exec("UPDATE vocab_deliveries SET state='Uncertain' WHERE state='Sending';"));
 }

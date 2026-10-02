@@ -156,6 +156,7 @@ export interface VocabRequest {
   word: string;
   lang: string;
   content?: unknown;
+  entryId?: string;
 }
 
 export interface VocabResult {

@@ -1,0 +1,29 @@
+id: app.susu.eudic
+name: Eudic
+apiVersion: 1
+minHost: 1
+entry: main.js
+capabilities:
+  - vocab
+hosts:
+  - api.frdic.com
+credentialUse:
+  - apiKey
+config:
+  type: object
+  properties:
+    vocabList:
+      type: string
+      title: Word list
+      x-susu:
+        help: The Eudic word list new words are added to. Leave empty for the default list.
+        optionsSource:
+          dependsOn: [baseUrl, apiKey]
+    baseUrl:
+      type: string
+      format: uri
+      title: API address
+      x-susu:
+        group: advanced
+        placeholder: https://api.frdic.com
+        help: Leave empty for the Eudic OpenAPI.
