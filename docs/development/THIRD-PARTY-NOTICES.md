@@ -10,6 +10,8 @@ node tools/license-inventory.mjs docs/evidence/F00/license-inventory.json tools/
 
 Rerun it with the product host's lockfile once `src/Susu.Host` publishes (F03+).
 
+F17.2 reran it with `src/Susu.Host/packages.lock.json` ([`evidence/F17/license-inventory-host.json`](../evidence/F17/license-inventory-host.json)) and generates the shipped notices with `node tools/generate-notices.mjs`: `LICENSES/NOTICE.txt` (components and the real license texts found) and `LICENSES/third-party.json` (shown on the About page). The installer (F18) must place `LICENSES/NOTICE.txt` next to the app.
+
 ## Redistributed components (F00 probe build)
 
 | Component | Version | License | Where it ends up |
