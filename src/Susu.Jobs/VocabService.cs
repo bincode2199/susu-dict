@@ -135,7 +135,8 @@ public sealed class VocabService : IAsyncDisposable
     {
         stop.Cancel();
         if (loop is null) return;
-        try { await loop.WaitAsync(timeout ?? TimeSpan.FromSeconds(5)); }
+        // ConfigureAwait(false): the host calls this with GetResult() on the UI thread after its message loop ended; resuming on the dispatcher would deadlock the exit.
+        try { await loop.WaitAsync(timeout ?? TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
         catch (Exception e) when (e is TimeoutException or OperationCanceledException) { }
     }
 

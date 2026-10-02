@@ -48,3 +48,14 @@ node tools/run-clean-env.mjs powershell -NoProfile -File tools/dev.ps1 publish -
 Unit and contract tests: `./tools/dev.ps1 test` (xunit v3 on Microsoft.Testing.Platform). Contract drift: `dotnet run --project tools/Susu.ContractsGen -c Release -- . --check`.
 
 To rebuild while another probe executable is running, supply `-OutputDirectory artifacts/selection-probes` to both native build and managed publish scripts. Run the executable from that directory so it uses matching native DLLs. `--selection` checks UIA selection, MSAA protected/unsupported controls, IA2 ABI bounds and helper timeout. `--msaa-diagnostic` is a diagnostic-only longer deadline and does not replace acceptance. `--read-selection <HWND>` and `--read-ia2 <HWND>` run external-window acquisition through the bounded helper; use synthetic data and record the target build and expected result separately.
+
+## Installer (F18.1)
+
+Per-user NSIS installer: `tools/installer/susu.nsi`, built by `tools/build-installer.ps1` from the NativeAOT publish output (`src/Susu.Host/bin/Release/net10.0/win-x64/publish`, or `-PublishDir`). Run `node tools/generate-notices.mjs` first so `LICENSES/NOTICE.txt` exists.
+
+```powershell
+./tools/build-installer.ps1 -Version 0.1.0 -StageOnly     # stage + staged-manifest.json under artifacts/installer/stage (no NSIS needed)
+./tools/build-installer.ps1 -Version 0.1.0                # also compile; needs makensis (the script never downloads it)
+```
+
+Signing is a hook: `-SignTool` and `-SignArgs` (or `SUSU_SIGN_TOOL` and `SUSU_SIGN_ARGS`, separated by `|`), with `{file}` replaced per file. No certificate is in the repository. Without a hook the output is marked UNSIGNED everywhere; `-RequireSigned` refuses it. Details and evidence: [F18](../evidence/F18/F18.md).

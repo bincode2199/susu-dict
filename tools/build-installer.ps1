@@ -101,7 +101,7 @@ $candidates = @($MakeNsis, (Get-Command makensis -ErrorAction SilentlyContinue).
   (Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe'), (Join-Path $env:ProgramFiles 'NSIS/makensis.exe'),
   (Join-Path $root '.tools/nsis/makensis.exe')) | Where-Object { $_ -and (Test-Path $_) }
 if (-not $candidates) {
-  Write-Error 'makensis was not found. Staging is complete. Install NSIS (https://nsis.sourceforge.io) yourself or pass -MakeNsis <path>; this script does not download it.'
+  [Console]::Error.WriteLine('makensis was not found. Staging is complete. Install NSIS (https://nsis.sourceforge.io) yourself or pass -MakeNsis <path>; this script does not download it.')
   exit 3
 }
 $nsis = @($candidates)[0]

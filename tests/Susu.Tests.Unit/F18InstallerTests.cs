@@ -322,6 +322,74 @@ public class F18InstallerTests
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool TranslateMessage(in Msg message);
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "DispatchMessageW")] private static extern nint DispatchMessage(in Msg message);
 
+    // ---------- the real published susu.exe: installer commands end to end ----------
+
+    private static (int Exit, string Report) RunHost(string exe, params string[] args)
+    {
+        string report = Path.Combine(TestTemp.NewDir("susu-f18-report"), "r.json");
+        var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true };
+        foreach (string a in args) info.ArgumentList.Add(a);
+        info.ArgumentList.Add("--report");
+        info.ArgumentList.Add(report);
+        using var process = Process.Start(info)!;
+        Assert.True(process.WaitForExit(60_000));
+        return (process.ExitCode, File.Exists(report) ? File.ReadAllText(report) : "");
+    }
+
+    [Fact] // UPD07: the published exe's query/exit/uninstall commands; a real running instance is asked to exit and is really gone
+    public async Task Published_exe_installer_commands_work_against_a_real_running_instance()
+    {
+        string? output = PluginHostIntegrationTests.FindHostBuildOutput();
+        if (output is null) return;
+        string exe = Path.Combine(output, "susu.exe");
+        string root = TestTemp.NewDir("susu-f18-root");
+
+        Assert.Equal((0, "{\"state\":\"not-running\",\"inFlight\":0}"), RunHost(exe, "--installer-query", "--data-root", root));
+        Assert.Equal((0, "{\"state\":\"not-running\",\"inFlight\":0}"), RunHost(exe, "--installer-exit", "--data-root", root));
+
+        string prefix = $"Susu.F18Test.{Guid.NewGuid():N}.";
+        string resources = TestTemp.NewDir("susu-f18-res");
+        ContainerHost.Open(prefix + "x", resources, allowExisting: false).Close(deleteProfile: false); // a leftover profile
+        var paths = Susu.Storage.AppPaths.UnderRoot(root).EnsureCreated();
+        File.WriteAllText(Path.Combine(paths.Roaming, "settings.yaml"), "x");
+        var kept = RunHost(exe, "--installer-uninstall", "--data-root", root, "--profile-prefix", prefix);
+        Assert.Equal(0, kept.Exit);
+        Assert.Contains("\"profilesRemoved\":1", kept.Report);
+        Assert.Contains("\"userDataDeleted\":false", kept.Report);
+        Assert.True(File.Exists(Path.Combine(paths.Roaming, "settings.yaml")));
+        var wiped = RunHost(exe, "--installer-uninstall", "--data-root", root, "--profile-prefix", prefix, "--delete-user-data");
+        Assert.Equal(0, wiped.Exit);
+        Assert.Contains("\"userDataDeleted\":true", wiped.Report);
+        Assert.False(Directory.Exists(paths.Roaming));
+        Assert.Empty(InstallerSupport.ListContainerProfiles(prefix));
+
+        // a real instance, with its own data root
+        string running = TestTemp.NewDir("susu-f18-running");
+        var start = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true };
+        start.ArgumentList.Add("--data-root");
+        start.ArgumentList.Add(running);
+        using var app = Process.Start(start)!;
+        try
+        {
+            (int Exit, string Report) query = (0, "");
+            for (int i = 0; i < 100 && query.Exit < 100 && !app.HasExited; i++)
+            {
+                query = RunHost(exe, "--installer-query", "--data-root", running);
+                if (query.Exit < 100) await Task.Delay(200, TestContext.Current.CancellationToken);
+            }
+            if (app.HasExited && query.Exit < 100) return; // no usable desktop or WebView2 runtime here: the app exits on its own, nothing to coordinate
+            Assert.Equal(100, query.Exit); // running, nothing in flight
+            Assert.Contains("\"state\":\"running\"", query.Report);
+            // uninstall refuses while the instance runs
+            Assert.Equal(13, RunHost(exe, "--installer-uninstall", "--data-root", running).Exit);
+            var exit = RunHost(exe, "--installer-exit", "--data-root", running, "--timeout-ms", "20000");
+            Assert.Equal(0, exit.Exit);
+            Assert.Contains("\"state\":\"exited\"", exit.Report);
+            Assert.True(app.WaitForExit(20_000), "the process must be gone once the installer's exit request returns");
+        }
+        finally { if (!app.HasExited) app.Kill(true); }
+    }
+
     // ---------- X06: the plugin-host process tree dies with its parent ----------
 
     private const string ParentRole = "SUSU_F18_X06_PARENT";
