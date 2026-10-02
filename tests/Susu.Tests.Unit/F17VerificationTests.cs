@@ -1054,9 +1054,9 @@ public sealed class F17VerificationTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "journal.json"), journal);
         string s = rig.SettingsHash;
         var ex = Record.Exception(() => rig.Restart());
-        // DEFECT F17V-6 (low-medium): journals with a missing files list or a null/empty/invalid target throw NullReferenceException, ArgumentException or
-        // similar out of Recover(), which runs before anything is loaded; the host cannot start until someone deletes the transactions folder by hand. Any such
-        // journal should be treated as damaged: delete it and go on. The exception type is recorded so the fix can be verified.
+        // DEFECT F17V-6 (low-medium): a Prepared journal with no files list, a null entry (NullReferenceException) or whose .old copy is missing (FileNotFoundException)
+        // throws out of ConfigTransaction.Recover(); Program.cs calls Recover() before anything else with no catch, so the host cannot start until someone deletes the
+        // transactions folder by hand. Such a journal should be treated as damaged: delete it and go on. The exception type is recorded so the fix can be verified.
         bool crashes = ex is not null;
         if (crashes) Assert.True(ex is NullReferenceException or ArgumentException or InvalidOperationException or IOException or NotSupportedException, ex!.GetType().Name);
         else Assert.Equal(s, rig.SettingsHash);
