@@ -56,7 +56,7 @@ Environment notes for building and running (PowerShell setup, non-interactive RD
    - F05 real vendor calls and A01–A04 need accounts.
    - F04/F05 WebSocket is not built (no v1 adapter needs it).
    - F06 real Tencent/DeepL/OpenAI calls need accounts; the interactive G1 walk-through needs a drivable desktop.
-   - The plugin sandbox lacks `crypto` and `URLSearchParams`, which PLAN 4.3 lists (found in F09.1). Assigned to F16.
+   - The plugin sandbox lacks `crypto` and `URLSearchParams`, which PLAN 4.3 lists (found in F09.1). Resolved in F16.4 (`crypto.getRandomValues`, `randomUUID`, `subtle.digest`, `URLSearchParams`; no `URL`, `TextEncoder`, `setTimeout` etc. exist in the bridge either, see F16.4 in the F16 record).
    - Resolved 2026-09-25: the intermittent `NetworkBrokerTests` failure (timing assumptions in test code); PER02 re-measured with the lazy host (pass).
 
 ## Execution plan (goal set 2026-09-25)

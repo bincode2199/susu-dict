@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")
+#endif
 
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
@@ -276,6 +281,69 @@ static const char *bootstrap =
 "function abort(id){const c=calls.get(id);if(c)c.abort({name:'AbortError',kind:'cancelled'});}"
 "return [invoke,abort];})";
 
+
+/* ---- crypto natives (PLAN 4.3): OS random bytes and SHA digests, nothing else ---- */
+static JSValue js_random(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    int32_t n = 0;
+    if (argc < 1 || JS_ToInt32(ctx, &n, argv[0]) || n < 0 || n > 65536) return JS_ThrowRangeError(ctx, "random: bad length");
+    uint8_t *buffer = malloc(n ? (size_t)n : 1);
+    if (!buffer) return JS_ThrowOutOfMemory(ctx);
+#ifdef _WIN32
+    if (BCryptGenRandom(NULL, buffer, (ULONG)n, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) { free(buffer); return JS_ThrowInternalError(ctx, "random source failed"); }
+#else
+    free(buffer);
+    return JS_ThrowInternalError(ctx, "random source unavailable");
+#endif
+    JSValue result = JS_NewArrayBufferCopy(ctx, buffer, (size_t)n);
+    free(buffer);
+    return result;
+}
+
+// digest(id, arrayBuffer): id 1 SHA-1, 2 SHA-256, 3 SHA-384, 4 SHA-512.
+static JSValue js_digest(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    (void)this_val;
+    int32_t id = 0;
+    size_t length = 0;
+    if (argc < 2 || JS_ToInt32(ctx, &id, argv[0])) return JS_ThrowTypeError(ctx, "digest: bad arguments");
+    uint8_t *data = JS_GetArrayBuffer(ctx, &length, argv[1]);
+    if (!data) return JS_EXCEPTION;
+#ifdef _WIN32
+    static const wchar_t *names[] = { NULL, BCRYPT_SHA1_ALGORITHM, BCRYPT_SHA256_ALGORITHM, BCRYPT_SHA384_ALGORITHM, BCRYPT_SHA512_ALGORITHM };
+    static const ULONG sizes[] = { 0, 20, 32, 48, 64 };
+    if (id < 1 || id > 4 || length > 0xFFFFFFF0u) return JS_ThrowRangeError(ctx, "digest: bad algorithm");
+    BCRYPT_ALG_HANDLE handle = NULL;
+    uint8_t out[64];
+    if (BCryptOpenAlgorithmProvider(&handle, names[id], NULL, 0) != 0) return JS_ThrowInternalError(ctx, "digest unavailable");
+    NTSTATUS status = BCryptHash(handle, NULL, 0, data, (ULONG)length, out, sizes[id]);
+    BCryptCloseAlgorithmProvider(handle, 0);
+    if (status != 0) return JS_ThrowInternalError(ctx, "digest failed");
+    return JS_NewArrayBufferCopy(ctx, out, sizes[id]);
+#else
+    return JS_ThrowInternalError(ctx, "digest unavailable");
+#endif
+}
+
+static const char *webapis =
+#include "webapis.inc"
+;
+
+// Evaluates webapis.js: defines the global crypto and URLSearchParams.
+static int install_webapis(JSContext *ctx) {
+    JSValue factory = JS_Eval(ctx, webapis, strlen(webapis), "<host-webapis>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(factory)) { JS_FreeValue(ctx, JS_GetException(ctx)); return 1; }
+    JSValue natives = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, natives, "random", JS_NewCFunction(ctx, js_random, "random", 1));
+    JS_SetPropertyStr(ctx, natives, "digest", JS_NewCFunction(ctx, js_digest, "digest", 2));
+    JSValue result = JS_Call(ctx, factory, JS_UNDEFINED, 1, (JSValueConst *)&natives);
+    JS_FreeValue(ctx, natives);
+    JS_FreeValue(ctx, factory);
+    int failed = JS_IsException(result);
+    if (failed) JS_FreeValue(ctx, JS_GetException(ctx));
+    JS_FreeValue(ctx, result);
+    return failed;
+}
+
 // Creates a runtime for one plugin package: host bridge, restricted loader, lockdown.
 EXPORT susu_engine *susu_qjs_new_plugin(size_t memory_limit, interrupt_fn interrupted, host_fn host, read_module_fn read_module, void *opaque) {
     if (!host || !read_module) return NULL;
@@ -294,7 +362,7 @@ EXPORT susu_engine *susu_qjs_new_plugin(size_t memory_limit, interrupt_fn interr
     engine->invoke = JS_GetPropertyUint32(ctx, pair, 0);
     engine->abort = JS_GetPropertyUint32(ctx, pair, 1);
     JS_FreeValue(ctx, pair);
-    if (apply_lockdown(engine)) { susu_qjs_free(engine); return NULL; }
+    if (install_webapis(ctx) || apply_lockdown(engine)) { susu_qjs_free(engine); return NULL; }
     return engine;
 }
 

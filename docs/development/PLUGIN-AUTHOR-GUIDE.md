@@ -126,6 +126,10 @@ Matching rules for `result` and `bodyJson`: objects match when every expected ke
 
 Write at least: one success per capability you declare, one case per vendor failure you map (`auth`, `rate_limited`, `quota`), a vendor answer in the wrong shape (expect `bad_response`), and for `vocab` an unreadable answer after a write (expect `unknown`, never `applied`). The shipped packages' cases are in `tests/plugin-cases/<package>.test.json` and show the same on real vendors.
 
+### Web APIs in the sandbox
+
+The plugin runtime has no network or file primitives of its own; besides `ctx.$http` and friends it offers `crypto.getRandomValues` (integer typed arrays, at most 65536 bytes per call, else `QuotaExceededError`), `crypto.randomUUID`, `crypto.subtle.digest` (`SHA-1`, `SHA-256`, `SHA-384`, `SHA-512`; resolves an `ArrayBuffer`) and `URLSearchParams` (form-urlencoded: `+` is a space, spaces are written back as `+`). Nothing else of Web Crypto exists (no `sign`, `importKey`, HMAC): request signing is not done in plugin code (PLAN 4.3), and `digest` is for content hashes and de-duplication. The random bytes come from the operating system and a plugin never sees host keys. A `translate` case that exercises all of them is in `PluginAuthorCliTests`.
+
 ## Package and sign
 
 `susu-plugin pack [<dir>] [--out <file.susuext>] [--key <seed file>]` runs the same checks as `check`, zips the package without the author-only files (`susu-plugin.test.json`, `*.test.json` at the top level, a `tests/` folder, an old `signature`) and writes `<id>-<version>.susuext` (or `--out`). Install it from Settings > Plugins (pick the file or drop it on the window): the host unzips it with the safe unzip rules, shows the permission list and signer, and activates it in a transaction that rolls back if the new version cannot load.

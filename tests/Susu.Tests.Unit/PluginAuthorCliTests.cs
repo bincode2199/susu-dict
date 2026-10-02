@@ -250,6 +250,35 @@ public class PluginAuthorCliTests
         Assert.Contains("8 passed, 0 failed", test.Out);
     }
 
+    /// <summary>F16.4: crypto and URLSearchParams exist in the real AppContainer sandbox, not only in-process.</summary>
+    [Fact]
+    public void A_plugin_can_use_crypto_and_URLSearchParams_in_the_real_sandbox()
+    {
+        if (Exes() is not var (cli, host)) { Assert.Skip("publish susu-plugin.exe and susu.exe first"); return; }
+        string dir = Generated("translate", main: """
+            const hex = (b) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
+            export default {
+              async translate(req) {
+                const digest = hex(await crypto.subtle.digest('SHA-256', Uint8Array.from(req.text, (c) => c.charCodeAt(0))));
+                const bytes = crypto.getRandomValues(new Uint8Array(16));
+                const uuid = crypto.randomUUID();
+                const p = new URLSearchParams({ q: req.text, to: 'zh Hans' }); p.append('q', 'a&b'); p.sort();
+                let quota = 'none'; try { crypto.getRandomValues(new Uint8Array(65537)); } catch (e) { quota = e.name; }
+                return { text: digest + '|' + bytes.length + '|' + /^[0-9a-f-]{36}$/.test(uuid) + '|' + p.toString() + '|' + quota };
+              },
+            };
+            """, cases: """
+            { "version": 1, "cases": [
+              { "name": "web apis", "request": { "text": "abc", "from": "en", "to": "zh-Hans" },
+                "expect": { "result": { "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad|16|true|q=abc&q=a%26b&to=zh+Hans|QuotaExceededError" } } }
+            ] }
+            """);
+
+        var test = Run(cli, "test", dir, "--host", host);
+        Assert.True(test.Exit == 0, test.Out + test.Err);
+        Assert.Contains("1 passed, 0 failed", test.Out);
+    }
+
     [Fact]
     public void A_case_calling_an_undeclared_capability_and_the_filter_option_behave()
     {
