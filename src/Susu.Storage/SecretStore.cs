@@ -33,6 +33,27 @@ public sealed class SecretStore : ISecretStore
 
     public bool Has(string accountId, string secretName) { lock (gate) return entries.Any(e => e.Account == accountId && e.Name == secretName); }
 
+    /// <summary>Every stored (account, name) pair, for a backup that includes keys (F17.1). Values are read one by one with <see cref="TryRead"/>.</summary>
+    public IReadOnlyList<(string Account, string Name)> Entries() { lock (gate) return [.. entries.Select(e => (e.Account, e.Name))]; }
+
+    /// <summary>
+    /// Builds the bytes of a secrets.dat from plaintext values, protecting each with <paramref name="protector"/> (the importing user's DPAPI,
+    /// F17.1), without touching any store. Same validation as <see cref="Write"/>.
+    /// </summary>
+    public static byte[] BuildFile(ISecretProtector protector, IEnumerable<(string Account, string Name, string Value)> values)
+    {
+        var list = new List<SecretEntry>();
+        foreach (var (account, name, value) in values)
+        {
+            if (value.Length == 0 || value.Length > MaxValueChars) throw new ArgumentException($"secret must be 1..{MaxValueChars} characters");
+            if (string.IsNullOrWhiteSpace(account) || string.IsNullOrWhiteSpace(name)) throw new ArgumentException("account and secret name are required");
+            byte[] plain = Encoding.UTF8.GetBytes(value);
+            try { list.RemoveAll(e => e.Account == account && e.Name == name); list.Add(new SecretEntry(account, name, Convert.ToBase64String(protector.Protect(plain)))); }
+            finally { CryptographicOperations.ZeroMemory(plain); }
+        }
+        return Serialize(list);
+    }
+
     public IReadOnlyList<string> Names(string accountId) { lock (gate) return entries.Where(e => e.Account == accountId).Select(e => e.Name).Order(StringComparer.Ordinal).ToList(); }
 
     public void Write(string accountId, string secretName, ReadOnlySpan<char> value)

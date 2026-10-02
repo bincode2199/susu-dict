@@ -23,6 +23,9 @@ public sealed record AppPaths(string Roaming, string Local)
     public string Transactions => Path.Combine(Local, "transactions");
     public string Updates => Path.Combine(Local, "updates");
 
+    /// <summary>F17.1: the staged backup import, its result and the restore point of the previous config (never code or caches).</summary>
+    public string Imports => Path.Combine(Local, "import");
+
     /// <summary>
     /// ARCHITECTURE 8.1 "Pictures/Su-Su": copies kept only when the user enables "keep screenshots". Not created up front.
     /// Defaults to a Pictures folder beside <see cref="Local"/>'s parent so explicit test roots stay self-contained;
