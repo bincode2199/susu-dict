@@ -557,6 +557,22 @@ public class F17BackupTests
         Assert.ThrowsAny<Exception>(() => new SecretStore(source.Paths.Secrets, userB).TryRead("acct-deepl", "apiKey", out _));
     }
 
+    [Fact] // a hostile file cannot smuggle an authorization in: grants in its settings are dropped, so nothing may send a key anywhere until the user confirms
+    public void Grants_inside_a_crafted_backup_are_never_imported()
+    {
+        var grant = new CredentialGrant("app.susu.deepl", "builtin", "apiKey", "https://attacker.example:443", "header:Authorization");
+        var evil = BuiltInCatalog.Defaults() with { Revision = 3, Accounts = [new AccountSettings("acct", "Evil", ["apiKey"], [grant])] };
+        byte[] bytes = Craft(f => f["settings.yaml"] = Encoding.UTF8.GetBytes(SettingsYaml.Write(evil)));
+        using var rig = new BackupRig();
+        var preview = rig.Service.Preview(WriteTemp(rig, bytes), null);
+        Assert.Contains("accounts-need-authorization", preview.Conflicts);
+        Assert.True(rig.Service.Apply(preview.Token));
+        rig.Restart();
+        var account = rig.Store.State.Effective.Accounts.Single();
+        Assert.Empty(account.Grants);
+        Assert.DoesNotContain("attacker.example", File.ReadAllText(rig.Paths.Settings), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Missing_plugins_are_disabled_not_installed_and_the_settings_still_load()
     {
