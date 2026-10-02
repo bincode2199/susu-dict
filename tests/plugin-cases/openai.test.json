@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "assembles a streamed answer",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "contentType": "text/event-stream", "text": "data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"好\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n" } ],
+      "expectRequests": [ { "method": "POST", "path": "/v1/chat/completions", "headerContains": { "Authorization": "Bearer test-key" }, "bodyJson": { "stream": true } } ],
+      "expect": { "result": { "text": "你好" } }
+    },
+    {
+      "name": "a stream that ends before [DONE] is a network error, not a partial answer",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "contentType": "text/event-stream", "text": "data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}\n\n" } ],
+      "expect": { "error": "network" }
+    },
+    {
+      "name": "401 is auth",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "apiKey": "wrong" },
+      "vendor": [ { "status": 401, "json": { "error": { "code": "invalid_api_key", "message": "bad key" } } } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

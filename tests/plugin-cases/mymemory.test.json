@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "maps the canonical zh-Hans to MyMemory's zh-CN and returns the translation",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "vendor": [ { "status": 200, "json": { "responseData": { "translatedText": "你好" }, "responseStatus": 200 } } ],
+      "expectRequests": [ { "method": "GET", "pathContains": "langpair=en|zh-CN" } ],
+      "expect": { "result": { "text": "你好" } }
+    },
+    {
+      "name": "a quota message inside a 200 answer is the quota class",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "vendor": [ { "status": 200, "json": { "responseData": { "translatedText": "MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY." }, "responseStatus": 200 } } ],
+      "expect": { "error": "quota" }
+    },
+    {
+      "name": "429 is rate_limited",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "vendor": [ { "status": 429, "json": {} } ],
+      "expect": { "error": "rate_limited" }
+    }
+  ]
+}

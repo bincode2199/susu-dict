@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "transcribes inline audio to text",
+      "request": { "audio": { "$file": "audio" }, "model": "gemini-2.5-flash", "output": "text" },
+      "inputs": { "audio": { "base64": "UklGRg==", "mime": "audio/wav", "extension": "wav", "durationMs": 2000 } },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "candidates": [ { "finishReason": "STOP", "content": { "parts": [ { "text": "hello world" } ] } } ] } } ],
+      "expectRequests": [ { "method": "POST", "path": "/v1beta/models/gemini-2.5-flash:generateContent", "headerContains": { "X-Goog-Api-Key": "test-key" }, "bodyContains": "UklGRg==" } ],
+      "expect": { "result": { "kind": "text", "text": "hello world" } }
+    },
+    {
+      "name": "a truncated transcript is bad_response, not a partial success",
+      "request": { "audio": { "$file": "audio" }, "model": "gemini-2.5-flash", "output": "text" },
+      "inputs": { "audio": { "base64": "UklGRg==", "mime": "audio/wav", "extension": "wav", "durationMs": 2000 } },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "candidates": [ { "finishReason": "MAX_TOKENS", "content": { "parts": [ { "text": "hello" } ] } } ] } } ],
+      "expect": { "error": "bad_response", "detailContains": "MAX_TOKENS" }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "translates with a TC3-signed request",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "secretId": "test-id", "secretKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "Response": { "TargetText": "你好", "Source": "en", "Target": "zh", "RequestId": "r-1" } } } ],
+      "expectRequests": [ { "method": "POST", "headerContains": { "X-TC-Action": "TextTranslate", "Authorization": "TC3-HMAC-SHA256" }, "bodyJson": { "SourceText": "hello", "Source": "en", "Target": "zh" } } ],
+      "expect": { "result": { "text": "你好" } }
+    },
+    {
+      "name": "an authentication failure code is auth",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "secretId": "test-id", "secretKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "Response": { "Error": { "Code": "AuthFailure.SignatureFailure", "Message": "bad" }, "RequestId": "r-1" } } } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

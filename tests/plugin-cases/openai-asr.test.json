@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "transcribes to text",
+      "request": { "audio": { "$file": "audio" }, "model": "gpt-4o-transcribe", "output": "text" },
+      "inputs": { "audio": { "base64": "UklGRg==", "mime": "audio/wav", "extension": "wav", "durationMs": 2000 } },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "text": "hello world" } } ],
+      "expectRequests": [ { "method": "POST", "path": "/v1/audio/transcriptions", "headerContains": { "Authorization": "Bearer test-key" }, "bodyContains": "gpt-4o-transcribe" } ],
+      "expect": { "result": { "kind": "text", "text": "hello world" } }
+    },
+    {
+      "name": "whisper-1 returns timed segments",
+      "request": { "audio": { "$file": "audio" }, "model": "whisper-1", "output": "segments" },
+      "inputs": { "audio": { "base64": "UklGRg==", "mime": "audio/wav", "extension": "wav", "durationMs": 2000 } },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "segments": [ { "start": 0, "end": 1.5, "text": "hello world" } ] } } ],
+      "expect": { "result": { "kind": "segments", "segments": [ { "start": 0, "end": 1.5, "text": "hello world" } ] } }
+    },
+    {
+      "name": "an invalid key is auth",
+      "request": { "audio": { "$file": "audio" }, "model": "whisper-1", "output": "text" },
+      "inputs": { "audio": { "base64": "UklGRg==", "mime": "audio/wav", "extension": "wav", "durationMs": 2000 } },
+      "secrets": { "apiKey": "wrong" },
+      "vendor": [ { "status": 401, "json": { "error": { "code": "invalid_api_key", "message": "bad key" } } } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

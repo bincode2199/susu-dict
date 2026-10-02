@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "translate returns the joined translation",
+      "capability": "translate",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "appKey": "test-app", "appSecret": "test-secret" },
+      "vendor": [ { "status": 200, "json": { "errorCode": "0", "translation": [ "你好" ] } } ],
+      "expect": { "result": { "text": "你好" } }
+    },
+    {
+      "name": "dictionary: code 120 is a legal empty entry",
+      "capability": "dictionary",
+      "request": { "word": "zzzz" },
+      "secrets": { "appKey": "test-app", "appSecret": "test-secret" },
+      "vendor": [ { "status": 200, "json": { "errorCode": "120" } } ],
+      "expect": { "result": { "word": "zzzz", "phonetics": [], "parts": [] } }
+    },
+    {
+      "name": "a rejected key is auth",
+      "capability": "translate",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "appKey": "wrong", "appSecret": "wrong" },
+      "vendor": [ { "status": 200, "json": { "errorCode": "108" } } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

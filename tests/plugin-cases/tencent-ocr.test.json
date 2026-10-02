@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "reads a text line with confidence",
+      "request": { "image": { "$file": "image" }, "lang": "en" },
+      "inputs": { "image": { "text": "not a real png", "mime": "image/png", "extension": "png", "width": 100, "height": 50 } },
+      "secrets": { "secretId": "test-id", "secretKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "Response": { "TextDetections": [ { "DetectedText": "hello", "Confidence": 99 } ], "RequestId": "r-1" } } } ],
+      "expectRequests": [ { "method": "POST", "headerContains": { "X-TC-Action": "GeneralBasicOCR" }, "bodyJson": { "ImageBase64": "bm90IGEgcmVhbCBwbmc=" } } ],
+      "expect": { "result": { "blocks": [ { "text": "hello", "kind": "text", "confidence": 0.99 } ] } }
+    },
+    {
+      "name": "an image without text is an empty result, not an error",
+      "request": { "image": { "$file": "image" }, "lang": "en" },
+      "inputs": { "image": { "text": "not a real png", "mime": "image/png", "extension": "png", "width": 100, "height": 50 } },
+      "secrets": { "secretId": "test-id", "secretKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "Response": { "Error": { "Code": "FailedOperation.ImageNoText", "Message": "none" }, "RequestId": "r-1" } } } ],
+      "expect": { "result": { "blocks": [] } }
+    }
+  ]
+}

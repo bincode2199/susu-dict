@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "speaks a word and returns an audio handle",
+      "request": { "text": "hello" },
+      "secrets": { "secretId": "test-id", "secretKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "Response": { "Audio": "AAECAwQ=", "SessionId": "s-1", "RequestId": "r-1" } } } ],
+      "expectRequests": [ { "method": "POST", "headerContains": { "X-TC-Action": "TextToVoice" }, "bodyJson": { "Text": "hello", "Codec": "mp3" } } ],
+      "expect": { "result": { "audio": { "id": "$any", "mime": "audio/mpeg", "bytes": 5 } } }
+    },
+    {
+      "name": "403 is auth",
+      "request": { "text": "hello" },
+      "secrets": { "secretId": "test-id", "secretKey": "test-key" },
+      "vendor": [ { "status": 403, "json": {} } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "lookup: a note with this entry id is found",
+      "request": { "operationId": "op-1", "action": "lookup", "entryRevision": 1, "word": "hello", "lang": "en", "entryId": "entry1" },
+      "vendor": [ { "status": 200, "json": { "error": null, "result": [ 1234 ] } } ],
+      "expectRequests": [ { "method": "POST", "bodyJson": { "action": "findNotes", "version": 6 } } ],
+      "expect": { "result": { "status": "found", "remoteId": "1234" } }
+    },
+    {
+      "name": "lookup: no note is absent",
+      "request": { "operationId": "op-2", "action": "lookup", "entryRevision": 1, "word": "hello", "lang": "en", "entryId": "entry1" },
+      "vendor": [ { "status": 200, "json": { "error": null, "result": [] } } ],
+      "expect": { "result": { "status": "absent" } }
+    },
+    {
+      "name": "upsert: a note that already exists is updated, never duplicated",
+      "request": { "operationId": "op-3", "action": "upsert", "entryRevision": 2, "word": "hello", "lang": "en", "entryId": "entry1", "content": { "source": "test" } },
+      "vendor": [
+        { "status": 200, "json": { "error": null, "result": [ 1234 ] } },
+        { "status": 200, "json": { "error": null, "result": null } }
+      ],
+      "expectRequests": [ { "bodyJson": { "action": "findNotes" } }, { "bodyJson": { "action": "updateNoteFields" } } ],
+      "expect": { "result": { "status": "applied", "remoteId": "1234" } }
+    },
+    {
+      "name": "a non-AnkiConnect answer is bad_response",
+      "request": { "operationId": "op-4", "action": "lookup", "entryRevision": 1, "word": "hello", "lang": "en", "entryId": "entry1" },
+      "vendor": [ { "status": 200, "text": "<html>not anki</html>" } ],
+      "expect": { "error": "bad_response" }
+    }
+  ]
+}

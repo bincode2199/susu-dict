@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "translates and sends the key in the Authorization header",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "translations": [ { "text": "你好", "detected_source_language": "EN" } ] } } ],
+      "expectRequests": [ { "method": "POST", "path": "/v2/translate", "headerContains": { "Authorization": "DeepL-Auth-Key test-key" }, "bodyJson": { "text": ["hello"], "target_lang": "ZH-HANS" } } ],
+      "expect": { "result": { "text": "你好" } }
+    },
+    {
+      "name": "403 is auth",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "apiKey": "wrong" },
+      "vendor": [ { "status": 403, "json": { "message": "Forbidden" } } ],
+      "expect": { "error": "auth" }
+    },
+    {
+      "name": "429 is rate_limited",
+      "request": { "text": "hello", "from": "en", "to": "zh-Hans" },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 429, "json": {} } ],
+      "expect": { "error": "rate_limited" }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "speaks a word: SSML out, an audio file handle back",
+      "request": { "text": "hello", "lang": "en" },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "contentType": "audio/mpeg", "base64": "AAECAwQ=" } ],
+      "expectRequests": [ { "method": "POST", "path": "/cognitiveservices/v1", "headerContains": { "Ocp-Apim-Subscription-Key": "test-key" }, "bodyContains": "<prosody" } ],
+      "expect": { "result": { "audio": { "id": "$any", "mime": "audio/mpeg", "bytes": 5 } } }
+    },
+    {
+      "name": "401 is auth",
+      "request": { "text": "hello", "lang": "en" },
+      "secrets": { "apiKey": "wrong" },
+      "vendor": [ { "status": 401, "json": {} } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

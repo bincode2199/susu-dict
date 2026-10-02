@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "speaks a word and returns an audio handle",
+      "request": { "text": "hello", "lang": "en" },
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "audioContent": "AAECAwQ=" } } ],
+      "expectRequests": [ { "method": "POST", "path": "/v1/text:synthesize", "headerContains": { "X-Goog-Api-Key": "test-key" }, "bodyJson": { "input": { "text": "hello" } } } ],
+      "expect": { "result": { "audio": { "id": "$any", "mime": "audio/mpeg", "bytes": 5 } } }
+    },
+    {
+      "name": "permission denied is auth",
+      "request": { "text": "hello", "lang": "en" },
+      "secrets": { "apiKey": "wrong" },
+      "vendor": [ { "status": 403, "json": { "error": { "code": 403, "status": "PERMISSION_DENIED", "message": "denied" } } } ],
+      "expect": { "error": "auth" }
+    },
+    {
+      "name": "the voices list maps to id, name and language",
+      "capability": "voices",
+      "request": {},
+      "secrets": { "apiKey": "test-key" },
+      "vendor": [ { "status": 200, "json": { "voices": [ { "name": "en-US-Standard-C", "ssmlGender": "FEMALE", "languageCodes": [ "en-US" ] } ] } } ],
+      "expect": { "result": [ { "id": "en-US-Standard-C", "name": "en-US-Standard-C (female)", "lang": "en-US" } ] }
+    }
+  ]
+}

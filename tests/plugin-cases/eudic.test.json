@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "lookup: a word in the list is found",
+      "request": { "operationId": "op-1", "action": "lookup", "entryRevision": 1, "word": "hello", "lang": "en" },
+      "secrets": { "apiKey": "NIS test" },
+      "vendor": [ { "status": 200, "json": { "data": [ { "word": "hello" } ] } } ],
+      "expectRequests": [ { "method": "GET", "pathContains": "/api/open/v1/studylist/word/hello", "headerContains": { "Authorization": "NIS test" } } ],
+      "expect": { "result": { "status": "found", "remoteId": "en:hello" } }
+    },
+    {
+      "name": "lookup: 404 is absent",
+      "request": { "operationId": "op-2", "action": "lookup", "entryRevision": 1, "word": "hello", "lang": "en" },
+      "secrets": { "apiKey": "NIS test" },
+      "vendor": [ { "status": 404, "json": {} } ],
+      "expect": { "result": { "status": "absent" } }
+    },
+    {
+      "name": "upsert: a missing word is added",
+      "request": { "operationId": "op-3", "action": "upsert", "entryRevision": 1, "word": "hello", "lang": "en" },
+      "secrets": { "apiKey": "NIS test" },
+      "vendor": [ { "status": 404, "json": {} }, { "status": 200, "json": { "message": "ok" } } ],
+      "expectRequests": [ { "method": "GET" }, { "method": "POST", "path": "/api/open/v1/studylist/word", "bodyJson": { "language": "en", "word": "hello" } } ],
+      "expect": { "result": { "status": "applied", "remoteId": "en:hello" } }
+    },
+    {
+      "name": "upsert: a 5xx after the write is unknown, never applied",
+      "request": { "operationId": "op-4", "action": "upsert", "entryRevision": 1, "word": "hello", "lang": "en" },
+      "secrets": { "apiKey": "NIS test" },
+      "vendor": [ { "status": 404, "json": {} }, { "status": 503, "text": "down" } ],
+      "expect": { "result": { "status": "unknown" } }
+    },
+    {
+      "name": "401 is auth",
+      "request": { "operationId": "op-5", "action": "lookup", "entryRevision": 1, "word": "hello", "lang": "en" },
+      "secrets": { "apiKey": "wrong" },
+      "vendor": [ { "status": 401, "json": {} } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

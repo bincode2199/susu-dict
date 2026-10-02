@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "reads a formula",
+      "request": { "image": { "$file": "image" } },
+      "inputs": { "image": { "text": "not a real png", "mime": "image/png", "extension": "png", "width": 100, "height": 50 } },
+      "secrets": { "apiKey": "test-token" },
+      "vendor": [ { "status": 200, "json": { "status": true, "res": { "info": "x^2", "type": "formula", "conf": 0.9 } } } ],
+      "expectRequests": [ { "method": "POST", "path": "/api/simpletex_ocr", "headerContains": { "token": "test-token" } } ],
+      "expect": { "result": { "blocks": [ { "text": "x^2", "kind": "formula", "confidence": 0.9 } ] } }
+    },
+    {
+      "name": "401 is auth",
+      "request": { "image": { "$file": "image" } },
+      "inputs": { "image": { "text": "not a real png", "mime": "image/png", "extension": "png", "width": 100, "height": 50 } },
+      "secrets": { "apiKey": "wrong" },
+      "vendor": [ { "status": 401, "json": { "status": false } } ],
+      "expect": { "error": "auth" }
+    }
+  ]
+}
