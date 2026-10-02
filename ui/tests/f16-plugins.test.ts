@@ -1,4 +1,4 @@
-// F16.1: the Plugins settings page. Fake bridge only (the host side is covered by PluginWindowTests and the sandbox tests): empty list and pick,
+// F16.1/F16.2: the Plugins settings page. Fake bridge only (the host side is covered by PluginWindowTests and the sandbox tests): empty list and pick,
 // the permission diff for a first install / an upgrade / a built-in override, the unsigned and third-party notes, confirm and discard sending
 // only the token, rejection reasons, install and uninstall results (with the built-in restored note), the uninstall confirmation step, and a
 // build without a file dialog.
@@ -139,5 +139,92 @@ describe('Plugins page', () => {
     await busy.wrapper.find('[data-plugin-pick]').trigger('click');
     await flushPromises();
     expect(busy.wrapper.find('[data-plugin-failed]').text()).toBe(t('plugins.busy'));
+  });
+
+  // ---------- F16.2 ----------
+
+  const heldUpdate = (over: Partial<PluginPreviewView> = {}) => pending({
+    token: 'upd1', version: '1.2.0', against: 'installed', baseVersion: '1.0.0', replacesVersion: '1.0.0', isUpdate: true,
+    reasons: ['signer-changed', 'permissions-expanded'], addedCapabilities: [], addedOrigins: ['https://new.example'], ...over,
+  });
+
+  it('lists staged updates, names the held changes, and keeps Apply disabled until they are acknowledged', async () => {
+    const { wrapper, bridge } = await mountPage(plugins({ installed: [installed()], updates: [heldUpdate()] }), () => withView(plugins()));
+    expect(wrapper.find('[data-plugin-update="true"]').exists()).toBe(true);
+    expect(wrapper.findAll('[data-plugin-reason]').map((r) => r.attributes('data-plugin-reason'))).toEqual(['signer-changed', 'permissions-expanded']);
+    expect(wrapper.find('[data-plugin-old-runs]').text()).toBe(t('plugins.held.oldRuns', { v: '1.0.0' }));
+    const apply = wrapper.find('[data-plugin-confirm]');
+    expect(apply.attributes('disabled')).toBeDefined();
+    await apply.trigger('click');
+    expect(bridge.calls).toHaveLength(0);
+    await wrapper.find('[data-plugin-ack]').setValue(true);
+    expect(wrapper.find('[data-plugin-confirm]').attributes('disabled')).toBeUndefined();
+    await wrapper.find('[data-plugin-confirm]').trigger('click');
+    await flushPromises();
+    expect(bridge.calls[0]).toEqual({ name: 'Plugin.Confirm', payload: { token: 'upd1', acknowledged: true } });
+  });
+
+  it('a staged update without held changes applies with the token only and can be discarded', async () => {
+    const { wrapper, bridge } = await mountPage(plugins({ installed: [installed()], updates: [heldUpdate({ reasons: [] })] }), () => withView(plugins()));
+    expect(wrapper.find('[data-plugin-ack]').exists()).toBe(false);
+    await wrapper.find('[data-plugin-confirm]').trigger('click');
+    await flushPromises();
+    expect(bridge.calls[0]).toEqual({ name: 'Plugin.Confirm', payload: { token: 'upd1' } });
+  });
+
+  it('names the calls an install or uninstall would cancel and counts them afterwards', async () => {
+    const tasks = [{ capability: 'translate', count: 2 }];
+    const { wrapper } = await mountPage(plugins({ installed: [installed({ inFlight: tasks })], pending: pending({ inFlight: tasks }) }));
+    expect(wrapper.find('[data-plugin-pending] [data-plugin-inflight]').text()).toBe(t('plugins.inflight', { tasks: 'translate × 2' }));
+    await wrapper.find('[data-plugin-uninstall]').trigger('click');
+    expect(wrapper.find('[data-plugin-item] [data-plugin-inflight]').text()).toBe(t('plugins.inflight', { tasks: 'translate × 2' }));
+    wrapper.unmount();
+    const done = await mountPage(plugins({ last: { action: 'install', id: 'acme.dict', version: '1.1.0', issues: [], interrupted: 2 } }));
+    expect(done.wrapper.find('[data-plugin-interrupted]').text()).toBe(t('plugins.interrupted', { n: 2 }));
+  });
+
+  it('uninstall asks whether to delete the stored data and sends removeData only when ticked', async () => {
+    const answer = () => withView(plugins());
+    const keep = await mountPage(plugins({ installed: [installed()] }), answer);
+    await keep.wrapper.find('[data-plugin-uninstall]').trigger('click');
+    expect(keep.wrapper.text()).toContain(t('plugins.dataKept'));
+    await keep.wrapper.find('[data-plugin-uninstall-confirm]').trigger('click');
+    await flushPromises();
+    expect(keep.bridge.calls[0]).toEqual({ name: 'Plugin.Uninstall', payload: { id: 'acme.dict' } });
+    keep.wrapper.unmount();
+    const drop = await mountPage(plugins({ installed: [installed()] }), answer);
+    await drop.wrapper.find('[data-plugin-uninstall]').trigger('click');
+    await drop.wrapper.find('[data-plugin-remove-data]').setValue(true);
+    await drop.wrapper.find('[data-plugin-uninstall-confirm]').trigger('click');
+    await flushPromises();
+    expect(drop.bridge.calls[0]).toEqual({ name: 'Plugin.Uninstall', payload: { id: 'acme.dict', removeData: true } });
+  });
+
+  it('offers a check only with an update source, and a failed check is shown as a failure, never as up to date', async () => {
+    const none = await mountPage(plugins());
+    expect(none.wrapper.find('[data-plugin-check]').attributes('disabled')).toBeDefined();
+    expect(none.wrapper.text()).toContain(t('plugins.updates.none'));
+    none.wrapper.unmount();
+    const answer = () => withView(plugins({ canCheckUpdates: true, check: { checked: 1, staged: 0, failures: [{ id: 'acme.dict', code: 'signature-invalid' }] } }));
+    const { wrapper, bridge } = await mountPage(plugins({ canCheckUpdates: true }), answer);
+    await wrapper.find('[data-plugin-check]').trigger('click');
+    await flushPromises();
+    expect(bridge.calls[0]).toEqual({ name: 'Plugin.CheckUpdates', payload: undefined });
+    expect(wrapper.find('[data-plugin-check-ok]').exists()).toBe(false);
+    expect(wrapper.find('[data-plugin-check-failed]').text()).toBe(t('plugins.check.failed'));
+    expect(wrapper.find('[data-plugin-check-failure]').text()).toContain(t('plugins.check.failure.signature-invalid'));
+    wrapper.unmount();
+    const ok = await mountPage(plugins({ canCheckUpdates: true, check: { checked: 3, staged: 1, failures: [] } }));
+    expect(ok.wrapper.find('[data-plugin-check-ok]').text()).toBe(t('plugins.check.result', { n: 3, staged: 1 }));
+  });
+
+  it('translates the held-change refusal and the compatibility reasons', async () => {
+    const { wrapper } = await mountPage(plugins({ last: { action: 'install', id: 'acme.dict', error: 'install.needsConfirmation', issues: [] } }));
+    expect(wrapper.find('[data-plugin-error]').text()).toBe(t('plugins.error.install.needsConfirmation'));
+    wrapper.unmount();
+    const rejected = await mountPage(plugins({ last: { action: 'preview', error: 'install.rejected', issues: [{ path: 'apiVersion', code: 'api-unsupported' }, { path: 'minHost', code: 'host-too-old' }] } }));
+    const texts = rejected.wrapper.findAll('[data-plugin-issue]').map((i) => i.text());
+    expect(texts[0]).toContain(t('plugins.issue.api-unsupported'));
+    expect(texts[1]).toContain(t('plugins.issue.host-too-old'));
   });
 });

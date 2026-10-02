@@ -251,7 +251,7 @@ settings 包括 schemaVersion、revision、语言/热键、providerInstances、s
 | window_state | windowKind PK, monitorHint, x/y/DPI | 只恢复位置；不记最大化/大小 |
 | usage | provider/account/period/metric 复合键, count | 由 attempt 事件幂等聚合；非供应商余额 |
 | usage_events | attemptId+metric UNIQUE, units, outcome, day | 不存正文；聚合后保留 7 天去重 |
-| plugin_kv | installationId+namespace+key PK, valueJson, bytes | 实例/包命名空间由宿主定；每包默认≤1 MiB，总≤32 MiB |
+| plugin_kv | packageId+namespace+key PK, valueJson, bytes | 包 ID 命名空间由宿主按调用授权绑定（schema 4，F16.2）：更新保留，卸载默认保留、明确选择后才删除；每包默认≤1 MiB，总≤32 MiB |
 | plugin_installations | installationId PK, packageId, version, signer, hash, active | 当前激活指针与旧版本恢复信息 |
 | vocab_entries | entryId PK, lang, normalizedText, displayText, contentJson, revision, deletedAt | UNIQUE(lang, normalizedText)；NFC、英语大小写折叠，原文保留 |
 | vocab_deliveries | entryId+targetInstanceId+entryRevision UNIQUE, operationId, state, remoteId, attempts, nextAt | 每目标独立状态，FK entries |

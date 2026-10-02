@@ -157,7 +157,9 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
   let pluginInstalled: PluginsFixture['installed'] = [];
   let pluginPending: PluginsFixture['pending'];
   let pluginLast: PluginsFixture['last'];
-  const pluginsView = (): PluginsFixture => ({ installed: pluginInstalled, pending: pluginPending, last: pluginLast, canPick: true });
+  let pluginUpdates: NonNullable<PluginsFixture['updates']> = [];
+  let pluginCheck: PluginsFixture['check'];
+  const pluginsView = (): PluginsFixture => ({ installed: pluginInstalled, pending: pluginPending, last: pluginLast, canPick: true, updates: pluginUpdates, canCheckUpdates: true, check: pluginCheck });
   const vocabView = (): NonNullable<SettingsView['vocab']> => ({
     favorites: 3 + favorited.size, canExport: true, rows: vocabRows, export: vocabExport,
     targets: [
@@ -342,13 +344,29 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         pluginPending = { token: 'dev', id: 'dev.sample', name: 'Sample', version: '1.0.0', signerKind: 'thirdParty', signer: 'a1b2c3d4e5f60718293a', against: 'none', addedCapabilities: ['dictionary'], removedCapabilities: [], addedOrigins: ['https://example.com'], removedOrigins: [], addedSecrets: [], removedSecrets: [] };
         ok(project());
         return;
+      case 'Plugin.CheckUpdates': {
+        const target = pluginInstalled[0];
+        pluginUpdates = target ? [{ token: 'dev-update', id: target.id, name: target.name, version: '2.0.0', signerKind: target.signerKind, signer: target.signer, replacesVersion: target.version, against: 'installed', baseVersion: target.version, addedCapabilities: [], removedCapabilities: [], addedOrigins: ['https://new.example.com'], removedOrigins: [], addedSecrets: [], removedSecrets: [], reasons: ['permissions-expanded'], isUpdate: true, inFlight: [] }] : [];
+        pluginCheck = { checked: pluginInstalled.length, staged: pluginUpdates.length, failures: [] };
+        ok(project());
+        return;
+      }
       case 'Plugin.Confirm':
+        if (payload?.token === 'dev-update') {
+          if (!payload.acknowledged) { pluginLast = { action: 'install', error: 'install.needsConfirmation', issues: [] }; ok(project()); return; }
+          pluginInstalled = pluginInstalled.map((p) => (p.id === pluginUpdates[0]?.id ? { ...p, version: pluginUpdates[0]!.version } : p));
+          pluginLast = { action: 'install', id: pluginUpdates[0]?.id, version: pluginUpdates[0]?.version, issues: [], interrupted: 0 };
+          pluginUpdates = [];
+          ok(project());
+          return;
+        }
         if (pluginPending) pluginInstalled = [...pluginInstalled, { id: pluginPending.id, name: pluginPending.name, version: pluginPending.version, signerKind: pluginPending.signerKind, signer: pluginPending.signer, capabilities: pluginPending.addedCapabilities, origins: pluginPending.addedOrigins, secrets: [] }];
         pluginLast = { action: 'install', id: pluginPending?.id, version: pluginPending?.version, issues: [] };
         pluginPending = undefined;
         ok(project());
         return;
       case 'Plugin.Discard':
+        pluginUpdates = pluginUpdates.filter((u) => u.token !== payload?.token);
         pluginPending = undefined;
         ok(project());
         return;
