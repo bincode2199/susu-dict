@@ -1063,5 +1063,458 @@ public sealed class F17VerificationTests : IDisposable
         Assert.True(File.Exists(rig.Paths.Settings));
     }
 
+    // ================= diagnostics export =================
+
+    private const string DKey = "sk-live-Zq81LmN0pRt9fA2kQ7zXb41V";
+    private const string DPass = "pr0xy-P@ss-Zz9!";
+    private const string DText = "我的私人日记 private diary line 9981";
+    private static readonly string[] DSecrets = [DKey, DPass, DText, "alice.private@example.org", "ALICE-PC-77", "alice.personal"];
+
+    private DiagnosticsExporter Exporter(BackupRig? rigOrNull = null, Func<DiagnosticsInfo>? info = null, string[]? registered = null)
+    {
+        var rig = rigOrNull ?? Rig();
+        var literals = new SensitiveLiterals();
+        literals.AddRange(registered ?? [DKey, DPass, "alice.private@example.org", "ALICE-PC-77", "alice.personal"]);
+        return new DiagnosticsExporter(rig.Paths, rig.Clock, literals, info ?? (() => new DiagnosticsInfo("1.2.3.0", "1.2.3", "Microsoft Windows 10.0.26200", ".NET 10.0.0", "en", "system", 1, 2, 3, 4, 5, 6)));
+    }
+
+    private static string ExportTo(BackupRig rig, DiagnosticsExporter exporter, out DiagnosticsOutcome outcome)
+    {
+        string path = Path.Combine(rig.Root.Root, $"d-{Guid.NewGuid():N}.zip");
+        outcome = exporter.Export(path);
+        return path;
+    }
+
+    private static string LogLine(string json) => json;
+    private static string L(params (string K, object V)[] f)
+    {
+        var m = new Dictionary<string, object> { ["t"] = "2026-10-02T01:02:03.0000000Z" };
+        foreach (var (k, v) in f) m[k] = v;
+        return JsonSerializer.Serialize(m);
+    }
+
+    [Fact]
+    public void Logs_in_unusual_encodings_and_escapes_never_leak_and_never_crash_the_export()
+    {
+        var rig = Rig();
+        string good = L(("event", "translate.done"), ("status", 200), ("durationMs", 5));
+        string leak = L(("event", "plugin.log"), ("service", DKey), ("message", DText + " " + DKey), ("url", $"https://api.example.com/x?k={DKey}"));
+        // the secret written with JSON \uXXXX escapes in an identifier field, the event name and an unknown field
+        string escaped = string.Concat(DKey.Select(c => $"\\u{(int)c:x4}"));
+        string viaEscapes = $"{{\"t\":\"2026-10-02T01:02:03.0000000Z\",\"event\":\"{escaped}\",\"service\":\"{escaped}\",\"code\":\"{escaped}\",\"x\":\"{escaped}\",\"window\":\"{string.Concat(DPass.Select(c => $"\\u{(int)c:x4}"))}\"}}";
+        string[] lines = [good, leak, viaEscapes, good];
+        string logs = rig.Paths.Logs;
+        Directory.CreateDirectory(logs);
+        File.WriteAllLines(Path.Combine(logs, "susu-20261001.jsonl"), lines, new UnicodeEncoding(false, true));                 // UTF-16 LE with BOM
+        File.WriteAllLines(Path.Combine(logs, "susu-20261002.jsonl"), lines, new UnicodeEncoding(true, true));                  // UTF-16 BE with BOM
+        File.WriteAllLines(Path.Combine(logs, "susu-20261003.jsonl"), lines, new UTF8Encoding(true));                           // UTF-8 with BOM
+        File.WriteAllText(Path.Combine(logs, "susu-20261004.jsonl"), string.Join("\r\n", lines) + "\r\n", new UTF8Encoding(false)); // CRLF
+        File.WriteAllText(Path.Combine(logs, "susu-20261005.jsonl"), string.Join("\r", lines), new UTF8Encoding(false));            // bare CR
+        File.WriteAllBytes(Path.Combine(logs, "susu-20261006.jsonl"), [.. Encoding.UTF8.GetBytes(good + "\n"), 0xFF, 0xFE, 0xC0, 0x80, .. Encoding.UTF8.GetBytes("\n" + leak + "\n"), .. new byte[64], .. Encoding.UTF8.GetBytes(good + "\n")]); // invalid UTF-8 and NULs
+        File.WriteAllLines(Path.Combine(logs, "susu-20261007.jsonl"), lines.Select(l => l.Replace(DKey, "\ud800" + DKey)), new UTF8Encoding(false)); // lone surrogate before the secret
+        var exporter = Exporter(rig);
+        string zip = ExportTo(rig, exporter, out var outcome);
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.True(outcome.LogLines >= 4, "the honest lines of the readable files should survive");
+        byte[] bytes = File.ReadAllBytes(zip);
+        Assert.Null(FindInZip(bytes, DSecrets.Where(s => s != DText && s != "alice.personal")));
+        Assert.Null(FindInZip(bytes, [DText]));
+        // the entries are valid UTF-8 JSON lines: no garbage from the odd encodings is copied through
+        using var z = new ZipArchive(new MemoryStream(bytes));
+        foreach (var e in z.Entries.Where(e => e.FullName.StartsWith("logs/", StringComparison.Ordinal)))
+        {
+            using var r = new StreamReader(e.Open(), new UTF8Encoding(false, true));
+            foreach (string line in r.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                using (JsonDocument.Parse(line)) { }
+        }
+    }
+
+    [Fact]
+    public void Hostile_facts_are_replaced_not_copied()
+    {
+        var rig = Rig();
+        string[] hostile = [DKey, DPass, "C:\\Users\\alice.personal\\x", "ALICE-PC-77", "1.2.3 " + DKey, "..\\..\\x", new string('9', 5000), "1.2.3.4.5", "\u0000", "zh-Hans" + DKey];
+        foreach (string h in hostile)
+        {
+            var exporter = Exporter(rig, () => new DiagnosticsInfo(h, h, h, h, h, h, -1, int.MaxValue, 0, 0, 0, long.MinValue));
+            string zip = ExportTo(rig, exporter, out var outcome);
+            Assert.True(outcome.Ok, outcome.Error);
+            Assert.Null(FindInZip(File.ReadAllBytes(zip), [DKey, DPass, "alice.personal", "ALICE-PC-77"]));
+            using var z = ZipFile.OpenRead(zip);
+            using var doc = JsonDocument.Parse(new StreamReader(z.GetEntry("diagnostics.json")!.Open()).ReadToEnd());
+            Assert.Equal("unknown", doc.RootElement.GetProperty("appVersion").GetString());
+            Assert.Equal("other", doc.RootElement.GetProperty("uiLanguage").GetString());
+            Assert.Equal("other", doc.RootElement.GetProperty("proxyMode").GetString());
+        }
+    }
+
+    [Fact]
+    public void A_very_large_log_folder_is_trimmed_to_the_budget_in_bounded_time()
+    {
+        var rig = Rig();
+        Directory.CreateDirectory(rig.Paths.Logs);
+        string line = L(("event", "net.call"), ("service", "deepl"), ("status", 200), ("durationMs", 12), ("bytes", 1234), ("url", "https://api.example.com/v1/x?q=1"));
+        string block = string.Join("\n", Enumerable.Repeat(line, 4000)) + "\n"; // about 1 MB
+        for (int i = 0; i < 120; i++) File.WriteAllText(Path.Combine(rig.Paths.Logs, $"susu-2026{i / 28 + 1:00}{i % 28 + 1:00}.jsonl"), block);
+        long before = GC.GetTotalAllocatedBytes(precise: false);
+        var sw = Stopwatch.StartNew();
+        string zip = ExportTo(rig, Exporter(rig), out var outcome);
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(30), sw.Elapsed.ToString());
+        using var z = ZipFile.OpenRead(zip);
+        long uncompressed = z.Entries.Where(e => e.FullName.StartsWith("logs/", StringComparison.Ordinal)).Sum(e => e.Length);
+        Assert.InRange(uncompressed, 1, DiagnosticsExporter.MaxLogBytes + 1024);
+        Assert.True(File.GetLastWriteTimeUtc(zip) > DateTime.UtcNow.AddMinutes(-5));
+        // observation: allocation is bounded by the files read until the budget runs out, not by the folder
+        long allocated = GC.GetTotalAllocatedBytes(precise: false) - before;
+        Assert.True(allocated < 2L << 30, $"{allocated >> 20} MiB allocated for a 120 MB folder");
+    }
+
+    [Fact]
+    public void One_enormous_log_file_does_not_exhaust_memory_or_hang()
+    {
+        var rig = Rig();
+        Directory.CreateDirectory(rig.Paths.Logs);
+        string line = L(("event", "net.call"), ("status", 200), ("durationMs", 12));
+        string path = Path.Combine(rig.Paths.Logs, "susu-20261002.jsonl");
+        using (var w = new StreamWriter(path, false, new UTF8Encoding(false)))
+            for (int i = 0; i < 700_000; i++) w.WriteLine(line); // about 60 MB, no file cap in the logger of this test
+        long before = GC.GetTotalAllocatedBytes(precise: false);
+        var sw = Stopwatch.StartNew();
+        ExportTo(rig, Exporter(rig), out var outcome);
+        Assert.True(outcome.Ok, outcome.Error);
+        long allocated = GC.GetTotalAllocatedBytes(precise: false) - before;
+        // OBSERVATION F17V-7 (low): CollectLogs reads each file whole with File.ReadAllLines before it applies the budget. The logger rotates and caps files, so the
+        // shipped logs are small; a hand-made or foreign file of this size costs this much transient memory. Recorded, not asserted tightly.
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(60), $"{sw.Elapsed} and {allocated >> 20} MiB allocated");
+        Assert.InRange(outcome.LogLines, 1, 700_000);
+    }
+
+    [Fact]
+    public void A_locked_log_is_skipped_and_the_rest_is_exported()
+    {
+        var rig = Rig();
+        Directory.CreateDirectory(rig.Paths.Logs);
+        string good = L(("event", "ok.line"), ("status", 200));
+        File.WriteAllText(Path.Combine(rig.Paths.Logs, "susu-20261001.jsonl"), good + "\n");
+        string locked = Path.Combine(rig.Paths.Logs, "susu-20261002.jsonl");
+        File.WriteAllText(locked, good + "\n");
+        Directory.CreateDirectory(Path.Combine(rig.Paths.Logs, "susu-20261003.jsonl")); // a folder with a log's name
+        using var hold = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        string zip = ExportTo(rig, Exporter(rig), out var outcome);
+        Assert.True(outcome.Ok, outcome.Error);
+        Assert.Equal(1, outcome.LogFiles);
+        Assert.Contains("logs/susu-20261001.jsonl", ZipFile.OpenRead(zip).Entries.Select(e => e.FullName));
+    }
+
+    [Fact]
+    public void A_log_the_user_may_not_read_does_not_fail_the_whole_export()
+    {
+        var rig = Rig();
+        Directory.CreateDirectory(rig.Paths.Logs);
+        string good = L(("event", "ok.line"), ("status", 200));
+        File.WriteAllText(Path.Combine(rig.Paths.Logs, "susu-20261001.jsonl"), good + "\n");
+        string denied = Path.Combine(rig.Paths.Logs, "susu-20261002.jsonl");
+        File.WriteAllText(denied, good + "\n");
+        var user = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
+        var info = new FileInfo(denied);
+        var rule = new System.Security.AccessControl.FileSystemAccessRule(user, System.Security.AccessControl.FileSystemRights.ReadData, System.Security.AccessControl.AccessControlType.Deny);
+        var acl = info.GetAccessControl(); acl.AddAccessRule(rule); info.SetAccessControl(acl);
+        try
+        {
+            string zip = ExportTo(rig, Exporter(rig), out var outcome);
+            // DEFECT F17V-8 (low): UnauthorizedAccessException from ReadAllLines is not caught per file (only IOException is), so one unreadable log turns the
+            // whole export into "write-failed" (a message about the destination) and the user gets no diagnostics at all. Expected: skip the file, export the rest.
+            // Records today's behaviour; when fixed expect Ok with LogFiles == 1.
+            Assert.False(outcome.Ok);
+            Assert.Equal("write-failed", outcome.Error);
+            Assert.False(File.Exists(zip));
+            Assert.Empty(Directory.GetFiles(rig.Root.Root, "*.tmp"));
+        }
+        finally
+        {
+            acl = info.GetAccessControl(); acl.RemoveAccessRule(rule); info.SetAccessControl(acl);
+        }
+    }
+
+    [Fact]
+    public void A_missing_or_empty_log_folder_exports_the_facts_alone_and_the_counts_say_so()
+    {
+        var rig = Rig();
+        if (Directory.Exists(rig.Paths.Logs)) Directory.Delete(rig.Paths.Logs, true);
+        string zip = ExportTo(rig, Exporter(rig), out var outcome);
+        Assert.True(outcome.Ok);
+        Assert.Equal((0, 0, 0), (outcome.LogFiles, outcome.LogLines, outcome.DroppedLines));
+        using var z = ZipFile.OpenRead(zip);
+        Assert.Equal(["README.txt", "diagnostics.json"], z.Entries.Select(e => e.FullName).Order(StringComparer.Ordinal).ToArray());
+        Directory.CreateDirectory(rig.Paths.Logs);
+        File.WriteAllBytes(Path.Combine(rig.Paths.Logs, "susu-20261002.jsonl"), []);
+        ExportTo(rig, Exporter(rig), out var again);
+        Assert.True(again.Ok);
+        Assert.Equal(0, again.LogFiles);
+    }
+
+    [Fact]
+    public void Exporting_over_a_locked_or_missing_destination_fails_with_a_key_and_leaves_no_temp_file()
+    {
+        var rig = Rig();
+        var exporter = Exporter(rig);
+        string target = Path.Combine(rig.Root.Root, "locked.zip");
+        File.WriteAllText(target, "old");
+        using (new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.Equal("write-failed", exporter.Export(target).Error);
+        Assert.Equal("old", File.ReadAllText(target));
+        Assert.Equal("write-failed", exporter.Export(Path.Combine(rig.Root.Root, "no-such-folder", "x.zip")).Error);
+        Assert.Equal("write-failed", exporter.Export(Path.Combine(rig.Root.Root, "bad<name>.zip")).Error);
+        Assert.Equal("write-failed", exporter.Export("").Error);
+        Assert.Empty(Directory.GetFiles(rig.Root.Root, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    // ================= data clean: trees =================
+
+    private sealed class CleanRig : IDisposable
+    {
+        public readonly TempRoot Root = new();
+        public readonly ManualClock Clock = new();
+        public readonly SettingsStore Settings;
+        public readonly SecretStore Secrets;
+        public readonly ConfigService Config;
+        public readonly FileLeases Leases;
+        public readonly KeptScreenshots Shots;
+        public readonly Database Db;
+        public readonly FavoritesRepository Favorites;
+        public readonly DataCleanService Clean;
+        public AppPaths Paths => Root.Paths;
+        private int ids;
+
+        public CleanRig()
+        {
+            Settings = new SettingsStore(Paths, Clock);
+            Secrets = new SecretStore(Paths.Secrets, new XorProtector());
+            Config = new ConfigService(Settings, Secrets);
+            Leases = new FileLeases(Paths.Cache);
+            Shots = KeptScreenshots.For(Paths);
+            Db = Database.Open(Paths.Database);
+            Favorites = new FavoritesRepository(Db, Clock, null, () => $"id{++ids}");
+            Clean = new DataCleanService(Paths, Clock, Config, Secrets, Leases, Shots.Store, Favorites);
+        }
+
+        public void Dispose() { Settings.Dispose(); Leases.Dispose(); Db.Dispose(); Root.Dispose(); }
+    }
+
+    private CleanRig NewClean() { var r = new CleanRig(); cleanup.Add(r); return r; }
+
+    private static byte[] Png(int n) => [0x89, 0x50, 0x4E, 0x47, (byte)n, 1, 2, 3];
+
+    /// <summary>Everything the app and the user keep: data folders, the user's own files beside them, a plugin package, a WebView profile, the restore point.</summary>
+    private static (string UserFile, string Plugin, string Held) SeedClean(CleanRig rig)
+    {
+        var p = rig.Paths;
+        var state = rig.Settings.State;
+        var grant = new CredentialGrant("app.susu.deepl", "builtin", "apiKey", "https://api-free.deepl.com:443", "header:Authorization");
+        var next = state.Effective with
+        {
+            Accounts = [new AccountSettings("acct-deepl", "DeepL", ["apiKey"], [grant])],
+            Instances = [.. state.Effective.Instances.Select(i => i.Id == "deepl" ? i with { AccountBindings = new Dictionary<string, string> { ["apiKey"] = "acct-deepl" } } : i)],
+            General = state.Effective.General with { DefaultExpandedCards = 4 },
+            Prompts = [new PromptProfile("p1", "Mine", "Translate: {text}")],
+        };
+        Assert.Equal(SaveStatus.Saved, rig.Settings.Save(next, state.Revision, state.FileHash).Status);
+        rig.Secrets.Write("acct-deepl", "apiKey", "sk-clean-KEYKEY-1");
+        rig.Secrets.Write(NetworkSettings.ProxyAccountId, "password", "proxy-pass-1");
+        Directory.CreateDirectory(p.Logs); Directory.CreateDirectory(p.Cache);
+        foreach (string d in new[] { "20261001", "20261002", "20261003" }) File.WriteAllText(Path.Combine(p.Logs, $"susu-{d}.jsonl"), "{}\n{}\n");
+        File.WriteAllText(Path.Combine(p.Logs, "susu-notes.txt"), "not a log");
+        File.WriteAllText(Path.Combine(p.Logs, "other.jsonl"), "{}");
+        File.WriteAllText(Path.Combine(p.Logs, "readme.txt"), "keep");
+        string held = rig.Leases.Create("tts", "mp3").FilePath;
+        File.WriteAllText(held, "held by a running task");
+        File.WriteAllText(Path.Combine(p.Cache, "loose.tmp"), "12345");
+        Directory.CreateDirectory(Path.Combine(p.Cache, "99999999-5", "nested", "deeper"));
+        File.WriteAllText(Path.Combine(p.Cache, "99999999-5", "nested", "deeper", "old.bin"), "old");
+        File.WriteAllText(Path.Combine(p.Cache, "99999999-5", "a.bin"), "old");
+        rig.Shots.Keep(Png(1), rig.Clock.UtcNow);
+        rig.Shots.Keep(Png(2), rig.Clock.UtcNow.AddSeconds(-1));
+        string userFile = Path.Combine(p.KeptScreenshots, "my-own-picture.png");
+        File.WriteAllBytes(userFile, Png(9));
+        File.WriteAllBytes(Path.Combine(Path.GetDirectoryName(p.KeptScreenshots)!, "Holiday.jpg"), [1, 2, 3]);
+        rig.Favorites.Favorite(new FavoriteCard("en", "apple", "{}"), []);
+        string plugin = Path.Combine(p.UserPlugins, "com.example.echo", "1.0.0", "main.js");
+        Directory.CreateDirectory(Path.GetDirectoryName(plugin)!);
+        File.WriteAllText(plugin, "plugin code");
+        Directory.CreateDirectory(p.WebView); File.WriteAllText(Path.Combine(p.WebView, "profile.dat"), "webview");
+        Directory.CreateDirectory(Path.Combine(p.Imports, "restore-point")); File.WriteAllText(Path.Combine(p.Imports, "restore-point", "settings.yaml"), "old config");
+        Directory.CreateDirectory(p.Updates); File.WriteAllText(Path.Combine(p.Updates, "pending.bin"), "update");
+        string outside = Path.Combine(rig.Root.Root, "elsewhere.txt");
+        File.WriteAllText(Path.GetFullPath(outside), "elsewhere");
+        return (userFile, plugin, held);
+    }
+
+    private static Dictionary<string, string> Snapshot(string root)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories))
+        {
+            string rel = Path.GetRelativePath(root, path);
+            if (Directory.Exists(path)) { map[rel + "\\"] = "<dir>"; continue; }
+            try
+            {
+                using var s = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var ms = new MemoryStream(); s.CopyTo(ms);
+                map[rel] = AtomicFile.Hash(ms.ToArray());
+            }
+            catch (IOException) { map[rel] = "<locked>"; }
+        }
+        return map;
+    }
+
+    private static (string[] Removed, string[] Changed, string[] Added) Diff(Dictionary<string, string> before, Dictionary<string, string> after)
+        => ([.. before.Keys.Except(after.Keys).Order()], [.. before.Where(kv => after.TryGetValue(kv.Key, out var v) && v != kv.Value).Select(kv => kv.Key).Order()], [.. after.Keys.Except(before.Keys).Order()]);
+
+    private static bool IsDatabase(string rel) => rel.StartsWith("Local\\Su-Su\\susu.db", StringComparison.OrdinalIgnoreCase);
+    private static bool IsTransaction(string rel) => rel.StartsWith("Local\\Su-Su\\transactions", StringComparison.OrdinalIgnoreCase);
+
+    [Fact]
+    public void Each_clean_entry_changes_exactly_what_it_says_and_nothing_else()
+    {
+        string[] kinds = [.. DataCleanKinds.All];
+        foreach (string kind in kinds)
+        {
+            var rig = NewClean();
+            var (userFile, plugin, held) = SeedClean(rig);
+            string root = rig.Root.Root;
+            var before = Snapshot(root);
+            string outsideFile = Path.Combine(rig.Root.Root, "elsewhere.txt");
+            var outcome = rig.Clean.Clear(kind);
+            Assert.True(outcome.Ok, $"{kind}: {outcome.Error}");
+            var (removed, changed, added) = Diff(before, Snapshot(root));
+            string R(string p) => Path.GetRelativePath(root, p);
+            // what no entry may ever touch
+            string[] untouchable = [R(plugin), R(userFile), "Pictures\\Holiday.jpg", "Local\\Su-Su\\webview\\profile.dat", "Local\\Su-Su\\updates\\pending.bin", "Local\\Su-Su\\import\\restore-point\\settings.yaml", R(held), "Local\\Su-Su\\logs\\susu-notes.txt", "Local\\Su-Su\\logs\\other.jsonl", "Local\\Su-Su\\logs\\readme.txt"];
+            foreach (var u in untouchable) Assert.DoesNotContain(u, removed.Concat(changed), StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(added, a => !(a.StartsWith("Local\\Su-Su\\transactions", StringComparison.OrdinalIgnoreCase) || IsDatabase(a) || a.EndsWith("settings.yaml.prev", StringComparison.OrdinalIgnoreCase) || a.Contains("kept-screenshots.json", StringComparison.OrdinalIgnoreCase)));
+            switch (kind)
+            {
+                case DataCleanKinds.Logs:
+                    Assert.Equal(["Local\\Su-Su\\logs\\susu-20261001.jsonl", "Local\\Su-Su\\logs\\susu-20261002.jsonl", "Local\\Su-Su\\logs\\susu-20261003.jsonl"], removed.Concat(changed).Order().ToArray());
+                    break;
+                case DataCleanKinds.Caches:
+                    Assert.Contains("Local\\Su-Su\\cache\\loose.tmp", removed);
+                    Assert.Contains("Local\\Su-Su\\cache\\99999999-5\\a.bin", removed);
+                    Assert.All(removed.Concat(changed), r => Assert.StartsWith("Local\\Su-Su\\cache\\", r, StringComparison.OrdinalIgnoreCase));
+                    break;
+                case DataCleanKinds.Screenshots:
+                    Assert.All(removed.Concat(changed), r => Assert.True(r.StartsWith("Pictures\\Su-Su\\", StringComparison.OrdinalIgnoreCase) || r.Contains("kept-screenshots.json", StringComparison.OrdinalIgnoreCase), r));
+                    Assert.Equal(2, removed.Count(r => r.StartsWith("Pictures\\Su-Su\\", StringComparison.OrdinalIgnoreCase) && r.EndsWith(".png", StringComparison.OrdinalIgnoreCase) && !r.EndsWith("my-own-picture.png", StringComparison.OrdinalIgnoreCase)));
+                    break;
+                case DataCleanKinds.Favorites:
+                    Assert.All(removed.Concat(changed), r => Assert.True(IsDatabase(r), r));
+                    break;
+                case DataCleanKinds.Settings:
+                    Assert.All(removed.Concat(changed), r => Assert.True(r.EndsWith("settings.yaml") || r.EndsWith("settings.yaml.prev") || IsTransaction(r), r));
+                    Assert.Single(rig.Settings.State.Effective.Accounts); // accounts and keys survive a reset
+                    Assert.True(rig.Secrets.TryRead("acct-deepl", "apiKey", out _));
+                    break;
+                case DataCleanKinds.Accounts:
+                    Assert.All(removed.Concat(changed), r => Assert.True(r.EndsWith("settings.yaml") || r.EndsWith("settings.yaml.prev") || r.EndsWith("secrets.dat") || r.EndsWith("secrets.dat.prev") || IsTransaction(r), r));
+                    Assert.Empty(rig.Secrets.Entries());
+                    Assert.Empty(rig.Settings.State.Effective.Accounts);
+                    Assert.Equal(4, rig.Settings.State.Effective.General.DefaultExpandedCards); // only the accounts went
+                    Assert.Single(rig.Settings.State.Effective.Prompts);
+                    break;
+            }
+            if (kind != DataCleanKinds.Favorites) Assert.DoesNotContain(removed.Concat(changed), IsDatabase);
+            Assert.Equal("elsewhere", File.ReadAllText(outsideFile));
+            Assert.Equal("held by a running task", File.ReadAllText(held));
+        }
+    }
+
+    [Theory]
+    [InlineData("Caches")]
+    [InlineData("caches ")]
+    [InlineData(" caches")]
+    [InlineData("..\\logs")]
+    [InlineData("caches\0")]
+    [InlineData("all")]
+    [InlineData("*")]
+    [InlineData("")]
+    [InlineData("kind")]
+    public void An_unknown_kind_deletes_nothing(string kind)
+    {
+        var rig = NewClean();
+        SeedClean(rig);
+        var before = Snapshot(rig.Root.Root);
+        var outcome = rig.Clean.Clear(kind);
+        Assert.False(outcome.Ok);
+        Assert.Equal(before, Snapshot(rig.Root.Root));
+        Assert.Equal(6, rig.Clean.Items().Count);
+    }
+
+    [Fact]
+    public void A_junction_inside_the_cache_is_not_followed_out_of_the_app_data()
+    {
+        var rig = NewClean();
+        SeedClean(rig);
+        string outside = TestTemp.NewDir("susu-f17v-cacheout");
+        File.WriteAllText(Path.Combine(outside, "precious.txt"), "do not delete");
+        Directory.CreateDirectory(Path.Combine(outside, "sub"));
+        File.WriteAllText(Path.Combine(outside, "sub", "deep.txt"), "keep");
+        // a dead-session folder that is itself a junction, and one inside an ordinary dead-session folder
+        Assert.True(TryJunction(Path.Combine(rig.Paths.Cache, "99999999-7"), outside));
+        Assert.True(TryJunction(Path.Combine(rig.Paths.Cache, "99999999-5", "inner"), outside));
+        Assert.True(TryJunction(Path.Combine(rig.Paths.Cache, "linked-folder"), outside));
+        var usage = rig.Clean.Items().Single(i => i.Kind == DataCleanKinds.Caches);
+        var outcome = rig.Clean.Clear(DataCleanKinds.Caches);
+        bool survived = File.Exists(Path.Combine(outside, "precious.txt")) && File.Exists(Path.Combine(outside, "sub", "deep.txt"));
+        // DEFECT F17V-9 (low-medium, needs a junction planted in the user's own cache folder): FileLeases.Sweep lists a dead-session directory with
+        // GetFiles("*", AllDirectories) and deletes each file before it deletes the directory, so a junction at the session level makes the clean delete files in the
+        // junction's target. The directory delete itself is safe. Records today's behaviour; when fixed `survived` must be true and the usage count must not count the target.
+        Assert.True(outcome.Ok);
+        Assert.False(Directory.Exists(Path.Combine(rig.Paths.Cache, "99999999-7")));
+        Assert.False(survived, "F17V-9 appears fixed: replace this record with an assertion that the target survives (usage " + usage.Count + ")");
+    }
+
+    [Fact]
+    public void Deleting_accounts_leaves_the_previous_copies_of_the_key_file_and_the_settings()
+    {
+        var rig = NewClean();
+        SeedClean(rig);
+        rig.Secrets.Write("acct-deepl", "apiKey", "sk-clean-KEYKEY-2"); // a second write so a .prev exists
+        Assert.True(rig.Clean.Clear(DataCleanKinds.Accounts).Ok);
+        Assert.Empty(rig.Secrets.Entries());
+        string prev = rig.Paths.Secrets + ".prev";
+        // DEFECT F17V-10 (medium-low, privacy): AtomicFile.Write keeps the previous version of secrets.dat and settings.yaml as ".prev". "Delete accounts and keys"
+        // goes through that path, so secrets.dat.prev still holds the keys (DPAPI ciphertext for this user, but readable by this user) and settings.yaml.prev still
+        // holds the accounts and grants; neither the About page nor the data-clean text mentions them. Records today's behaviour; when fixed the .prev files must
+        // be gone or hold no key and no account.
+        Assert.True(File.Exists(prev));
+        var old = new SecretStore(prev, new XorProtector());
+        Assert.True(old.TryRead("acct-deepl", "apiKey", out string key) || old.TryRead(NetworkSettings.ProxyAccountId, "password", out key), "the previous key file holds no key (defect fixed?)");
+        Assert.NotEmpty(key);
+        Assert.Contains("acct-deepl", File.ReadAllText(rig.Paths.Settings + ".prev"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_link_in_the_logs_folder_is_removed_without_touching_its_target()
+    {
+        var rig = NewClean();
+        SeedClean(rig);
+        string outside = TestTemp.NewDir("susu-f17v-logout");
+        string target = Path.Combine(outside, "precious.log");
+        File.WriteAllText(target, "keep me");
+        string link = Path.Combine(rig.Paths.Logs, "susu-20269999.jsonl");
+        try { File.CreateSymbolicLink(link, target); }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException) { Assert.Skip("file symbolic links need developer mode or elevation on this machine: " + e.Message); }
+        Assert.True(rig.Clean.Clear(DataCleanKinds.Logs).Ok);
+        Assert.True(File.Exists(target));
+        Assert.Equal("keep me", File.ReadAllText(target));
+        // a folder junction named like a log is ignored
+        string dirOutside = TestTemp.NewDir("susu-f17v-logdir");
+        File.WriteAllText(Path.Combine(dirOutside, "a.txt"), "keep");
+        Assert.True(TryJunction(Path.Combine(rig.Paths.Logs, "susu-20269998.jsonl"), dirOutside));
+        Assert.True(rig.Clean.Clear(DataCleanKinds.Logs).Ok);
+        Assert.True(File.Exists(Path.Combine(dirOutside, "a.txt")));
+    }
+
     // === END ===
 }
