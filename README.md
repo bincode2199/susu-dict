@@ -13,6 +13,7 @@ This page is the root of the documentation. It says where to start, then indexes
 | Understand what the product does | [Product](docs/product/README.md) |
 | Understand how it is built and where the code lives | [Architecture](docs/architecture/README.md) |
 | Pick up the next module | [Development](docs/development/README.md) |
+| Write a plugin | [Plugin author guide](docs/development/PLUGIN-AUTHOR-GUIDE.md) |
 | Write or move a document | [Documentation conventions](docs/CONVENTIONS.md) |
 
 Agent working rules are in [CLAUDE.md](CLAUDE.md). Most planning documents are written in Chinese; build notes and evidence records are in English.
@@ -39,6 +40,7 @@ Each folder has a `README.md` that indexes its documents. Every document names i
     - [DEV-PLAN](docs/development/DEV-PLAN.md) · 模块开发计划: modules F00–F19, quality gates M0–M5, dependencies and exit criteria.
     - [TEST-PLAN](docs/development/TEST-PLAN.md) · 开发与发布验收计划: acceptance cases (C, B, T, A, S, X, J, PER, SEL, CFG, UI, DATA, UPD, …).
     - [BUILD](docs/development/BUILD.md): toolchain, environment, build, run and test commands.
+    - [PLUGIN-AUTHOR-GUIDE](docs/development/PLUGIN-AUTHOR-GUIDE.md): `susu-plugin` init/check/test/pack, capability templates, cases file format, permission model, signing.
     - [MODULE-TEMPLATE](docs/development/MODULE-TEMPLATE.md): template for a module delivery record.
     - [THIRD-PARTY-NOTICES](docs/development/THIRD-PARTY-NOTICES.md): dependency and license inventory.
   - [Evidence](docs/evidence/README.md): what has been delivered and verified.

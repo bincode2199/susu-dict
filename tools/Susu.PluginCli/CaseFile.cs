@@ -230,9 +230,19 @@ internal static class CaseFile
         }
     }
 
+    /// <summary>Readable JSON for messages: non-ASCII text stays as text instead of \uXXXX escapes.</summary>
+    private static string Render(JsonNode? node)
+    {
+        if (node is null) return "null";
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+            node.WriteTo(writer);
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
     public static string Short(JsonNode? node)
     {
-        string s = node?.ToJsonString() ?? "null";
+        string s = Render(node);
         return s.Length <= 160 ? s : s[..157] + "...";
     }
 }
