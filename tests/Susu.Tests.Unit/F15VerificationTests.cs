@@ -613,8 +613,32 @@ public sealed class F15VerificationTests : IDisposable
             }
             Assert.Equal(5000, ReadApkg(Out("b.apkg")).Notes.Count);
             Assert.Equal(5001, ParseCsv(File.ReadAllBytes(Out("b.csv"))).Count);
-            TestContext.Current.SendDiagnosticMessage($"F15 5000 entries: favorite {favMs} ms, drain {drainMs} ms, txt/csv/apkg {string.Join("/", times)} ms");
+            File.AppendAllText(Path.Combine(Path.GetTempPath(), "f15-timing.txt"), $"storage 5000x2: favorite {favMs} ms, drain {drainMs} ms, txt/csv/apkg {string.Join("/", times)} ms{Environment.NewLine}");
             Assert.True(favMs < 60_000 && drainMs < 60_000 && times.All(t => t < 30_000), $"favorite {favMs} drain {drainMs} export {string.Join("/", times)}");
+        }
+    }
+
+    [Fact] // the real worker drains 5000 queued rows for one target (scripted, instant) and Status/Problems stay cheap
+    public async Task Worker_drains_five_thousand_rows_in_time()
+    {
+        var (db, fav, _) = Open();
+        using (db)
+        {
+            var target = new ScriptTarget("t", (r, _) => Task.FromResult<VocabSyncOutcome>(new VocabSyncOutcome.Applied("r" + r.EntryId)));
+            await using var service = new VocabService(fav, new VocabSyncWorker(fav, _ => target, clock), () => ["t"], clock);
+            var swf = Stopwatch.StartNew();
+            for (int i = 0; i < 5000; i++) service.Favorite(new FavoriteCard("en", "w" + i, Content("m" + i)));
+            long favTotal = swf.ElapsedMilliseconds;
+            var sw = Stopwatch.StartNew();
+            await service.SyncNowAsync(Ct);
+            long ms = sw.ElapsedMilliseconds;
+            Assert.Equal(5000, target.Requests.Count);
+            Assert.Equal(5000, service.Status(["t"])[0].Succeeded);
+            sw.Restart();
+            _ = service.Problems();
+            Assert.True(sw.ElapsedMilliseconds < 2000, "Problems() took " + sw.ElapsedMilliseconds);
+            File.AppendAllText(Path.Combine(Path.GetTempPath(), "f15-timing.txt"), $"worker drain 5000: favorites {favTotal} ms, pass {ms} ms{Environment.NewLine}");
+            Assert.True(ms < 120_000, "drain took " + ms);
         }
     }
 
