@@ -102,6 +102,13 @@ internal static class MainMode
 
         int rolledBack = new ConfigTransaction(paths.Transactions).Recover();
         if (rolledBack > 0) log.Event("config.recovered", ("count", rolledBack));
+        // F17.1: a confirmed backup import is switched here, after the journal is recovered and before settings and secrets are read.
+        try
+        {
+            if (BackupImport.ApplyPending(paths, clock) is { } importResult)
+                log.Event("backup.import", ("state", importResult.State), ("code", importResult.Error ?? ""), ("source", importResult.Source));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { log.Event("backup.import-failed", ("code", e.GetType().Name)); }
         using var settings = new SettingsStore(paths, clock);
         settings.StartWatching();
         var secrets = new SecretStore(paths.Secrets, new DpapiProtector());
@@ -276,6 +283,19 @@ internal static class MainMode
             new VocabFileExporter(new VocabExporter(db, favorites, clock)));
         coordinator.Vocab = vocabService;
         coordinator.VocabSavePicker = new Win32VocabSavePicker();
+        // F17.1: backup and restore. Packages the installation has: the shipped catalog, the native providers and the user-installed ones (identities only; no code is ever exported or imported).
+        var installationRows = new PluginInstallationRepository(db);
+        coordinator.Backup = new BackupService(paths, settings, secrets, new DpapiProtector(), clock, new BackupHost(typeof(Program).Assembly.GetName().Version?.ToString() ?? "0",
+            () =>
+            {
+                var available = BuiltInCatalog.Packages.ToDictionary(p => p.PackageId, p => (string?)null);
+                available["native.els"] = null; available["native.sapi"] = null;
+                foreach (var installed in pluginInstaller.Installed()) available[installed.Id] = installed.Version;
+                return available;
+            },
+            () => [.. installationRows.ActiveRecords().Select(r => new BackupPluginRef(r.PackageId, r.Version, r.Signer, r.Hash))],
+            () => new BackupLocalData(vocabService.Count(), vocabService.Status([.. VocabCatalog.All.Select(v => v.InstanceId)]).Sum(s => s.Pending + s.Retrying + s.Failed + s.Uncertain))));
+        coordinator.BackupPicker = new Win32BackupPicker();
         coordinator.PluginInstaller = pluginInstaller;
         coordinator.PluginUpdates = new Susu.Plugins.Install.PluginUpdateService(pluginInstaller, source: null, Path.Combine(paths.UserPlugins, ".downloads")); // no update feed is specified yet (DEV-PLAN F16.2): no source, so the page offers no check
         coordinator.PluginPicker = new Win32PluginPackagePicker();

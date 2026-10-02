@@ -31,6 +31,13 @@ export const UI_COMMANDS = {
   PluginDiscard: 'Plugin.Discard',
   PluginUninstall: 'Plugin.Uninstall',
   PluginCheckUpdates: 'Plugin.CheckUpdates',
+  BackupExport: 'Backup.Export',
+  BackupPick: 'Backup.Pick',
+  BackupUnlock: 'Backup.Unlock',
+  BackupApply: 'Backup.Apply',
+  BackupDiscard: 'Backup.Discard',
+  BackupUndo: 'Backup.Undo',
+  BackupDismiss: 'Backup.Dismiss',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -69,6 +76,88 @@ export interface AccountView {
   label: string;
   secrets: SecretSlotView[];
   usedBy: string[];
+}
+
+export interface BackupAccountView {
+  id: string;
+  label: string;
+  missingSecrets: string[];
+}
+
+export interface BackupAppliedView {
+  state: string;
+  error?: string;
+  source: string;
+  disabledInstances: number;
+  at: string;
+}
+
+export interface BackupDeltaView {
+  area: string;
+  current: number;
+  backup: number;
+  differs: boolean;
+}
+
+export interface BackupExportRequest {
+  includeSecrets: boolean;
+  password?: string;
+}
+
+export interface BackupOutcomeView {
+  action: string;
+  error?: string;
+  fileName?: string;
+  encrypted: boolean;
+  includedSecrets: boolean;
+  secretCount: number;
+}
+
+export interface BackupPluginView {
+  id: string;
+  backupVersion: string;
+  installedVersion?: string;
+  status: string;
+}
+
+export interface BackupPreviewView {
+  token: string;
+  created?: string;
+  appVersion: string;
+  encrypted: boolean;
+  includesSecrets: boolean;
+  schemaOlder: boolean;
+  deltas: BackupDeltaView[];
+  plugins: BackupPluginView[];
+  missingPackages: string[];
+  disabledInstances: string[];
+  accounts: BackupAccountView[];
+  backupSecrets: number;
+  keysRemoved: number;
+  keptFavorites: number;
+  keptOutbox: number;
+  conflicts: string[];
+}
+
+export interface BackupTokenRequest {
+  token: string;
+}
+
+export interface BackupUnlockRequest {
+  password: string;
+}
+
+export interface BackupView {
+  canExport: boolean;
+  canImport: boolean;
+  step: string;
+  fileName?: string;
+  preview?: BackupPreviewView;
+  last?: BackupOutcomeView;
+  scheduled: boolean;
+  scheduledSource?: string;
+  applied?: BackupAppliedView;
+  canUndo: boolean;
 }
 
 export interface BindAccountRequest {
@@ -538,6 +627,7 @@ export interface SettingsView {
   ocr?: OcrSettingsView;
   vocab?: VocabSettingsView;
   plugins?: PluginsView;
+  backup?: BackupView;
 }
 
 export interface SpeakCardRequest {

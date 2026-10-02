@@ -4,15 +4,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Susu.Abstractions;
 using Susu.Domain;
 
 namespace Susu.Storage;
 
-/// <summary>A backup was refused. <see cref="Code"/> is a stable key (never a path, YAML text or secret) the page translates.</summary>
-public sealed class BackupException(string code) : Exception(code)
-{
-    public string Code { get; } = code;
-}
 
 /// <summary>A user-installed package listed in a backup. Only the identity is kept: the code is never part of a backup and is never installed by an import.</summary>
 public sealed record BackupPluginRef(string Id, string Version, string Signer, string Hash);
@@ -29,8 +25,8 @@ public static class BackupLimits
     public const long RatioFloorBytes = 1L << 20;
     public const int MinIterations = 600_000;
     public const int MaxIterations = 2_000_000;
-    public const int MinPasswordChars = 8;
-    public const int MaxPasswordChars = 256;
+    public const int MinPasswordChars = BackupPasswordPolicy.Min;
+    public const int MaxPasswordChars = BackupPasswordPolicy.Max;
     public const int MaxListEntries = 1000;
 }
 

@@ -5,42 +5,11 @@ using Susu.Domain;
 
 namespace Susu.Storage;
 
-/// <summary>Local data a restore leaves alone (the backup holds no favorites, entries, outbox, history, caches or logs).</summary>
-public sealed record BackupLocalData(int Favorites, int OutboxOpen);
-
 /// <summary>
 /// What the host tells the backup service about this installation. AvailablePackages: package id to installed version (null for built-in and native
 /// packages); UserPlugins: the installed user packages as identities only.
 /// </summary>
 public sealed record BackupHost(string AppVersion, Func<IReadOnlyDictionary<string, string?>> AvailablePackages, Func<IReadOnlyList<BackupPluginRef>> UserPlugins, Func<BackupLocalData> LocalData);
-
-public sealed record BackupExportOptions(bool IncludeSecrets, string? Password);
-
-public sealed record BackupExportOutcome(bool Ok, string? Error, bool Encrypted, bool IncludedSecrets, int SecretCount);
-
-/// <summary>Area: settings | accounts | instances | enabledServices | prompts. Differs: the restore would change this area.</summary>
-public sealed record BackupDelta(string Area, int Current, int Backup, bool Differs);
-
-/// <summary>Status: missing | builtin | same | older | newer (the backup's version against the installed one).</summary>
-public sealed record BackupPluginStatus(string Id, string BackupVersion, string? InstalledVersion, string Status);
-
-/// <summary>An account in the restored settings. Every account needs its grants confirmed again; MissingSecrets are the keys the backup did not bring.</summary>
-public sealed record BackupAccountStatus(string Id, string Label, string[] MissingSecrets);
-
-/// <summary>
-/// What restoring would replace, before anything is applied (DATA09). Conflicts are stable keys: plugins-missing (disabled, not installed),
-/// accounts-need-authorization, keys-missing, keys-removed (local keys the restore drops), services-disabled.
-/// </summary>
-public sealed record BackupPreview(string Token, DateTimeOffset? Created, string AppVersion, bool Encrypted, bool IncludesSecrets, bool SchemaOlder,
-    IReadOnlyList<BackupDelta> Deltas, IReadOnlyList<BackupPluginStatus> Plugins, IReadOnlyList<string> MissingPackages, IReadOnlyList<string> DisabledInstances,
-    IReadOnlyList<BackupAccountStatus> Accounts, int BackupSecrets, int KeysRemoved, BackupLocalData Kept, IReadOnlyList<string> Conflicts);
-
-/// <summary>State: None | Previewed | Ready (applies at the next start). Result: how the last import at start ended.</summary>
-public sealed record BackupStatus(string State, string? Source, bool CanUndo, BackupApplyResult? Result);
-
-/// <summary>State: Applied | Failed; Error is a stable key.</summary>
-public sealed record BackupApplyResult(string State, string? Error, string Source, int DisabledInstances, DateTimeOffset At);
-
 internal sealed record BackupPending(string Token, string State, string SettingsHash, string SecretsHash, string? FinalSettingsHash, int Attempts, string CreatedUtc, string Source, int Disabled);
 internal sealed record BackupResult(string State, string? Error, string Token, string AtUtc, int Disabled, string Source);
 internal sealed record BackupRestorePointMeta(string Token, bool HadSettings, bool HadSecrets, string CreatedUtc);
@@ -52,7 +21,7 @@ internal sealed record BackupRestorePointMeta(string Token, bool HadSettings, bo
 /// (<see cref="BackupImport.ApplyPending"/>) commits both files through the journaled <see cref="ConfigTransaction"/> after keeping a restore point of the
 /// old pair. Plugin code, caches, the database and granted authorizations are never in a backup, so an import cannot install or authorize anything.
 /// </summary>
-public sealed class BackupService(AppPaths paths, ISettingsStore settings, SecretStore secrets, ISecretProtector protector, IClock clock, BackupHost host)
+public sealed class BackupService(AppPaths paths, ISettingsStore settings, SecretStore secrets, ISecretProtector protector, IClock clock, BackupHost host) : IBackupService
 {
     private readonly object gate = new();
 

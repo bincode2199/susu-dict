@@ -172,7 +172,8 @@ public sealed record SettingsView(
     SpeechView? Speech = null,
     OcrSettingsView? Ocr = null,
     VocabSettingsView? Vocab = null,
-    PluginsView? Plugins = null);
+    PluginsView? Plugins = null,
+    BackupView? Backup = null);
 
 [TsExport("ui")]
 public sealed record SettingsIssueView(string Path, string Code, string Message, int Line);
@@ -503,3 +504,51 @@ public sealed record PluginTokenRequest(string Token, bool Acknowledged = false)
 
 [TsExport("ui")]
 public sealed record PluginUninstallRequest(string Id, bool RemoveData = false);
+
+/// <summary>
+/// Backup and restore (F17.1). Step: idle | password (an encrypted file was chosen and waits for its password) | preview (the file is verified and what
+/// a restore would replace is shown). Scheduled: a confirmed import waits for the next start (ScheduledSource: backup | undo). Applied: how the last
+/// import at start ended. CanUndo: the config from before the last import is still kept. The page never sees a path, a key or a grant; a password
+/// travels in the command and is not kept.
+/// </summary>
+[TsExport("ui")]
+public sealed record BackupView(bool CanExport, bool CanImport, string Step, string? FileName, BackupPreviewView? Preview, BackupOutcomeView? Last,
+    bool Scheduled, string? ScheduledSource, BackupAppliedView? Applied, bool CanUndo);
+
+/// <summary>
+/// What restoring would replace. Conflicts are stable keys: plugins-missing, services-disabled, accounts-need-authorization, keys-missing, keys-removed.
+/// Kept* are the local favorites and open outbox rows, which a backup neither holds nor changes.
+/// </summary>
+[TsExport("ui")]
+public sealed record BackupPreviewView(string Token, string? Created, string AppVersion, bool Encrypted, bool IncludesSecrets, bool SchemaOlder,
+    BackupDeltaView[] Deltas, BackupPluginView[] Plugins, string[] MissingPackages, string[] DisabledInstances, BackupAccountView[] Accounts,
+    int BackupSecrets, int KeysRemoved, int KeptFavorites, int KeptOutbox, string[] Conflicts);
+
+/// <summary>Area: settings | accounts | instances | enabledServices | prompts.</summary>
+[TsExport("ui")]
+public sealed record BackupDeltaView(string Area, int Current, int Backup, bool Differs);
+
+/// <summary>Status: missing | builtin | same | older | newer. Plugins are listed only; a restore never installs one.</summary>
+[TsExport("ui")]
+public sealed record BackupPluginView(string Id, string BackupVersion, string? InstalledVersion, string Status);
+
+[TsExport("ui")]
+public sealed record BackupAccountView(string Id, string Label, string[] MissingSecrets);
+
+/// <summary>The last backup action. Action: export | preview | apply | undo. Error is a stable key; FileName only (no folder).</summary>
+[TsExport("ui")]
+public sealed record BackupOutcomeView(string Action, string? Error, string? FileName, bool Encrypted, bool IncludedSecrets, int SecretCount);
+
+/// <summary>State: Applied | Failed. Error is a stable key. Source: backup | undo. At: ISO time.</summary>
+[TsExport("ui")]
+public sealed record BackupAppliedView(string State, string? Error, string Source, int DisabledInstances, string At);
+
+/// <summary>Backup.Export: IncludeSecrets needs a Password; a Password alone encrypts the settings.</summary>
+[TsExport("ui")]
+public sealed record BackupExportRequest(bool IncludeSecrets, string? Password = null);
+
+[TsExport("ui")]
+public sealed record BackupUnlockRequest(string Password);
+
+[TsExport("ui")]
+public sealed record BackupTokenRequest(string Token);
