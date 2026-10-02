@@ -101,6 +101,8 @@ public sealed class BackupService(AppPaths paths, ISettingsStore settings, Secre
     /// </summary>
     public BackupPreview Preview(string path, string? password)
     {
+        // F17V-2: a confirmed import (or scheduled undo) is never dropped silently by another preview; the user discards it first.
+        if (BackupImport.ReadPending(paths) is { State: "Ready" or "Applying" }) throw new BackupException("import-scheduled");
         var contents = BackupArchive.Open(BackupArchive.ReadFile(path), password);
         var available = host.AvailablePackages();
         var (restored, disabled) = BackupImport.Sanitize(contents.Settings, available);

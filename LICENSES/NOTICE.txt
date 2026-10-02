@@ -6,8 +6,8 @@ row gives the SPDX license from the package metadata. The .NET runtime notices (
 
 Components
 ==========
-- Microsoft WebView2 loader (static library) 1.0.4191.47 | Microsoft WebView2 SDK license (LICENSE.txt in package) | susu_windows_probe.dll (static)
-- MSVC static runtime (CRT/UCRT) 14.44.35207 | Visual Studio license terms (redistributable code, statically linked) | susu_quickjs.dll, susu_windows_probe.dll (/MT since F00)
+- Microsoft WebView2 loader (static library) 1.0.4191.47 | Microsoft WebView2 SDK license (LICENSE.txt in package) | susu_native.dll, susu_windows_probe.dll (static)
+- MSVC static runtime (CRT/UCRT) 14.44.35207 | Visual Studio license terms (redistributable code, statically linked) | susu_quickjs.dll, susu_native.dll, susu_plugin_sandbox.dll, susu_selection.dll, susu_windows_probe.dll (/MT since F00)
 - QuickJS-NG v0.17.0 (6d46d07d04041b40f4f49eaa7fdebe44c314c699) | MIT | susu_quickjs.dll (static)
 - @babel/helper-string-parser 7.29.7 | MIT | UI bundle (production dependency closure; an upper bound of what Vite includes)
 - @babel/helper-validator-identifier 7.29.7 | MIT | UI bundle (production dependency closure; an upper bound of what Vite includes)

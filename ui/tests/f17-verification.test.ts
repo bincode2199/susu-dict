@@ -156,7 +156,7 @@ async function mountPage(nav: 'nav.backup' | 'nav.about', view: Partial<Settings
   const bridge = fakeBridge(answer);
   const wrapper = mount(SettingsWindow, { props: { bridge: bridge as any, state }, attachTo: document.body });
   await wrapper.findAll('.nav-item').find((n) => n.text() === t(nav))!.trigger('click');
-  return { wrapper, bridge };
+  return { wrapper, bridge, state };
 }
 
 const backupStates = (): { name: string; view: BackupView }[] => [
@@ -301,14 +301,43 @@ describe('accessibility (static)', () => {
     }
   });
 
-  it('OBSERVATION F17V-12 (low, UI05): the six clean buttons share one accessible name, and neither page moves focus to what appears (password step, preview, confirm box)', async () => {
-    const { wrapper } = await mountPage('nav.about', { about: about() }, 'en');
-    const names = kinds.map((k) => accessibleName(wrapper.find(`[data-clean-button="${k}"]`).element, document));
-    // Each row's title is a <span>, not a label, and the button has no aria-label or aria-describedby: a screen reader tabbing through the buttons hears the same
-    // word six times. Records today's behaviour; when fixed expect six different names (for example "Clear logs").
-    expect(new Set(names).size).toBe(1);
-    const sources = ['BackupSettings.vue', 'AboutSettings.vue'].map((f) => read('ui', 'src', 'components', f)).join('\n');
-    expect(sources).not.toMatch(/\.focus\(|autofocus|@keydown\.esc|@keydown\.escape/);
+  it('F17V-12 (fixed): the six clean buttons have different accessible names; focus moves to what appears; Escape closes the confirm box and the backup steps', async () => {
+    for (const lang of ['en', 'zh-Hans'] as const) {
+      const { wrapper } = await mountPage('nav.about', { about: about() }, lang);
+      const names = kinds.map((k) => accessibleName(wrapper.find(`[data-clean-button="${k}"]`).element, document));
+      expect(new Set(names).size).toBe(kinds.length);
+      for (const n of names) expect(n.trim().length).toBeGreaterThan(0);
+      // opening a box focuses its cancel button (the safe one); Escape closes it and focus returns to the entry's button; nothing was sent
+      const button = wrapper.find('[data-clean-button="logs"]');
+      await button.trigger('click');
+      await flushPromises();
+      expect(document.activeElement).toBe(wrapper.find('[data-clean-cancel="logs"]').element);
+      const confirmNames = new Set<string>();
+      confirmNames.add(accessibleName(wrapper.find('[data-clean-confirm-button="logs"]').element, document));
+      await wrapper.find('[data-clean-confirm="logs"]').trigger('keydown', { key: 'Escape' });
+      await flushPromises();
+      expect(wrapper.find('[data-clean-confirm="logs"]').exists()).toBe(false);
+      expect(document.activeElement).toBe(wrapper.find('[data-clean-button="logs"]').element);
+      for (const k of kinds) { await wrapper.find(`[data-clean-button="${k}"]`).trigger('click'); confirmNames.add(accessibleName(wrapper.find(`[data-clean-confirm-button="${k}"]`).element, document)); }
+      expect(confirmNames.size).toBe(kinds.length);
+    }
+    // the Backup page: focus moves to the password box and to the preview when they appear, and Escape discards
+    const { wrapper, bridge, state } = await mountPage('nav.backup', { backup: backup() }, 'en');
+    state.settings = settings({ backup: backup({ step: 'password' }) });
+    await flushPromises();
+    expect(document.activeElement).toBe(wrapper.find('[data-backup-unlock-password]').element);
+    await wrapper.find('[data-backup-unlock-password]').trigger('keydown', { key: 'Escape' });
+    await flushPromises();
+    expect(bridge.calls.at(-1)?.name).toBe('Backup.Discard');
+    state.settings = settings({ backup: backup({ step: 'preview', preview: preview() }) });
+    await flushPromises();
+    expect(document.activeElement).toBe(wrapper.find('[data-backup-preview]').element);
+    expect(accessibleName(wrapper.find('[data-backup-preview]').element, document).length).toBeGreaterThan(0);
+    const before = bridge.calls.length;
+    await wrapper.find('[data-backup-preview]').trigger('keydown', { key: 'Escape' });
+    await flushPromises();
+    expect(bridge.calls.length).toBe(before + 1);
+    expect(bridge.calls.at(-1)?.name).toBe('Backup.Discard');
   });
 });
 

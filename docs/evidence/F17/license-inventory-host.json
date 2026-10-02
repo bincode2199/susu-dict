@@ -148,14 +148,14 @@
       "version": "1.0.4191.47",
       "license": "Microsoft WebView2 SDK license (LICENSE.txt in package)",
       "licenseFile": "microsoft.web.webview2/1.0.4191.47/LICENSE.txt",
-      "linkedInto": "susu_windows_probe.dll (static)"
+      "linkedInto": "susu_native.dll, susu_windows_probe.dll (static)"
     },
     {
       "name": "MSVC static runtime (CRT/UCRT)",
       "version": "14.44.35207",
       "license": "Visual Studio license terms (redistributable code, statically linked)",
       "licenseFile": "Visual Studio Build Tools license",
-      "linkedInto": "susu_quickjs.dll, susu_windows_probe.dll (/MT since F00)"
+      "linkedInto": "susu_quickjs.dll, susu_native.dll, susu_plugin_sandbox.dll, susu_selection.dll, susu_windows_probe.dll (/MT since F00)"
     }
   ],
   "npm": [

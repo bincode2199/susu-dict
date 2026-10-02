@@ -62,9 +62,9 @@ const native = [
   { name: 'QuickJS-NG', version: `${deps.quickjs.tag} (${deps.quickjs.commit})`, license: deps.quickjs.license,
     licenseFile: existsSync(join(quickjsFolder, 'LICENSE')) ? 'LICENSE in pinned source' : 'missing', linkedInto: 'susu_quickjs.dll (static)' },
   { name: 'Microsoft WebView2 loader (static library)', version: '1.0.4191.47', license: 'Microsoft WebView2 SDK license (LICENSE.txt in package)',
-    licenseFile: 'microsoft.web.webview2/1.0.4191.47/LICENSE.txt', linkedInto: 'susu_windows_probe.dll (static)' },
+    licenseFile: 'microsoft.web.webview2/1.0.4191.47/LICENSE.txt', linkedInto: 'susu_native.dll, susu_windows_probe.dll (static)' },
   { name: 'MSVC static runtime (CRT/UCRT)', version: deps.msvc, license: 'Visual Studio license terms (redistributable code, statically linked)',
-    licenseFile: 'Visual Studio Build Tools license', linkedInto: 'susu_quickjs.dll, susu_windows_probe.dll (/MT since F00)' },
+    licenseFile: 'Visual Studio Build Tools license', linkedInto: 'susu_quickjs.dll, susu_native.dll, susu_plugin_sandbox.dll, susu_selection.dll, susu_windows_probe.dll (/MT since F00)' },
 ];
 
 // UI production closure: walk package.json dependencies from ui/package.json (installed tree).

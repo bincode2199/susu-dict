@@ -656,17 +656,20 @@ public sealed class F17VerificationTests : IDisposable
     private static string Label(BackupRig r) => r.Store.State.Effective.Accounts.Single().Label;
 
     [Fact]
-    public void Previewing_a_second_file_replaces_a_confirmed_import_and_the_old_token_stops_working()
+    public void A_second_preview_is_refused_while_an_import_is_confirmed_and_the_old_token_stops_working_after_a_discard()
     {
         string a = Source(Labelled("A", "sk-a-KEYKEY", "acct-a"), "a.susubak"), b = Source(Labelled("B", "sk-b-KEYKEY", "acct-b"), "b.susubak");
         var target = Labelled("T", "sk-t-KEYKEY", "acct-t");
         var pa = target.Service.Preview(a, Pw);
         Assert.True(target.Service.Apply(pa.Token));
         Assert.Equal("Ready", target.Service.Status().State);
-        // a refused file leaves the confirmed import alone
-        Assert.Equal("not-a-backup", Code(() => target.Service.Preview(Put(target, "junk"u8.ToArray()), null)));
+        // F17V-2 (fixed): while an import is confirmed, any other preview (good or junk) is refused with a code and the confirmed import is untouched
+        Assert.Equal("import-scheduled", Code(() => target.Service.Preview(Put(target, "junk"u8.ToArray()), null)));
+        Assert.Equal("import-scheduled", Code(() => target.Service.Preview(b, Pw)));
         Assert.Equal("Ready", target.Service.Status().State);
-        // a second good file replaces it: the confirmed import is dropped without a word (observation F17V-2, low: the page must not offer Pick while Ready)
+        // after the user discards it, a second preview works and the old token no longer applies
+        target.Service.Discard();
+        Assert.Equal("not-a-backup", Code(() => target.Service.Preview(Put(target, "junk"u8.ToArray()), null)));
         var pb = target.Service.Preview(b, Pw);
         Assert.NotEqual(pa.Token, pb.Token);
         Assert.Equal("Previewed", target.Service.Status().State);
@@ -1223,12 +1226,11 @@ public sealed class F17VerificationTests : IDisposable
         try
         {
             string zip = ExportTo(rig, Exporter(rig), out var outcome);
-            // DEFECT F17V-8 (low): UnauthorizedAccessException from ReadAllLines is not caught per file (only IOException is), so one unreadable log turns the
-            // whole export into "write-failed" (a message about the destination) and the user gets no diagnostics at all. Expected: skip the file, export the rest.
-            // Records today's behaviour; when fixed expect Ok with LogFiles == 1.
-            Assert.False(outcome.Ok);
-            Assert.Equal("write-failed", outcome.Error);
-            Assert.False(File.Exists(zip));
+            // F17V-8 (fixed): the unreadable log is skipped and counted; the rest is exported.
+            Assert.True(outcome.Ok);
+            Assert.Equal(1, outcome.LogFiles);
+            Assert.Equal(1, outcome.DroppedLines);
+            Assert.True(File.Exists(zip));
             Assert.Empty(Directory.GetFiles(rig.Root.Root, "*.tmp"));
         }
         finally
@@ -1575,13 +1577,11 @@ public sealed class F17VerificationTests : IDisposable
         Assert.NotEmpty(ships("WebView2"));
         // SQLite ships as e_sqlite3.dll through SQLitePCLRaw
         Assert.Contains(rows, r => Str(r, "name").StartsWith("SQLitePCLRaw.lib.e_sqlite3", StringComparison.Ordinal));
-        // DEFECT F17V-11 (low, documentation): src/Susu.Windows/native/CMakeLists.txt links WebView2LoaderStatic.lib into BOTH susu_windows_probe and susu_native; only the
-        // probe (a test artifact that is not in the Host's Content list) is named in the WebView2 row's "ships", and susu_native.dll, the shell the user runs, is not.
-        // The MSVC runtime row names susu_quickjs and susu_windows_probe but not susu_native, susu_plugin_sandbox or susu_selection, which are also /MT. The license
-        // rows themselves are present; only the "ships" attribution is wrong. Records today's text; when fixed the WebView2 row must name susu_native.dll.
+        // F17V-11 (fixed): the WebView2 loader row names susu_native.dll (the shell the user runs) as well as the probe, and the MSVC runtime row names every /MT binary.
         string cmake = File.ReadAllText(Path.Combine(root, "src", "Susu.Windows", "native", "CMakeLists.txt"));
         Assert.Contains("target_link_libraries(susu_native PRIVATE \"${WEBVIEW_SDK}/x64/WebView2LoaderStatic.lib\"", cmake, StringComparison.Ordinal);
-        Assert.DoesNotContain("susu_native.dll", ships("WebView2"), StringComparison.Ordinal);
+        Assert.Contains("susu_native.dll", ships("WebView2"), StringComparison.Ordinal);
+        Assert.All(new[] { "susu_native.dll", "susu_plugin_sandbox.dll", "susu_selection.dll" }, d => Assert.Contains(d, ships("MSVC static runtime"), StringComparison.Ordinal));
         Assert.Contains("susu_windows_probe.dll", ships("WebView2"), StringComparison.Ordinal);
         // the NOTICE file lists every row by name and version
         string notice = File.ReadAllText(Path.Combine(root, "LICENSES", "NOTICE.txt"));

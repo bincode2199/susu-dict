@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { UI_COMMANDS, type BackupPreviewView, type CommandResult, type SettingsView } from '@protocol/ui';
 import SettingRow from './SettingRow.vue';
 import { t } from '../locales/i18n';
@@ -20,6 +20,16 @@ const exportPassword = ref('');
 const unlockPassword = ref('');
 
 watch(() => props.clearToken, () => { exportPassword.value = ''; unlockPassword.value = ''; });
+
+// F17V-12: focus moves to what just appeared (the password box or the preview) and Escape closes either step like the Discard button.
+const root = ref<HTMLElement | null>(null);
+watch(() => backup.value.step, async (step) => {
+  if (step !== 'password' && step !== 'preview') return;
+  await nextTick();
+  const selector = step === 'password' ? '[data-backup-unlock-password]' : '[data-backup-preview]';
+  root.value?.querySelector<HTMLElement>(selector)?.focus();
+});
+const onEscape = () => { if (!busy.value) void discard(); };
 
 async function run(key: string, name: string, payload?: object): Promise<boolean> {
   if (busy.value) return false;
@@ -68,7 +78,7 @@ const lastError = computed(() => (backup.value.last?.error ? errorText(backup.va
 </script>
 
 <template>
-  <section class="group backup" data-backup>
+  <section ref="root" class="group backup" data-backup>
     <h2>{{ t('backup.title') }}</h2>
     <p class="hint-text small">{{ t('backup.hint') }}</p>
 
@@ -87,12 +97,12 @@ const lastError = computed(() => (backup.value.last?.error ? errorText(backup.va
 
     <h3>{{ t('backup.import') }}</h3>
     <SettingRow :title="t('backup.import')" :hint="backup.canImport ? t('backup.import.hint') : t('backup.unavailable')">
-      <button type="button" class="btn" :disabled="!backup.canImport || !!busy" data-backup-pick @click="pick">{{ busy === 'pick' ? t('backup.choosing') : t('backup.choose') }}</button>
+      <button type="button" class="btn" :disabled="!backup.canImport || !!busy || backup.scheduled" data-backup-pick @click="pick">{{ busy === 'pick' ? t('backup.choosing') : t('backup.choose') }}</button>
     </SettingRow>
     <p v-if="backup.last?.action === 'preview' && backup.last.error" class="result small error-text" role="alert" data-backup-preview-error>{{ lastError }}</p>
     <p v-if="(backup.last?.action === 'apply' || backup.last?.action === 'undo') && backup.last.error" class="result small error-text" role="alert" data-backup-action-error>{{ lastError }}</p>
 
-    <div v-if="backup.step === 'password'" class="pending" data-backup-unlock>
+    <div v-if="backup.step === 'password'" class="pending" data-backup-unlock @keydown.esc.stop="onEscape">
       <h3>{{ t('backup.unlock.title', { file: backup.fileName ?? '' }) }}</h3>
       <p class="hint-text small">{{ t('backup.unlock.hint') }}</p>
       <div class="actions">
@@ -102,7 +112,7 @@ const lastError = computed(() => (backup.value.last?.error ? errorText(backup.va
       </div>
     </div>
 
-    <div v-if="backup.step === 'preview' && backup.preview" class="pending" data-backup-preview>
+    <div v-if="backup.step === 'preview' && backup.preview" class="pending" tabindex="-1" role="group" :aria-label="t('backup.preview.title', { file: backup.fileName ?? '' })" data-backup-preview @keydown.esc.stop="onEscape">
       <h3>{{ t('backup.preview.title', { file: backup.fileName ?? '' }) }}</h3>
       <p class="small hint-text" data-backup-meta>{{ t('backup.preview.meta', { version: backup.preview.appVersion }) }} {{ createdText(backup.preview.created) }}</p>
       <p v-if="backup.preview.schemaOlder" class="small hint-text" data-backup-older>{{ t('backup.olderSchema') }}</p>

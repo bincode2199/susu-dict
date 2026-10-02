@@ -7,7 +7,7 @@
       "license": "Microsoft WebView2 SDK license (LICENSE.txt in package)",
       "copyright": null,
       "url": null,
-      "ships": "susu_windows_probe.dll (static)"
+      "ships": "susu_native.dll, susu_windows_probe.dll (static)"
     },
     {
       "kind": "native",
@@ -16,7 +16,7 @@
       "license": "Visual Studio license terms (redistributable code, statically linked)",
       "copyright": null,
       "url": null,
-      "ships": "susu_quickjs.dll, susu_windows_probe.dll (/MT since F00)"
+      "ships": "susu_quickjs.dll, susu_native.dll, susu_plugin_sandbox.dll, susu_selection.dll, susu_windows_probe.dll (/MT since F00)"
     },
     {
       "kind": "native",

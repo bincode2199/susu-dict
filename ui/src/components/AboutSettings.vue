@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { UI_COMMANDS, type CommandResult, type DataCleanView, type SettingsView } from '@protocol/ui';
 import SettingRow from './SettingRow.vue';
 import { t } from '../locales/i18n';
@@ -31,9 +31,22 @@ async function run(key: string, name: string, payload?: object): Promise<boolean
 const openLogs = () => run('logs', UI_COMMANDS.AboutOpenLogs);
 const exportDiagnostics = () => run('diagnostics', UI_COMMANDS.AboutExportDiagnostics);
 const dismiss = () => run('dismiss', UI_COMMANDS.AboutDismiss);
+// F17V-12: opening a confirm box focuses its safe button (cancel); closing it by cancel, Escape or after the clear returns focus to the entry's button.
+const root = ref<HTMLElement | null>(null);
+const focusIn = async (selector: string) => { await nextTick(); root.value?.querySelector<HTMLElement>(selector)?.focus(); };
+async function ask(kind: string): Promise<void> {
+  confirming.value = kind;
+  await focusIn(`[data-clean-cancel="${kind}"]`);
+}
+async function cancel(kind: string): Promise<void> {
+  if (busy.value) return;
+  confirming.value = null;
+  await focusIn(`[data-clean-button="${kind}"]`);
+}
 async function clearNow(kind: string): Promise<void> {
   confirming.value = null;
   await run(`clear-${kind}`, UI_COMMANDS.DataClear, { kind, confirm: true });
+  await focusIn(`[data-clean-button="${kind}"]`);
 }
 
 const sizeText = (bytes: number) => (bytes < 1024 ? t('about.size.bytes', { n: bytes }) : bytes < 1024 * 1024 ? t('about.size.kb', { n: (bytes / 1024).toFixed(1) }) : t('about.size.mb', { n: (bytes / 1024 / 1024).toFixed(1) }));
@@ -41,10 +54,11 @@ const diagnosticsError = (code: string) => { const key = `about.diagnostics.erro
 const cleanError = (code: string) => { const key = `about.clean.error.${code}`; const text = t(key); return text === key ? t('about.clean.error.other') : text; };
 const usage = (d: DataCleanView) => (d.kind === 'settings' ? '' : d.kind === 'accounts' ? t('about.clean.usage.accounts', { n: d.count }) : d.bytes > 0 ? t('about.clean.usage.countBytes', { n: d.count, size: sizeText(d.bytes) }) : t('about.clean.usage.count', { n: d.count }));
 const kindName = (kind: string) => t(`about.clean.${kind}`);
+const cleanLabel = (key: string, kind: string) => `${t(key).replace('…', '')} ${kindName(kind)}`.trim(); // a distinct accessible name per entry (F17V-12)
 </script>
 
 <template>
-  <section class="group about" data-about>
+  <section ref="root" class="group about" data-about>
     <h2>{{ t('about.title') }}</h2>
     <SettingRow :title="t('about.version')"><span data-about-version>{{ about.version }}</span></SettingRow>
     <SettingRow :title="t('about.build')"><span data-about-build>{{ about.build }}</span></SettingRow>
@@ -79,14 +93,14 @@ const kindName = (kind: string) => t(`about.clean.${kind}`);
     <div v-for="d in about.data" :key="d.kind" class="clean" :data-clean="d.kind">
       <SettingRow :title="kindName(d.kind)" :hint="t(`about.clean.${d.kind}.deletes`) + ' ' + t(`about.clean.${d.kind}.keeps`)">
         <span v-if="usage(d)" class="small hint-text" :data-clean-usage="d.kind">{{ usage(d) }}</span>
-        <button v-if="confirming !== d.kind" type="button" class="btn" :disabled="!d.available || !!busy" :data-clean-button="d.kind" @click="confirming = d.kind">{{ t('about.clean.run') }}</button>
+        <button v-if="confirming !== d.kind" type="button" class="btn" :disabled="!d.available || !!busy" :data-clean-button="d.kind" :aria-label="cleanLabel('about.clean.run', d.kind)" @click="ask(d.kind)">{{ t('about.clean.run') }}</button>
       </SettingRow>
-      <div v-if="confirming === d.kind" class="pending" role="alertdialog" :aria-label="kindName(d.kind)" :data-clean-confirm="d.kind">
+      <div v-if="confirming === d.kind" class="pending" role="alertdialog" :aria-label="kindName(d.kind)" :data-clean-confirm="d.kind" @keydown.esc.stop="cancel(d.kind)">
         <p class="small">{{ t('about.clean.confirm', { what: kindName(d.kind) }) }}</p>
         <p class="small hint-text">{{ t(`about.clean.${d.kind}.deletes`) }} {{ t(`about.clean.${d.kind}.keeps`) }}</p>
         <div class="actions">
-          <button type="button" class="btn danger" :disabled="!!busy" :data-clean-confirm-button="d.kind" @click="clearNow(d.kind)">{{ t('about.clean.confirmRun') }}</button>
-          <button type="button" class="btn" :disabled="!!busy" :data-clean-cancel="d.kind" @click="confirming = null">{{ t('about.clean.cancel') }}</button>
+          <button type="button" class="btn danger" :disabled="!!busy" :aria-label="cleanLabel('about.clean.confirmRun', d.kind)" :data-clean-confirm-button="d.kind" @click="clearNow(d.kind)">{{ t('about.clean.confirmRun') }}</button>
+          <button type="button" class="btn" :disabled="!!busy" :data-clean-cancel="d.kind" @click="cancel(d.kind)">{{ t('about.clean.cancel') }}</button>
         </div>
       </div>
     </div>

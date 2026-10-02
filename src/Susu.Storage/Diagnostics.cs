@@ -69,7 +69,7 @@ public sealed class DiagnosticsExporter(AppPaths paths, IClock clock, SensitiveL
             if (budget <= 0) break;
             string[] lines;
             try { lines = File.ReadAllLines(file.FullName, Encoding.UTF8); }
-            catch (IOException) { continue; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { if (e is UnauthorizedAccessException) dropped++; continue; } // F17V-8: a log the user may not read is skipped and counted as one dropped entry, never fails the export
             var accepted = new List<string>();
             for (int i = lines.Length - 1; i >= 0; i--) // newest lines first so the budget keeps the end of the day
             {
