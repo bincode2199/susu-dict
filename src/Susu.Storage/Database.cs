@@ -149,6 +149,41 @@ public sealed class Database : IDisposable
         Exec(target, "PRAGMA wal_checkpoint(TRUNCATE);");
     }
 
+    /// <summary>
+    /// F18.2: a consistent standalone copy of a database file that no application has open (the updater runs after the app exited). Goes through the
+    /// SQLite backup API so committed pages still in the -wal file are included; the copy appears under its final name only when complete.
+    /// </summary>
+    public static void CopyFile(string source, string destination, IFaultPoint? faults = null)
+    {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = source, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+        connection.Open();
+        BackupTo(connection, destination, faults);
+    }
+
+    /// <summary>F18.2: puts a copy made by <see cref="CopyFile"/> back as the database file; stale -wal and -shm files of the replaced database are removed first.</summary>
+    public static void ReplaceFileWithCopy(string copy, string databasePath)
+    {
+        string temp = databasePath + ".restore.tmp";
+        TryDeleteFile(temp);
+        try
+        {
+            File.Copy(copy, temp, overwrite: true);
+            TryDeleteFile(databasePath + "-wal");
+            TryDeleteFile(databasePath + "-shm");
+            File.Move(temp, databasePath, overwrite: true);
+        }
+        finally { TryDeleteFile(temp); }
+    }
+
+    /// <summary>F18.2: the schema version stored in a database file, 0 when there is none; opens read-only and migrates nothing.</summary>
+    public static int PeekVersion(string path)
+    {
+        if (!File.Exists(path)) return 0;
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+        connection.Open();
+        return ReadVersion(connection);
+    }
+
     /// <summary>Online backup through the SQLite backup API; consistent even with an active WAL.</summary>
     public Task BackupToAsync(string destination) => WriteAsync(w => { BackupTo(w.Connection, destination); return true; }, transactional: false);
 
