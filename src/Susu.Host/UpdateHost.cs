@@ -194,10 +194,13 @@ internal sealed class ProcessUpdateLauncher(string installDirectory, string upda
         {
             string? self = Environment.ProcessPath;
             if (self is null || !File.Exists(self)) return false;
-            string folder = Path.Combine(updatesFolder, "helper");
+            // The helper needs the executable and the SQLite native library (it copies and restores the database); nothing else from the install folder, which is being replaced.
+            string folder = Path.Combine(updatesFolder, "helper", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(folder);
-            string copy = Path.Combine(folder, $"susu-update-{Guid.NewGuid():N}.exe");
+            string copy = Path.Combine(folder, "susu-update.exe");
             File.Copy(self, copy);
+            string sqlite = Path.Combine(Path.GetDirectoryName(self)!, "e_sqlite3.dll");
+            if (File.Exists(sqlite)) File.Copy(sqlite, Path.Combine(folder, "e_sqlite3.dll"));
             var info = new ProcessStartInfo(copy) { UseShellExecute = false, WorkingDirectory = folder };
             info.ArgumentList.Add(command);
             info.ArgumentList.Add("--install-dir");
@@ -216,9 +219,9 @@ internal sealed class ProcessUpdateLauncher(string installDirectory, string upda
         {
             string folder = Path.Combine(updatesFolder, "helper");
             if (!Directory.Exists(folder)) return;
-            foreach (string file in Directory.EnumerateFiles(folder))
+            foreach (string sub in Directory.EnumerateDirectories(folder))
             {
-                try { File.Delete(file); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                try { Directory.Delete(sub, recursive: true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
