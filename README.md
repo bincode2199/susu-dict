@@ -60,6 +60,7 @@ Each folder has a `README.md` that indexes its documents. Every document names i
     - [F13](docs/evidence/F13/F13.md): system audio translation.
     - [F14](docs/evidence/F14/F14.md): video transcription and subtitles.
     - [F15](docs/evidence/F15/F15.md): favorites, export and sync.
+    - [F16](docs/evidence/F16/F16.md): plugin management and developer tools.
   - [Windows VMs](docs/vm/README.md): the development and clean-test virtual machines.
     - [WINDOWS-VM-OPERATIONS](docs/vm/WINDOWS-VM-OPERATIONS.md) · 运行与维护手册: current spec, daily operation, maintenance, troubleshooting, rebuild.
     - [WINDOWS-VM-DEPLOYMENT](docs/vm/WINDOWS-VM-DEPLOYMENT.md) · 部署记录: what was deployed and verified.

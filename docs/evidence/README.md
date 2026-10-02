@@ -23,5 +23,6 @@ What has been delivered and verified. [PROGRESS](PROGRESS.md) is the one-page cu
 | [F13](F13/F13.md) | System audio translation |
 | [F14](F14/F14.md) | Video transcription and subtitles |
 | [F15](F15/F15.md) | Favorites, export and sync |
+| [F16](F16/F16.md) | Plugin management and developer tools |
 
 New records are created from [MODULE-TEMPLATE](../development/MODULE-TEMPLATE.md).
