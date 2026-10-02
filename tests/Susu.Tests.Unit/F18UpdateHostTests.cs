@@ -102,6 +102,9 @@ public class F18UpdateHostTests
         var offer = new AppUpdateOffer(toVersion, 5, "susu-new.zip", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), "");
         var updater = new AppUpdater(install, paths.Database, paths.Updates, new RealEnvStub(), faults);
         updater.BeginDownload(offer, "0.0.1");
+        zipPath = Path.Combine(paths.Updates, "downloads", "susu-new.zip");
+        Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
+        File.WriteAllBytes(zipPath, bytes);
         Assert.True(updater.Stage(zipPath).Ok);
         // The helper is a copy of the executable outside the install folder (the install folder's files are replaced while it runs).
         string helperFolder = Path.Combine(paths.Updates, "helper", "test");

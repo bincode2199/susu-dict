@@ -104,6 +104,7 @@ internal static class MainMode
         }
 
         if (RecoverUpdate(paths, mode.DataRoot, log)) return 0; // F18.2: an interrupted application update is finished (or rolled back by the helper) before anything else runs
+        if (FirstStartGate(paths, mode.DataRoot, log)) return 0; // F18.3: a new version that failed to start twice is rolled back by the helper instead of starting again
         int rolledBack = new ConfigTransaction(paths).Recover();
         if (rolledBack > 0) log.Event("config.recovered", ("count", rolledBack));
         // F17.1: a confirmed backup import is switched here, after the journal is recovered and before settings and secrets are read.
@@ -331,8 +332,7 @@ internal static class MainMode
         int InFlightNow() => (coordinator.IsRecording ? 1 : 0) + (coordinator.VideoJobs?.Active is not null ? 1 : 0)
             + (translation.Supervisor is { } flightSupervisor && flightSupervisor.TryGetCurrent(out var flightCurrent) ? flightCurrent!.InFlightCalls().Count : 0);
         string installFolder = AppContext.BaseDirectory.TrimEnd('\\');
-        var assemblyVersion = typeof(Program).Assembly.GetName().Version;
-        string appVersion = assemblyVersion is null ? "0.0.0" : $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{Math.Max(0, assemblyVersion.Build)}";
+        string appVersion = AppVersionText();
         var appUpdater = new Susu.Plugins.AppUpdate.AppUpdater(installFolder, paths.Database, paths.Updates, new ProcessUpdateEnvironment(instanceName, mode.DataRoot));
         var updateTrust = new Susu.Plugins.AppUpdate.UpdateTrustStore(Path.Combine(paths.Updates, "trust.json"), Susu.Plugins.AppUpdate.UpdateKeyring.Production);
         var updatePrefs = new Susu.Plugins.AppUpdate.UpdatePrefs(Path.Combine(paths.Updates, "schedule.json"));
@@ -403,6 +403,11 @@ internal static class MainMode
         guard?.Start();
 #endif
 
+        _ = Task.Run(async () => // F18.3: the new version counts as started once it has been running for 15 s with the message loop up
+        {
+            try { await Task.Delay(TimeSpan.FromSeconds(15), updateSchedule.Token).ConfigureAwait(false); new Susu.Plugins.AppUpdate.FirstStartGuard(paths.Updates).Confirm(AppVersionText()); }
+            catch (Exception e) when (e is OperationCanceledException or IOException or UnauthorizedAccessException) { }
+        });
         dispatcher.Run();
         updateSchedule.Cancel();
 
@@ -526,6 +531,32 @@ internal static class MainMode
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ApplicationException) { log.Event("update.recover-failed", ("code", e.GetType().Name)); }
         return false;
+    }
+
+    internal static string AppVersionText()
+    {
+        var v = typeof(Program).Assembly.GetName().Version;
+        return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{Math.Max(0, v.Build)}";
+    }
+
+    /// <summary>
+    /// F18.3: counts this start of a freshly committed version. A version whose first starts were never confirmed (see the 15 s confirmation near the message loop) twice does not run a
+    /// third time: the helper restores the paired old binaries and database (loop guard: the failed version is recorded and never offered again) and starts the old version.
+    /// Returns true when the helper took over and this process must end.
+    /// </summary>
+    private static bool FirstStartGate(AppPaths paths, string? dataRoot, RedactingLog log)
+    {
+        try
+        {
+            var guard = new Susu.Plugins.AppUpdate.FirstStartGuard(paths.Updates);
+            if (guard.OnStart(AppVersionText()) == Susu.Plugins.AppUpdate.StartDecision.Proceed) return false;
+            string installDir = AppContext.BaseDirectory.TrimEnd('\\');
+            log.Event("update.first-start-failed", ("version", AppVersionText()));
+            bool started = new ProcessUpdateLauncher(installDir, paths.Updates, dataRoot).Launch("--rollback-update", "--reason", Susu.Plugins.AppUpdate.AppUpdater.FirstStartFailed);
+            if (!started) guard.Clear(); // no helper could be started: do not lock the user out, run this version again
+            return started;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ApplicationException) { log.Event("update.first-start-gate-failed", ("code", e.GetType().Name)); return false; }
     }
 
     private static void UpdateHostCleanup(AppPaths paths) => ProcessUpdateLauncher.CleanHelpers(paths.Updates);

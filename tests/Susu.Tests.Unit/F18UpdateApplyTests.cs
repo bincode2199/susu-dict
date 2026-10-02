@@ -52,7 +52,9 @@ public class F18UpdateApplyTests
         public IUpdateEnvironment? Override;
         public byte[] Zip = [];
         public AppUpdateOffer Offer = null!;
-        public string ZipPath => Path.Combine(Root, "package.zip");
+        public string ZipPath => Path.Combine(Updates, "downloads", "package.zip");
+        /// <summary>The package sits in the updater's downloads folder (BeginDownload clears that folder first).</summary>
+        public void Place() { Directory.CreateDirectory(Path.GetDirectoryName(ZipPath)!); File.WriteAllBytes(ZipPath, Zip); }
         public Dictionary<string, string> Old = new()
         {
             ["susu.exe"] = "OLD exe 1.1.0", ["susu_native.dll"] = "OLD native", ["ui/index.html"] = "OLD ui", ["old-only.dll"] = "only in the old version",
@@ -65,6 +67,9 @@ public class F18UpdateApplyTests
         public Rig(Dictionary<string, string>? newFiles = null)
         {
             if (newFiles is not null) New = newFiles;
+            // Like the real installer (staged-manifest.json ships in the install folder and in every package) so the updater knows which files an old version brought.
+            Old["staged-manifest.json"] = ManifestOf(Old.Keys);
+            if (!New.ContainsKey("staged-manifest.json")) New = new Dictionary<string, string>(New) { ["staged-manifest.json"] = ManifestOf(New.Keys) };
             Directory.CreateDirectory(Install);
             Directory.CreateDirectory(Path.GetDirectoryName(Db)!);
             foreach (var (path, text) in Old) Put(Install, path, text);
@@ -76,7 +81,7 @@ public class F18UpdateApplyTests
         public void SetPackage(Dictionary<string, string> files)
         {
             Zip = BuildZip(files.Select(f => (f.Key, Encoding.UTF8.GetBytes(f.Value))));
-            File.WriteAllBytes(ZipPath, Zip);
+            Place();
             Offer = new AppUpdateOffer("1.2.0", 5, "susu-1.2.0.zip", Zip.Length, Convert.ToHexStringLower(SHA256.HashData(Zip)), "");
         }
 
@@ -85,11 +90,13 @@ public class F18UpdateApplyTests
         public AppUpdater Staged(IFaultPoint? faults = null)
         {
             var updater = Updater(faults);
-            updater.BeginDownload(Offer, "1.1.0");
+            updater.BeginDownload(Offer, "1.1.0"); Place();
             Assert.True(updater.Stage(ZipPath).Ok);
             return updater;
         }
     }
+
+    private static string ManifestOf(IEnumerable<string> paths) => "{\"product\":\"Su-Su\",\"files\":[" + string.Join(",", paths.Select(p => "{\"path\":\"" + p + "\"}")) + "]}";
 
     private static void Put(string root, string rel, string text)
     {
@@ -262,7 +269,7 @@ public class F18UpdateApplyTests
         {
             var rig = new Rig();
             var updater = rig.Updater();
-            updater.BeginDownload(rig.Offer, "1.1.0");
+            updater.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
             File.WriteAllBytes(rig.ZipPath, mutate(rig.Zip));
             var result = updater.Stage(rig.ZipPath);
             Assert.Equal(new StageResult(false, expected), result);
@@ -288,7 +295,7 @@ public class F18UpdateApplyTests
         var rig = new Rig();
         rig.SetPackage(new Dictionary<string, string>(rig.New) { [name] = "evil" });
         var updater = rig.Updater();
-        updater.BeginDownload(rig.Offer, "1.1.0");
+        updater.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
         Assert.Equal(new StageResult(false, "package-invalid"), updater.Stage(rig.ZipPath));
         Assert.False(File.Exists(Path.Combine(rig.Root, "evil.dll")));
         AssertOld(rig);
@@ -306,15 +313,14 @@ public class F18UpdateApplyTests
         {
             rig.SetPackage(files);
             var updater = rig.Updater();
-            updater.BeginDownload(rig.Offer, "1.1.0");
+            updater.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
             Assert.Equal("package-invalid", updater.Stage(rig.ZipPath).Error);
         }
         // Names that differ only in case are one file on Windows.
         rig.Zip = BuildZip([("susu.exe", [1]), ("Susu.EXE", [2])]);
-        File.WriteAllBytes(rig.ZipPath, rig.Zip);
         rig.Offer = rig.Offer with { Size = rig.Zip.Length, Sha256 = Convert.ToHexStringLower(SHA256.HashData(rig.Zip)) };
         var u2 = rig.Updater();
-        u2.BeginDownload(rig.Offer, "1.1.0");
+        u2.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
         Assert.Equal("package-invalid", u2.Stage(rig.ZipPath).Error);
         AssertOld(rig);
     }
@@ -369,7 +375,7 @@ public class F18UpdateApplyTests
     {
         var rig = new Rig();
         var updater = rig.Updater(new FaultAt("stage:extracted", _ => DiskFull()));
-        updater.BeginDownload(rig.Offer, "1.1.0");
+        updater.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
         Assert.Equal(new StageResult(false, "disk-full"), updater.Stage(rig.ZipPath));
         Assert.Null(updater.Read());
         Assert.False(Directory.Exists(updater.StageFolder));
@@ -384,7 +390,7 @@ public class F18UpdateApplyTests
         rig.Env.HealthOk = !failHealth;
         var recorder = new Recorder();
         var updater = rig.Updater(recorder);
-        updater.BeginDownload(rig.Offer, "1.1.0");
+        updater.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
         updater.Stage(rig.ZipPath);
         updater.Apply();
         return recorder.Hits;
@@ -435,7 +441,7 @@ public class F18UpdateApplyTests
             var updater = rig.Updater(new FaultAt(point));
             try
             {
-                updater.BeginDownload(rig.Offer, "1.1.0");
+                updater.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
                 updater.Stage(rig.ZipPath);
                 updater.Apply();
                 Assert.Fail("no crash at " + point);
@@ -453,7 +459,7 @@ public class F18UpdateApplyTests
             var retry = rig.Updater();
             if (retry.Read()?.Stage != UpdateStages.Staged && retry.Read()?.Stage != UpdateStages.Committed)
             {
-                retry.BeginDownload(rig.Offer, "1.1.0");
+                retry.BeginDownload(rig.Offer, "1.1.0"); rig.Place();
                 Assert.True(retry.Stage(rig.ZipPath).Ok, point);
             }
             if (retry.Read()?.Stage == UpdateStages.Staged)
@@ -554,7 +560,7 @@ public class F18UpdateApplyTests
 
         var partial = new Rig();
         var u = partial.Updater();
-        u.BeginDownload(partial.Offer, "1.1.0");
+        u.BeginDownload(partial.Offer, "1.1.0"); partial.Place();
         File.WriteAllBytes(Path.Combine(u.DownloadsFolder, partial.Offer.FileName), partial.Zip[..100]);
         Assert.Equal("cleared", partial.Updater().Recover().Action);
         Assert.False(Directory.Exists(u.DownloadsFolder));
@@ -573,7 +579,7 @@ public class F18UpdateApplyTests
         rig.SetPackage(rig.New);
         rig.Offer = rig.Offer with { Version = "1.3.0", Sequence = 6 };
         var updater = rig.Updater();
-        updater.BeginDownload(rig.Offer, "1.2.0");
+        updater.BeginDownload(rig.Offer, "1.2.0"); rig.Place();
         Assert.True(updater.Stage(rig.ZipPath).Ok);
         Assert.Equal("committed", updater.Apply().Outcome);
         Assert.Equal(new SortedDictionary<string, string>(rig.New), Snapshot(rig.Install));

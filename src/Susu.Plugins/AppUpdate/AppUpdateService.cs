@@ -6,6 +6,9 @@ namespace Susu.Plugins.AppUpdate;
 public interface IUpdateLauncher
 {
     bool LaunchHelper();
+
+    /// <summary>F18.3: starts the helper that restores the previous version from the backup pair. False when no helper could be started.</summary>
+    bool LaunchRollback() => false;
 }
 
 /// <summary>
@@ -60,6 +63,7 @@ public sealed class AppUpdateService(string currentVersion, IAppUpdateSource? so
             catch (OperationCanceledException) { state = "none"; throw; }
             switch (check.Status)
             {
+                case AppUpdateStatus.Available when check.Offer is not null && updater.Guard.IsFailed(check.Offer.Version): state = "failed"; offer = null; error = "version-failed-before"; break; // loop guard (F18.3)
                 case AppUpdateStatus.Available when check.Offer is not null: state = "available"; offer = check.Offer; break;
                 case AppUpdateStatus.UpToDate: state = "upToDate"; offer = null; break;
                 default: state = "failed"; offer = null; error = check.ErrorCode ?? "check-failed"; break;
@@ -72,6 +76,7 @@ public sealed class AppUpdateService(string currentVersion, IAppUpdateSource? so
     public async Task<AppUpdateInfo> DownloadAsync(CancellationToken cancellationToken)
     {
         if (source is null || state != "available" || offer is not { } wanted || updater.Read() is not null) return Status();
+        if (updater.Guard.IsFailed(wanted.Version)) return Failed("version-failed-before");
         if (!await serial.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return Status();
         try
         {
@@ -105,6 +110,24 @@ public sealed class AppUpdateService(string currentVersion, IAppUpdateSource? so
         try
         {
             if (!launcher.LaunchHelper()) return new AppUpdateInstallOutcome(false, "helper-failed");
+            state = "installing";
+            return new AppUpdateInstallOutcome(true, null);
+        }
+        finally { serial.Release(); }
+    }
+
+    /// <summary>F18.3: the previous version can be restored from the backup pair of the last committed update (the pair is kept until the next update).</summary>
+    public bool CanRollBack => updater.CanRollBackToPrevious();
+
+    /// <summary>Starts the rollback helper on the user's command; names the interrupted tasks first like an install does.</summary>
+    public AppUpdateInstallOutcome RollBack(bool acknowledgedInFlight)
+    {
+        if (!updater.CanRollBackToPrevious()) return new AppUpdateInstallOutcome(false, "no-backup");
+        if (inFlight() > 0 && !acknowledgedInFlight) return new AppUpdateInstallOutcome(false, "in-flight-needs-confirmation");
+        if (!serial.Wait(0)) return new AppUpdateInstallOutcome(false, "busy");
+        try
+        {
+            if (!launcher.LaunchRollback()) return new AppUpdateInstallOutcome(false, "helper-failed");
             state = "installing";
             return new AppUpdateInstallOutcome(true, null);
         }

@@ -19,7 +19,38 @@ internal static class UpdateHost
 {
     public const int Committed = 0, RolledBack = 30, Aborted = 31, Failed = 32, NotStaged = 33, Busy = 34, BadArguments = 2, MigrationFailed = 21, HealthFailed = 22;
 
-    public static bool IsUpdateCommand(string[] args) => args.Length > 0 && args[0] is "--apply-update" or "--recover-update" or "--update-migrate" or "--update-health";
+    public static bool IsUpdateCommand(string[] args) => args.Length > 0 && args[0] is "--apply-update" or "--recover-update" or "--rollback-update" or "--update-migrate" or "--update-health";
+
+    public const int NoBackup = 35;
+
+    /// <summary>
+    /// Command-line rules (TEST-PLAN UPD08). Each option may appear once and takes exactly one value that is not itself an option. Paths are checked by <see cref="Run"/> with
+    /// <see cref="UpdatePathRules"/>.
+    /// </summary>
+    internal static bool TryParse(string[] args, string? defaultDataRoot, out string? dataRoot, out string? installDir, out string? report, out string? expect, out string? reason, out bool noRestart)
+    {
+        dataRoot = defaultDataRoot; installDir = report = expect = reason = null; noRestart = false;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 1; i < args.Length; i++)
+        {
+            string name = args[i];
+            if (name == "--no-restart") { if (!seen.Add(name)) return false; noRestart = true; continue; }
+            if (name is not ("--data-root" or "--install-dir" or "--report" or "--expect-version" or "--reason") || !seen.Add(name) || i + 1 >= args.Length) return false;
+            string value = args[++i];
+            if (value.Length == 0 || value.StartsWith("--", StringComparison.Ordinal) || value.Any(char.IsControl)) return false;
+            switch (name)
+            {
+                case "--data-root": dataRoot = value; break;
+                case "--install-dir": installDir = value; break;
+                case "--report": report = value; break;
+                case "--expect-version": expect = value; break;
+                default: reason = value; break;
+            }
+        }
+        return true;
+    }
+
+    private static bool VersionText(string? text) => text is { Length: > 0 and <= 32 } && text.All(c => char.IsAsciiDigit(c) || c == '.');
 
     public static string LockName(string? dataRoot) => "Su-Su.Update." + MainMode.InstanceName(dataRoot)["Su-Su.Instance".Length..].TrimStart('.');
 
@@ -36,33 +67,42 @@ internal static class UpdateHost
         return null;
     }
 
-    public static int Run(string[] args, Func<string?, IUpdateEnvironment>? environment = null, Func<string, bool>? restart = null)
+    /// <summary>
+    /// UPD08: every path is untrusted text and must be a plain absolute local path (no relative form, <c>..</c>, UNC, device or stream syntax, junction or symlink folder). The install
+    /// folder must hold a regular susu.exe and not overlap the updates folder. The helper itself must run from the helper folder under this data root's updates folder, i.e. from the
+    /// copy the app made, never from a path somebody passed. Nothing in the arguments names a package or an installer: the only source of files is the verified stage folder.
+    /// </summary>
+    public static int Run(string[] args, Func<string?, IUpdateEnvironment>? environment = null, Func<string, bool>? restart = null, string? processPath = null)
     {
-        string? dataRoot = Environment.GetEnvironmentVariable(AppPaths.DataRootVariable), installDir = null, report = null, expect = null;
-        bool noRestart = false;
-        for (int i = 1; i < args.Length; i++)
+        if (!TryParse(args, Environment.GetEnvironmentVariable(AppPaths.DataRootVariable), out string? dataRoot, out string? installDir, out string? report, out string? expect, out string? reason, out bool noRestart)) return BadArguments;
+        if (dataRoot is not null)
         {
-            switch (args[i])
-            {
-                case "--data-root" when i + 1 < args.Length: dataRoot = args[++i]; break;
-                case "--install-dir" when i + 1 < args.Length: installDir = args[++i]; break;
-                case "--report" when i + 1 < args.Length: report = args[++i]; break;
-                case "--expect-version" when i + 1 < args.Length: expect = args[++i]; break;
-                case "--no-restart": noRestart = true; break;
-                default: return BadArguments;
-            }
+            dataRoot = UpdatePathRules.PlainAbsolute(dataRoot);
+            if (dataRoot is null) return BadArguments;
         }
         var paths = AppPaths.Resolve(dataRoot, development: false);
         switch (args[0])
         {
-            case "--update-migrate": return Probe(paths, migrate: true, null);
-            case "--update-health": return expect is null ? BadArguments : Probe(paths, migrate: false, expect);
+            case "--update-migrate": return reason is null && expect is null && installDir is null ? Probe(paths, migrate: true, null) : BadArguments;
+            case "--update-health": return expect is null || !VersionText(expect) || reason is not null || installDir is not null ? BadArguments : Probe(paths, migrate: false, expect);
         }
-        if (installDir is null || !Directory.Exists(installDir)) return BadArguments;
+        // Helper modes: apply, recover, roll back.
+        string? install = UpdatePathRules.InstallFolder(installDir, paths.Updates);
+        if (install is null || expect is not null) return BadArguments;
+        string? self = processPath ?? Environment.ProcessPath;
+        string helperFolder = Path.GetFullPath(Path.Combine(paths.Updates, "helper"));
+        if (self is null || !UpdatePathRules.IsUnder(Path.GetFullPath(self), helperFolder) || UpdatePathRules.IsReparsePoint(Path.GetDirectoryName(Path.GetFullPath(self))!)) return BadArguments;
+        if (report is not null)
+        {
+            report = UpdatePathRules.PlainAbsolute(report);
+            if (report is null || !report.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || UpdatePathRules.IsUnder(report, install)
+                || Path.GetDirectoryName(report) is not { } reportFolder || !Directory.Exists(reportFolder) || UpdatePathRules.IsReparsePoint(report)) return BadArguments;
+        }
+        if (args[0] == "--rollback-update" ? reason is not (AppUpdater.UserRollback or AppUpdater.FirstStartFailed) : reason is not null) return BadArguments;
         using var gate = TryLock(dataRoot);
         if (gate is null) return Write(report, Busy, "busy");
         var env = environment?.Invoke(dataRoot) ?? new ProcessUpdateEnvironment(MainMode.InstanceName(dataRoot), dataRoot);
-        var updater = new AppUpdater(Path.GetFullPath(installDir), paths.Database, paths.Updates, env);
+        var updater = new AppUpdater(install, paths.Database, paths.Updates, env);
         int code;
         string state;
         if (args[0] == "--recover-update")
@@ -71,6 +111,21 @@ internal static class UpdateHost
             var recovery = updater.Recover();
             code = recovery.Action == "failed" ? Failed : Committed;
             state = "recovered:" + recovery.Action;
+        }
+        else if (args[0] == "--rollback-update")
+        {
+            var result = updater.RollBackToPrevious(reason!);
+            (code, state) = result.Outcome switch
+            {
+                "rolled-back" => (RolledBack, "rolled-back:" + result.Error),
+                "aborted" => (Aborted, "aborted:" + result.Error),
+                "failed" => (Failed, "failed:" + result.Error),
+                _ => (NoBackup, "no-backup"),
+            };
+            // No pair to go back to (or it is damaged): the failing start is not retried forever; the guard is released and the version on disk starts as it is.
+            if (code == NoBackup && reason == AppUpdater.FirstStartFailed) updater.Guard.Clear();
+            if (code == RolledBack && reason == AppUpdater.FirstStartFailed && !noRestart && report is null)
+                Win32Prompt.Error("Su-Su", "The new version could not start twice in a row, so Su-Su went back to the previous version. Your data from before the update was restored; what you saved in the new version is kept in the updates folder.\n新版本连续两次无法启动，Su-Su 已回到上一个版本，并恢复了更新前的数据；新版本中保存的内容保留在 updates 文件夹中。");
         }
         else
         {
@@ -84,7 +139,7 @@ internal static class UpdateHost
                 _ => (NotStaged, "not-staged"),
             };
         }
-        if (!noRestart && code != Failed) (restart ?? StartApp)(Path.Combine(installDir, "susu.exe")); // the version on disk now, new or restored, is started again
+        if (!noRestart && code != Failed) (restart ?? StartApp)(Path.Combine(install, "susu.exe")); // the version on disk now, new or restored, is started again
         return Write(report, code, state);
     }
 
@@ -188,7 +243,9 @@ internal sealed class ProcessUpdateLauncher(string installDirectory, string upda
 {
     public bool LaunchHelper() => Launch("--apply-update");
 
-    public bool Launch(string command)
+    public bool LaunchRollback() => Launch("--rollback-update", "--reason", Susu.Plugins.AppUpdate.AppUpdater.UserRollback);
+
+    public bool Launch(string command, params string[] extra)
     {
         try
         {
@@ -203,6 +260,7 @@ internal sealed class ProcessUpdateLauncher(string installDirectory, string upda
             if (File.Exists(sqlite)) File.Copy(sqlite, Path.Combine(folder, "e_sqlite3.dll"));
             var info = new ProcessStartInfo(copy) { UseShellExecute = false, WorkingDirectory = folder };
             info.ArgumentList.Add(command);
+            foreach (string e in extra) info.ArgumentList.Add(e);
             info.ArgumentList.Add("--install-dir");
             info.ArgumentList.Add(installDirectory);
             if (dataRoot is not null) { info.ArgumentList.Add("--data-root"); info.ArgumentList.Add(dataRoot); }

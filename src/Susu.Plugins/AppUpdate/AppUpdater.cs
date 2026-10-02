@@ -64,6 +64,9 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
     private const string NewSuffix = ".susu-new";
     private static readonly TimeSpan exitTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>First-start counter and the failed-version list (F18.3).</summary>
+    public FirstStartGuard Guard { get; } = new(updatesFolder);
+
     public string DownloadsFolder => Path.Combine(updatesFolder, "downloads");
     public string StageFolder => Path.Combine(updatesFolder, "stage");
     public string BackupFolder => Path.Combine(updatesFolder, "backup");
@@ -133,23 +136,9 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
         if (journal is not { Stage: UpdateStages.Downloading }) return new StageResult(false, "not-downloading");
         try
         {
-            faults?.Hit("stage:begin");
-            var info = new FileInfo(zipPath);
-            if (!info.Exists) return Fail("download-truncated");
-            if (info.Length < journal.PackageSize) return Fail("download-truncated");
-            if (info.Length != journal.PackageSize) return Fail("size-mismatch");
-            string hash;
-            using (var stream = new FileStream(zipPath, FileMode.Open, FileAccess.Read, FileShare.Read)) hash = Convert.ToHexStringLower(SHA256.HashData(stream));
-            if (!string.Equals(hash, journal.PackageSha256, StringComparison.Ordinal)) return Fail("hash-mismatch");
-            faults?.Hit("stage:hashed");
-            TryDeleteDirectory(StageFolder);
-            Directory.CreateDirectory(StageFolder);
-            var entries = Extract(zipPath, StageFolder, out string? error);
-            if (entries is null) return Fail(error ?? "package-invalid");
-            faults?.Hit("stage:extracted");
-            if (!entries.Any(e => string.Equals(e.Path, mainExecutable, StringComparison.OrdinalIgnoreCase))) return Fail("package-invalid");
-            var staged = journal with { Stage = UpdateStages.Staged, Files = entries, Error = null };
-            Write(staged);
+            string? failure = StageFromPackage(journal, zipPath, out var entries); // the package handle is closed again before any cleanup below
+            if (failure is not null) return Fail(failure);
+            Write(journal with { Stage = UpdateStages.Staged, Files = entries!, Error = null });
             faults?.Hit("stage:journal");
             return new StageResult(true, null);
         }
@@ -162,7 +151,37 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
         }
     }
 
-    private static UpdateFileEntry[]? Extract(string zipPath, string destination, out string? error)
+    private string? StageFromPackage(UpdateJournal journal, string zipPath, out UpdateFileEntry[]? entries)
+    {
+        entries = null;
+        faults?.Hit("stage:begin");
+        // UPD08: the package must be a plain file inside this updater's own downloads folder, and no work folder may be a junction or symlink.
+        if (!WorkFoldersPlain()) return "stage-failed";
+        string fullZip = Path.GetFullPath(zipPath);
+        if (!UpdatePathRules.IsUnder(fullZip, Path.GetFullPath(DownloadsFolder)) || UpdatePathRules.IsReparsePoint(fullZip)) return "download-path-invalid";
+        if (!File.Exists(fullZip)) return "download-truncated";
+        // One handle for the size check, the hash and the unpacking: writers are denied while it is open, so the bytes that were verified are the bytes that are unpacked.
+        using var package = new FileStream(fullZip, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (package.Length < journal.PackageSize) return "download-truncated";
+        if (package.Length != journal.PackageSize) return "size-mismatch";
+        string hash = Convert.ToHexStringLower(SHA256.HashData(package));
+        if (!string.Equals(hash, journal.PackageSha256, StringComparison.Ordinal)) return "hash-mismatch";
+        package.Position = 0;
+        faults?.Hit("stage:hashed");
+        TryDeleteDirectory(StageFolder);
+        Directory.CreateDirectory(StageFolder);
+        entries = Extract(package, StageFolder, out string? error);
+        if (entries is null) return error ?? "package-invalid";
+        faults?.Hit("stage:extracted");
+        if (!entries.Any(e => string.Equals(e.Path, mainExecutable, StringComparison.OrdinalIgnoreCase))) return "package-invalid";
+        return null;
+    }
+
+    /// <summary>True when the updates folder and the folders under it are not reparse points (a junction could point the stage or the backup anywhere).</summary>
+    private bool WorkFoldersPlain()
+        => new[] { updatesFolder, DownloadsFolder, StageFolder, BackupFolder }.All(p => !UpdatePathRules.IsReparsePoint(p));
+
+    private static UpdateFileEntry[]? Extract(Stream zipStream, string destination, out string? error)
     {
         error = null;
         var result = new List<UpdateFileEntry>();
@@ -170,7 +189,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
         long total = 0;
         try
         {
-            using var zip = ZipFile.OpenRead(zipPath);
+            using var zip = new ZipArchive(zipStream, ZipArchiveMode.Read, leaveOpen: true);
             if (zip.Entries.Count is 0 or > MaxEntries) { error = "package-invalid"; return null; }
             string root = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
             foreach (var entry in zip.Entries)
@@ -239,6 +258,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
         string error;
         try
         {
+            if (!WorkFoldersPlain()) { Discard(); return new ApplyResult("not-staged", "stage-failed"); } // a junction in the work folders: nothing is applied
             if (!StageIntact(journal)) { Discard(); return new ApplyResult("not-staged", "stage-corrupt"); }
             if (!HasRoomFor(journal)) return Abort(ref journal, "disk-full"); // before the app is stopped
             Enter(ref journal, UpdateStages.Exiting);
@@ -267,6 +287,8 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
             Enter(ref journal, UpdateStages.Replaced);
             faults?.Hit("replace:done");
 
+            // UPD08: only files that are byte-identical to the verified package are executed. The new executable is checked again right before it is run.
+            if (!InstalledFilesMatch(journal)) throw new UpdateStepException("stage-corrupt", "installed files differ from the verified package");
             Enter(ref journal, UpdateStages.Migrating);
             faults?.Hit("migrate:begin");
             if (!env.Migrate(installDirectory, databasePath, out string? migrateDetail)) throw new UpdateStepException("migration-failed", migrateDetail);
@@ -281,8 +303,10 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
             Enter(ref journal, UpdateStages.Healthy);
             faults?.Hit("health:journal");
 
+            Guard.Arm(journal.ToVersion, journal.FromVersion); // F18.3: the first start of the new version is counted; before the Committed marker so a commit is never unguarded
             Enter(ref journal, UpdateStages.Committed);
             faults?.Hit("commit:journal");
+            WriteInstalledList(journal);
             CleanAfterCommit();
             faults?.Hit("commit:cleanup");
             return new ApplyResult("committed", null);
@@ -375,6 +399,7 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
 
     private void Replace(UpdateJournal journal)
     {
+        var knownOld = KnownInstalledPaths(); // read before the first replacement: the installer's staged-manifest.json is itself replaced
         string backupTemp;
         int i = 0;
         foreach (var file in journal.Files)
@@ -382,9 +407,16 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
             string source = Path.Combine(StageFolder, file.Path.Replace('/', Path.DirectorySeparatorChar));
             string target = Path.Combine(installDirectory, file.Path.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            if (!TargetIsPlain(target)) throw new UpdateStepException("replace-failed", "link in the install folder"); // never write through a junction or symlink
             backupTemp = target + NewSuffix;
             TryDeleteFile(backupTemp);
-            CopyFlushed(source, backupTemp);
+            // The staged file is read with writers denied and hashed while it is copied: what lands in the install folder is exactly what the verified package held.
+            string copied = CopyFlushed(source, backupTemp);
+            if (!string.Equals(copied, file.Sha256, StringComparison.Ordinal))
+            {
+                TryDeleteFile(backupTemp);
+                throw new UpdateStepException("stage-corrupt", "staged file changed after verification");
+            }
             if (File.Exists(target))
             {
                 File.SetAttributes(target, FileAttributes.Normal);
@@ -393,15 +425,63 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
             else File.Move(backupTemp, target);
             faults?.Hit($"replace:{i++}");
         }
-        // Files of the old version the new one no longer ships are removed (the backup holds them).
+        // Only files of the previous version that the new one no longer ships are removed, and only files this updater knows the old version brought (its installed list and the
+        // installer's own file list). Anything else in the folder is the user's and stays; the backup holds all of it anyway.
         var keep = new HashSet<string>(journal.Files.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
-        string root = Path.GetFullPath(installDirectory);
-        foreach (string existing in InstalledFiles().ToList())
+        foreach (string old in knownOld)
         {
-            string rel = Path.GetRelativePath(root, existing).Replace('\\', '/');
-            if (!keep.Contains(rel)) File.Delete(existing);
+            if (keep.Contains(old)) continue;
+            string path = Path.Combine(installDirectory, old.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(path) && TargetIsPlain(path)) { File.SetAttributes(path, FileAttributes.Normal); File.Delete(path); }
         }
         faults?.Hit("replace:deleted");
+    }
+
+    /// <summary>The target and every folder between the install folder and it are ordinary (no reparse point).</summary>
+    private bool TargetIsPlain(string target)
+    {
+        string root = Path.GetFullPath(installDirectory).TrimEnd('\\');
+        string? dir = Path.GetDirectoryName(Path.GetFullPath(target));
+        while (dir is not null && dir.Length > root.Length && UpdatePathRules.IsUnder(dir, root))
+        {
+            if (UpdatePathRules.IsReparsePoint(dir)) return false;
+            dir = Path.GetDirectoryName(dir);
+        }
+        return !UpdatePathRules.IsReparsePoint(target);
+    }
+
+    private string InstalledListPath => Path.Combine(updatesFolder, "installed-files.json");
+
+    /// <summary>The files the installed version brought: the updater's own list from its last commit plus the installer's staged-manifest.json. Names are re-validated; nothing else is ever deleted.</summary>
+    private HashSet<string> KnownInstalledPaths()
+    {
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string? name) { if (name is not null && NormalizePath(name) is { } n && !string.Equals(n, mainExecutable, StringComparison.OrdinalIgnoreCase)) known.Add(n); }
+        try
+        {
+            if (File.Exists(InstalledListPath))
+                foreach (string name in JsonSerializer.Deserialize(File.ReadAllBytes(InstalledListPath), AppUpdateJson.Default.StringArray) ?? []) Add(name);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { }
+        try
+        {
+            string manifest = Path.Combine(installDirectory, "staged-manifest.json");
+            if (File.Exists(manifest))
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllBytes(manifest));
+                if (doc.RootElement.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+                    foreach (var f in files.EnumerateArray())
+                        if (f.ValueKind == JsonValueKind.Object && f.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String) Add(p.GetString());
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { }
+        return known;
+    }
+
+    private void WriteInstalledList(UpdateJournal journal)
+    {
+        try { AtomicFile.Write(InstalledListPath, JsonSerializer.SerializeToUtf8Bytes(journal.Files.Select(f => f.Path).ToArray(), AppUpdateJson.Default.StringArray)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // the next update then removes nothing it cannot prove it brought
     }
 
     private void CleanAfterCommit()
@@ -412,14 +492,68 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
 
     // ===== rollback =====
 
+    public const string FirstStartFailed = "first-start-failed", UserRollback = "user-rollback";
+
     private void RollBack(ref UpdateJournal journal, string error)
     {
+        if (error == FirstStartFailed) Guard.MarkFailed(journal.ToVersion); // the loop guard is written first: even a crash during the restore leaves the version marked
         Enter(ref journal, UpdateStages.RollingBack, error);
         faults?.Hit("rollback:journal");
         RestorePair(journal);
+        Guard.Clear(); // the old version is back; the first-start counter belongs to the version that was removed
         Enter(ref journal, UpdateStages.RolledBack, error);
         faults?.Hit("rollback:done");
     }
+
+    /// <summary>True when a backup pair of the previous version exists and the update that made it is committed (or its journal was dismissed): the user may go back.</summary>
+    public bool CanRollBackToPrevious()
+        => File.Exists(BackupIndexPath) && Read() is null or { Stage: UpdateStages.Committed };
+
+    private string RolledBackDataFolder => Path.Combine(updatesFolder, "rolled-back-data");
+
+    /// <summary>
+    /// F18.3: the old-version fallback, from the user's command or from the first-start guard. Needs the committed update's backup pair (kept until the next update). Stops the app, keeps
+    /// the CURRENT database as <c>rolled-back-data/susu-&lt;version&gt;.db</c> (anything saved since the update is therefore not lost, only not in the restored database), then restores the old
+    /// binaries and the old database together. Outcome: rolled-back | aborted (exit timeout, nothing changed) | no-backup | failed (rollback-incomplete; recovery finishes it).
+    /// </summary>
+    public ApplyResult RollBackToPrevious(string reason, string? rolledBackVersion = null)
+    {
+        if (!CanRollBackToPrevious()) return new ApplyResult("no-backup", null);
+        try
+        {
+            if (!WorkFoldersPlain()) return new ApplyResult("no-backup", "stage-failed");
+            var journal = Read();
+            BackupIndex? index = null;
+            try { index = JsonSerializer.Deserialize(File.ReadAllBytes(BackupIndexPath), AppUpdateJson.Default.BackupIndex); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { }
+            if (index?.Files is null) return new ApplyResult("no-backup", "backup-damaged");
+            string version = journal?.ToVersion ?? rolledBackVersion ?? Guard.Read()?.Version ?? "unknown";
+            if (version == "?") version = rolledBackVersion ?? "unknown";
+            if (env.StopApp(exitTimeout) == UpdateExitOutcome.TimedOut) return new ApplyResult("aborted", "exit-timeout");
+            if (File.Exists(databasePath))
+            {
+                Directory.CreateDirectory(RolledBackDataFolder);
+                string keep = Path.Combine(RolledBackDataFolder, "susu-" + SafeName(version) + ".db");
+                try { Database.CopyFile(databasePath, keep); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Data.Common.DbException) { File.Copy(databasePath, keep, overwrite: true); }
+                faults?.Hit("fallback:kept");
+            }
+            string[] newFiles = journal?.Files.Select(f => f.Path).ToArray() ?? ReadInstalledList();
+            var synthetic = new UpdateJournal(journal?.Id ?? Guid.NewGuid().ToString("N"), UpdateStages.Committed, index.Version, version, journal?.Sequence ?? 0,
+                journal?.PackageFile ?? "", journal?.PackageSha256 ?? "", journal?.PackageSize ?? 0, [.. newFiles.Select(p => new UpdateFileEntry(p, "", 0))], null);
+            RollBack(ref synthetic, reason);
+            return new ApplyResult("rolled-back", reason);
+        }
+        catch (Exception e) when (IsHandled(e)) { return new ApplyResult("failed", "rollback-incomplete"); }
+    }
+
+    private string[] ReadInstalledList()
+    {
+        try { return File.Exists(InstalledListPath) ? JsonSerializer.Deserialize(File.ReadAllBytes(InstalledListPath), AppUpdateJson.Default.StringArray) ?? [] : []; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return []; }
+    }
+
+    private static string SafeName(string version) => new(version.Select(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' ? c : '_').ToArray());
 
     /// <summary>Puts the old binaries and the old database back from the pair taken before the replacement; verifies each restored file against the backup index.</summary>
     private void RestorePair(UpdateJournal journal)
@@ -576,7 +710,12 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
 
     private static void TryDeleteDirectory(string path)
     {
-        try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+        try
+        {
+            if (!Directory.Exists(path)) return;
+            if (UpdatePathRules.IsReparsePoint(path)) Directory.Delete(path, recursive: false); // a junction or symlink is unlinked, its target is never touched
+            else Directory.Delete(path, recursive: true);
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }
@@ -593,4 +732,5 @@ public sealed class UpdateStepException(string code, string? detail = null) : Ex
 [JsonSerializable(typeof(TrustFile))]
 [JsonSerializable(typeof(ScheduleFile))]
 [JsonSerializable(typeof(UpdateSourceFile))]
+[JsonSerializable(typeof(string[]))]
 internal sealed partial class AppUpdateJson : JsonSerializerContext;
