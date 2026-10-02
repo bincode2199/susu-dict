@@ -26,6 +26,10 @@ export const UI_COMMANDS = {
   VocabExport: 'Vocab.Export',
   VocabResolve: 'Vocab.Resolve',
   VocabSync: 'Vocab.Sync',
+  PluginPick: 'Plugin.Pick',
+  PluginConfirm: 'Plugin.Confirm',
+  PluginDiscard: 'Plugin.Discard',
+  PluginUninstall: 'Plugin.Uninstall',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -209,6 +213,18 @@ export interface HotkeyView {
   reasonKey?: string;
 }
 
+export interface InstalledPluginView {
+  id: string;
+  name: string;
+  version: string;
+  signerKind: string;
+  signer: string;
+  capabilities: string[];
+  origins: string[];
+  secrets: string[];
+  overridesBuiltIn?: string;
+}
+
 export interface LoadOptionsRequest {
   instanceId: string;
   field: string;
@@ -311,6 +327,54 @@ export interface OptionsView {
   cached?: boolean;
   stale?: boolean;
   error?: ErrorKind;
+}
+
+export interface PluginIssueView {
+  path: string;
+  code: string;
+}
+
+export interface PluginOutcomeView {
+  action: string;
+  id?: string;
+  version?: string;
+  error?: string;
+  issues: PluginIssueView[];
+  restoredBuiltIn?: string;
+}
+
+export interface PluginPreviewView {
+  token: string;
+  id: string;
+  name: string;
+  version: string;
+  signerKind: string;
+  signer: string;
+  overridesBuiltIn?: string;
+  replacesVersion?: string;
+  against: string;
+  baseVersion?: string;
+  addedCapabilities: string[];
+  removedCapabilities: string[];
+  addedOrigins: string[];
+  removedOrigins: string[];
+  addedSecrets: string[];
+  removedSecrets: string[];
+}
+
+export interface PluginTokenRequest {
+  token: string;
+}
+
+export interface PluginUninstallRequest {
+  id: string;
+}
+
+export interface PluginsView {
+  installed: InstalledPluginView[];
+  pending?: PluginPreviewView;
+  last?: PluginOutcomeView;
+  canPick: boolean;
 }
 
 export interface PromptPreviewRequest {
@@ -446,6 +510,7 @@ export interface SettingsView {
   speech?: SpeechView;
   ocr?: OcrSettingsView;
   vocab?: VocabSettingsView;
+  plugins?: PluginsView;
 }
 
 export interface SpeakCardRequest {

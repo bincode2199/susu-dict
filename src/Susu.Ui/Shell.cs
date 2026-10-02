@@ -485,6 +485,10 @@ public sealed partial class ShellCoordinator
             case UiCommands.VocabExport: return await ExportVocabAsync(Read(payload, ContractsJson.Default.VocabExportCommand));
             case UiCommands.VocabResolve: return ResolveVocab(Read(payload, ContractsJson.Default.VocabResolveRequest));
             case UiCommands.VocabSync: return await SyncVocabAsync(Read(payload, ContractsJson.Default.VocabSyncCommand));
+            case UiCommands.PluginPick: return await PickPluginAsync();
+            case UiCommands.PluginConfirm: return await ConfirmPluginAsync(Read(payload, ContractsJson.Default.PluginTokenRequest));
+            case UiCommands.PluginDiscard: return DiscardPlugin(Read(payload, ContractsJson.Default.PluginTokenRequest));
+            case UiCommands.PluginUninstall: return UninstallPlugin(Read(payload, ContractsJson.Default.PluginUninstallRequest));
             case UiCommands.BeginCapture: return Recapture();
             case UiCommands.StartRecording: return await StartRecordingAsync();
             case UiCommands.PauseRecording: return await PauseRecordingAsync();
@@ -1117,7 +1121,7 @@ public sealed partial class ShellCoordinator
             new PromptView(s.Prompt.Level, s.Prompt.Profile, [.. s.Prompt.Scope], [.. PromptCatalog.Levels.Select(l => l.Id)], [.. PromptCatalog.AiInstances],
                 [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]),
             new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr), s.Speech.VideoTranslator, VideoTranslatorChoices(s)),
-            OcrSettingsOf(s), ProjectVocab(s));
+            OcrSettingsOf(s), ProjectVocab(s), ProjectPlugins());
     }
 
     private static readonly Dictionary<SpeechSlot, string> speechSlotNames = new() { [SpeechSlot.Tts] = "tts", [SpeechSlot.Asr] = "asr", [SpeechSlot.VideoAsr] = "videoAsr" };

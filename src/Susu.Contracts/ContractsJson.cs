@@ -88,6 +88,8 @@ namespace Susu.Contracts;
 [JsonSerializable(typeof(VocabExportCommand))]
 [JsonSerializable(typeof(VocabResolveRequest))]
 [JsonSerializable(typeof(VocabSyncCommand))]
+[JsonSerializable(typeof(PluginTokenRequest))]
+[JsonSerializable(typeof(PluginUninstallRequest))]
 [JsonSerializable(typeof(SubmitTextRequest))]
 [JsonSerializable(typeof(ToggleCardRequest))]
 [JsonSerializable(typeof(SelectLanguageRequest))]

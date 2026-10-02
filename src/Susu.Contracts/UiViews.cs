@@ -171,7 +171,8 @@ public sealed record SettingsView(
     PromptView? Prompt = null,
     SpeechView? Speech = null,
     OcrSettingsView? Ocr = null,
-    VocabSettingsView? Vocab = null);
+    VocabSettingsView? Vocab = null,
+    PluginsView? Plugins = null);
 
 [TsExport("ui")]
 public sealed record SettingsIssueView(string Path, string Code, string Message, int Line);
@@ -440,3 +441,40 @@ public sealed record VocabResolveRequest(string EntryId, string Target, long Rev
 
 [TsExport("ui")]
 public sealed record VocabSyncCommand(string Action, string? Target = null);
+
+/// <summary>
+/// SetPlugins (F16.1). Installed: user-installed packages (the built-in ones are not listed here). Pending: a staged package waiting for the user to
+/// confirm its permission diff. Last: the outcome of the last install or uninstall. CanPick: this build has a file dialog; without it the page says so.
+/// </summary>
+[TsExport("ui")]
+public sealed record PluginsView(InstalledPluginView[] Installed, PluginPreviewView? Pending, PluginOutcomeView? Last, bool CanPick);
+
+/// <summary>
+/// A user-installed package. SignerKind: unsigned | host | thirdParty (Signer is the verified key id; a third-party key is only the identity the user
+/// accepted, not host endorsement). OverridesBuiltIn: the shipped version this package replaces; uninstalling it brings that version back.
+/// </summary>
+[TsExport("ui")]
+public sealed record InstalledPluginView(string Id, string Name, string Version, string SignerKind, string Signer, string[] Capabilities, string[] Origins, string[] Secrets, string? OverridesBuiltIn);
+
+/// <summary>A staged package and what it would change. Against: none (first install: Added is the full set) | installed | builtin.</summary>
+[TsExport("ui")]
+public sealed record PluginPreviewView(string Token, string Id, string Name, string Version, string SignerKind, string Signer, string? OverridesBuiltIn, string? ReplacesVersion,
+    string Against, string? BaseVersion, string[] AddedCapabilities, string[] RemovedCapabilities, string[] AddedOrigins, string[] RemovedOrigins, string[] AddedSecrets, string[] RemovedSecrets);
+
+/// <summary>One reason a package was refused: Code (a stable key the page translates) and Path (the entry or field).</summary>
+[TsExport("ui")]
+public sealed record PluginIssueView(string Path, string Code);
+
+/// <summary>
+/// The last plugin action. Action: install | uninstall | preview. Error is an install.*, uninstall.* key when it failed; Issues lists why a package
+/// was refused. RestoredBuiltIn: the shipped version in effect again after uninstalling an override.
+/// </summary>
+[TsExport("ui")]
+public sealed record PluginOutcomeView(string Action, string? Id, string? Version, string? Error, PluginIssueView[] Issues, string? RestoredBuiltIn);
+
+/// <summary>Plugin.Confirm and Plugin.Discard name the pending package by its token; Plugin.Uninstall names an installed package id.</summary>
+[TsExport("ui")]
+public sealed record PluginTokenRequest(string Token);
+
+[TsExport("ui")]
+public sealed record PluginUninstallRequest(string Id);

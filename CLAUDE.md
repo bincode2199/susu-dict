@@ -8,6 +8,7 @@ Project docs start at [README.md](README.md); current state is in [docs/evidence
 - Don't keep a finished agent alive with `SendMessage` for new work. Follow-ups on the same sub-item are fine; a new sub-item or a new round of gaps gets a new agent.
 - Give each new agent a short handoff instead of history: the goal, the commits so far, the files touched, the open issues, and the exact test filter to run. Point it at the module record (`docs/evidence/Fxx/Fxx.md`) rather than pasting long text.
 - If an agent reports it has been working for a long time or is re-reading large files, have it commit, write its handoff notes, and stop; continue in a fresh agent.
+- Clean the test output after the test work for each feature is done: delete the leftover `%TEMP%\susu-*` folders (skip any still in use). Integration tests copy the host binaries (~12 MB) into a new temp folder per run and don't remove it; 4,665 of them had filled 59 GB by F08.
 - Include the two rule sections below in every coding and testing agent prompt (or point the agent at this file).
 
 ## Build and test output

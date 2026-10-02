@@ -9,7 +9,7 @@ namespace Susu.Windows.Media;
 /// </summary>
 public sealed unsafe partial class Win32SubtitleSavePicker(Func<nint>? owner = null) : ISubtitleSavePicker
 {
-    private const uint OverwritePrompt = 0x2, PathMustExist = 0x800, Explorer = 0x80000, NoChangeDir = 0x8;
+    private const uint OverwritePrompt = 0x2, PathMustExist = 0x800, Explorer = 0x80000, NoChangeDir = 0x8, FileMustExist = 0x1000, HideReadOnly = 0x4;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct OpenFileName
@@ -23,6 +23,10 @@ public sealed unsafe partial class Win32SubtitleSavePicker(Func<nint>? owner = n
         public nint DefaultExtension, CustomData, Hook, TemplateName, Reserved;
         public uint Reserved2, FlagsEx;
     }
+
+    [LibraryImport("comdlg32.dll", EntryPoint = "GetOpenFileNameW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetOpenFileName(ref OpenFileName dialog);
 
     [LibraryImport("comdlg32.dll", EntryPoint = "GetSaveFileNameW")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -48,6 +52,24 @@ public sealed unsafe partial class Win32SubtitleSavePicker(Func<nint>? owner = n
         SubtitleFormat.Vtt => "WebVTT (*.vtt)\0*.vtt\0",
         _ => "Text (*.txt)\0*.txt\0",
     } + "\0";
+
+    /// <summary>The classic open dialog (plugin package picker): the chosen existing file, or null when cancelled.</summary>
+    internal static string? ShowOpen(nint parent, string filter)
+    {
+        const int maxFile = 32768;
+        nint file = Marshal.AllocHGlobal(maxFile * 2), filterPtr = Marshal.StringToHGlobalUni(filter), title = Marshal.StringToHGlobalUni("Su-Su");
+        try
+        {
+            new Span<byte>((void*)file, maxFile * 2).Clear();
+            var dialog = new OpenFileName
+            {
+                StructSize = (uint)sizeof(OpenFileName), Owner = parent, Filter = filterPtr, FilterIndex = 1, File = file, MaxFile = maxFile,
+                Title = title, Flags = FileMustExist | PathMustExist | Explorer | NoChangeDir | HideReadOnly,
+            };
+            return GetOpenFileName(ref dialog) ? Marshal.PtrToStringUni(file) : null;
+        }
+        finally { Marshal.FreeHGlobal(file); Marshal.FreeHGlobal(filterPtr); Marshal.FreeHGlobal(title); }
+    }
 
     /// <summary>The classic save dialog (also used by the vocabulary export): <paramref name="filter"/> is the double-NUL filter string, <paramref name="ext"/> the default extension.</summary>
     internal static string? Show(nint parent, string suggested, string filter, string ext)

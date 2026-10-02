@@ -259,6 +259,15 @@ internal static class MainMode
             new VocabFileExporter(new VocabExporter(db, favorites, clock)));
         coordinator.Vocab = vocabService;
         coordinator.VocabSavePicker = new Win32VocabSavePicker();
+        // F16.1: plugin installation from the Settings window. User packages live in the roaming plugins folder; the host keyring is empty until the
+        // release build embeds the offline root (F18), so no package counts as host-signed yet and a built-in id cannot be overridden. The sandbox
+        // cannot read the roaming folder yet either (its ACL covers the program folder only), so the post-switch health check is structural here.
+        var pluginInstaller = new Susu.Plugins.Install.PluginInstaller(paths.UserPlugins, new PluginInstallationRepository(db),
+            Susu.Plugins.Install.BuiltInPackages.FromDirectory(Path.Combine(exeFolder, "plugins")), Susu.Plugins.Install.HostKeyring.Empty);
+        try { pluginInstaller.Recover(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) { log.Event("plugin.recover-failed", ("code", e.GetType().Name)); }
+        coordinator.PluginInstaller = pluginInstaller;
+        coordinator.PluginPicker = new Win32PluginPackagePicker();
         coordinator.MediaPicker = new Win32MediaPicker(mediaTokens);
         coordinator.SubtitleSavePicker = new Win32SubtitleSavePicker();
         coordinator.VideoJobs = new VideoJobs(mediaTokens, new MediaFoundationDecoder(), new LeasedFiles(leases),
