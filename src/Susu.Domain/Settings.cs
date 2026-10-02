@@ -135,7 +135,7 @@ public static class BuiltInCatalog
         new("tencent-tts", "app.susu.tencent-tts", [Capability.Tts], "speech", ["secretId", "secretKey"]),
         new("openai-asr", "app.susu.openai-asr", [Capability.Asr], "speech", ["apiKey"]),
         new("gemini-asr", "app.susu.gemini-asr", [Capability.Asr], "speech", ["apiKey"]),
-        new("ankiconnect", "app.susu.ankiconnect", [Capability.Vocab], "vocab", []),
+        new("ankiconnect", "app.susu.ankiconnect", [Capability.Vocab], "vocab", ["apiKey"]), // F15.4: the optional AnkiConnect key can be saved (used only when "use an API key" is on)
         new("eudic", "app.susu.eudic", [Capability.Vocab], "vocab", ["apiKey"]),
     ];
 

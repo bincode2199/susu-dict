@@ -23,6 +23,9 @@ export const UI_COMMANDS = {
   TestNetwork: 'Settings.TestNetwork',
   SelectSpeech: 'Settings.SelectSpeech',
   SaveOcr: 'Settings.SaveOcr',
+  VocabExport: 'Vocab.Export',
+  VocabResolve: 'Vocab.Resolve',
+  VocabSync: 'Vocab.Sync',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -95,6 +98,16 @@ export interface CardSnapshot {
 }
 
 export type CardState = 'CollapsedIdle' | 'Queued' | 'Loading' | 'Streaming' | 'Ready' | 'Failed' | 'Cancelled' | 'Unsupported';
+
+export interface CollectRequest {
+  serviceId: string;
+  favorite?: boolean;
+}
+
+export interface CollectView {
+  favorited: boolean;
+  targets: number;
+}
 
 export interface CommandResult {
   ok: boolean;
@@ -432,6 +445,7 @@ export interface SettingsView {
   prompt?: PromptView;
   speech?: SpeechView;
   ocr?: OcrSettingsView;
+  vocab?: VocabSettingsView;
 }
 
 export interface SpeakCardRequest {
@@ -667,6 +681,72 @@ export interface UiSnapshot {
 
 export interface ValidateProviderRequest {
   serviceId: string;
+}
+
+export interface VocabExportCommand {
+  format: string;
+  definitions: boolean;
+  phonetics: boolean;
+  examples: boolean;
+  onlyNew: boolean;
+  deck?: string;
+}
+
+export interface VocabExportView {
+  format: string;
+  path?: string;
+  error?: string;
+  retryable: boolean;
+  exported: number;
+  skipped: number;
+  issues: string[];
+}
+
+export interface VocabResolveRequest {
+  entryId: string;
+  target: string;
+  revision: number;
+  delivered: boolean;
+}
+
+export interface VocabRowView {
+  entryId: string;
+  word: string;
+  target: string;
+  revision: number;
+  state: string;
+  attempts: number;
+}
+
+export interface VocabSettingsView {
+  favorites: number;
+  targets: VocabTargetView[];
+  rows: VocabRowView[];
+  export?: VocabExportView;
+  canExport: boolean;
+}
+
+export interface VocabSyncCommand {
+  action: string;
+  target?: string;
+}
+
+export interface VocabTargetView {
+  instanceId: string;
+  enabled: boolean;
+  availability: string;
+  usable: boolean;
+  reasonKey?: string;
+  origin: string;
+  local: boolean;
+  lookup: boolean;
+  pending: number;
+  retrying: number;
+  failed: number;
+  uncertain: number;
+  succeeded: number;
+  lastError?: ErrorKind;
+  passFailed: boolean;
 }
 
 export interface VoiceView {

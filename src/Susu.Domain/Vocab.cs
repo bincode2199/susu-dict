@@ -47,3 +47,44 @@ public static class VocabCatalog
 
     public static VocabPackage? Find(string instanceId) => All.FirstOrDefault(p => p.InstanceId == instanceId);
 }
+
+/// <summary>
+/// F15.4: whether a vocabulary service instance can take deliveries now. <see cref="ReasonKey"/> is the page's i18n key of the first
+/// thing missing (vocab.reason.*); <see cref="Origin"/> is the exact address it calls.
+/// </summary>
+public sealed record VocabTargetState(bool Enabled, bool Usable, Availability Availability, string? ReasonKey, string Origin);
+
+public static class VocabTargets
+{
+    public const string ReasonDisabled = "vocab.reason.disabled", ReasonMissingKey = "vocab.reason.missingKey", ReasonNotGranted = "vocab.reason.notGranted",
+        ReasonOriginNotLocal = "vocab.reason.originNotLocal";
+
+    /// <summary>The state of <paramref name="instanceId"/> under <paramref name="settings"/>; null when it is not a vocabulary package instance.</summary>
+    /// <remarks>
+    /// AnkiConnect (a <see cref="VocabPackage.Local"/> package): its address is approved by the user typing it into this page, but only a loopback
+    /// address is ever approved without another step, so any other address makes the target unusable (the origin is the user's own AnkiConnect,
+    /// never a remote host). Its key is optional: it counts only when "use an API key" is on. Eudic needs its Authorization value saved and granted.
+    /// </remarks>
+    public static VocabTargetState? Evaluate(AppSettings settings, string instanceId, Func<string, string, bool> hasSecret)
+    {
+        if (VocabCatalog.Find(instanceId) is not { } package) return null;
+        var instance = settings.Instances.FirstOrDefault(i => i.Id == instanceId);
+        if (instance is null || instance.Package != package.PackageId) return null;
+        bool enabled = settings.Services.Any(s => s.Instance == instanceId && s.Capability == Capability.Vocab && s.Enabled);
+        string origin = package.Origin(instance.Config);
+        if (!enabled) return new VocabTargetState(false, false, Availability.Disabled, ReasonDisabled, origin);
+        if (package.Local && !VocabPackage.IsLoopback(origin)) return new VocabTargetState(true, false, Availability.TemporarilyUnavailable, ReasonOriginNotLocal, origin);
+        bool needsKey = !package.Local || (instance.Config.TryGetValue("useApiKey", out var use) && use is "true" or "True");
+        if (needsKey)
+        {
+            var states = CredentialPackages.States(settings, package, instance, hasSecret);
+            if (!states.All(t => t.Saved)) return new VocabTargetState(true, false, Availability.MissingCredential, ReasonMissingKey, origin);
+            if (!states.All(t => t.Granted)) return new VocabTargetState(true, false, Availability.MissingCredential, ReasonNotGranted, origin);
+        }
+        return new VocabTargetState(true, true, Availability.Ready, null, origin);
+    }
+
+    /// <summary>The instance ids of every vocabulary service that is enabled and has what it needs (key saved and granted, a local address), in catalog order.</summary>
+    public static IReadOnlyList<string> Usable(AppSettings settings, Func<string, string, bool> hasSecret)
+        => [.. VocabCatalog.All.Where(p => Evaluate(settings, p.InstanceId, hasSecret) is { Usable: true }).Select(p => p.InstanceId)];
+}

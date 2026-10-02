@@ -481,6 +481,10 @@ public sealed partial class ShellCoordinator
             case UiCommands.TestNetwork: return await TestNetworkAsync(Read(payload, ContractsJson.Default.NetworkTestRequest));
             case UiCommands.SelectSpeech: return SelectSpeech(Read(payload, ContractsJson.Default.SpeechSelectRequest));
             case UiCommands.SaveOcr: return SaveOcr(Read(payload, ContractsJson.Default.OcrSaveRequest));
+            case UiCommands.Collect: return await CollectAsync(kind, Read(payload, ContractsJson.Default.CollectRequest));
+            case UiCommands.VocabExport: return await ExportVocabAsync(Read(payload, ContractsJson.Default.VocabExportCommand));
+            case UiCommands.VocabResolve: return ResolveVocab(Read(payload, ContractsJson.Default.VocabResolveRequest));
+            case UiCommands.VocabSync: return await SyncVocabAsync(Read(payload, ContractsJson.Default.VocabSyncCommand));
             case UiCommands.BeginCapture: return Recapture();
             case UiCommands.StartRecording: return await StartRecordingAsync();
             case UiCommands.PauseRecording: return await PauseRecordingAsync();
@@ -631,6 +635,7 @@ public sealed partial class ShellCoordinator
     private void OnSettingsChanged(SettingsState state)
     {
         Speech?.Cache?.Retain(state.Effective); // F10.3: a changed service config (voice, speed, account) drops its cached audio
+        Vocab?.Kick(); // F15.4: a target that was just enabled or given its key takes its waiting rows at once
         platform.StartTimer(TimeSpan.Zero, () =>
         {
             foreach (var slot in translations.Values) slot.Stale = true;
@@ -1079,6 +1084,14 @@ public sealed partial class ShellCoordinator
                 if (x.Enabled) availability = (states.All(t => t.Saved && t.Granted) ? Availability.Ready : Availability.MissingCredential).ToString();
                 if (backend is not null) implemented = backend.RuntimeAvailable && x.Enabled;
             }
+            else if (x.Capability == Capability.Vocab && VocabCatalog.Find(x.Instance) is { } vocabPackage && instance.Package == vocabPackage.PackageId)
+            {
+                // F15.4 SetVocab: a vocabulary package's key (Eudic always; AnkiConnect only with "use an API key") is granted per package, origin and use like any
+                // wired package's; the AnkiConnect address must be a loopback address (VocabTargets).
+                targets = [.. CredentialPackages.States(s, vocabPackage, instance, config.Secrets.Has).Select(t => new CredentialTargetView(t.Secret, t.Origin, t.Use, t.Saved, t.Granted))];
+                if (VocabTargets.Evaluate(s, x.Instance, config.Secrets.Has) is { Enabled: true } vocabState) availability = vocabState.Availability.ToString();
+                if (backend is not null) implemented = backend.RuntimeAvailable && x.Enabled;
+            }
             else if (backend is not null) implemented = false;
             int order = x.Capability == Capability.Translate ? translationOrder.IndexOf(x.ServiceId) : -1;
             // Local usage counts translated characters; OCR calls are not counted in characters (no OCR usage line yet).
@@ -1100,7 +1113,7 @@ public sealed partial class ShellCoordinator
             new PromptView(s.Prompt.Level, s.Prompt.Profile, [.. s.Prompt.Scope], [.. PromptCatalog.Levels.Select(l => l.Id)], [.. PromptCatalog.AiInstances],
                 [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]),
             new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr), s.Speech.VideoTranslator, VideoTranslatorChoices(s)),
-            OcrSettingsOf(s));
+            OcrSettingsOf(s), ProjectVocab(s));
     }
 
     private static readonly Dictionary<SpeechSlot, string> speechSlotNames = new() { [SpeechSlot.Tts] = "tts", [SpeechSlot.Asr] = "asr", [SpeechSlot.VideoAsr] = "videoAsr" };

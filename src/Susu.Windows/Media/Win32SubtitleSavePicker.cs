@@ -34,7 +34,7 @@ public sealed unsafe partial class Win32SubtitleSavePicker(Func<nint>? owner = n
         nint parent = owner?.Invoke() ?? 0;
         var thread = new Thread(() =>
         {
-            try { done.TrySetResult(Show(parent, suggestedFileName, format)); }
+            try { done.TrySetResult(Show(parent, suggestedFileName, Filter(format), format.ToString().ToLowerInvariant())); }
             catch (Exception e) { done.TrySetException(e); }
         }) { IsBackground = true, Name = "susu-subtitle-save" };
         if (OperatingSystem.IsWindows()) thread.SetApartmentState(ApartmentState.STA);
@@ -42,16 +42,17 @@ public sealed unsafe partial class Win32SubtitleSavePicker(Func<nint>? owner = n
         return done.Task.WaitAsync(cancellationToken);
     }
 
-    private static string? Show(nint parent, string suggested, SubtitleFormat format)
+    private static string Filter(SubtitleFormat format) => format switch
+    {
+        SubtitleFormat.Srt => "SubRip (*.srt)\0*.srt\0",
+        SubtitleFormat.Vtt => "WebVTT (*.vtt)\0*.vtt\0",
+        _ => "Text (*.txt)\0*.txt\0",
+    } + "\0";
+
+    /// <summary>The classic save dialog (also used by the vocabulary export): <paramref name="filter"/> is the double-NUL filter string, <paramref name="ext"/> the default extension.</summary>
+    internal static string? Show(nint parent, string suggested, string filter, string ext)
     {
         const int maxFile = 32768;
-        string ext = format.ToString().ToLowerInvariant();
-        string filter = format switch
-        {
-            SubtitleFormat.Srt => "SubRip (*.srt)\0*.srt\0",
-            SubtitleFormat.Vtt => "WebVTT (*.vtt)\0*.vtt\0",
-            _ => "Text (*.txt)\0*.txt\0",
-        } + "\0";
         nint file = Marshal.AllocHGlobal(maxFile * 2), filterPtr = Marshal.StringToHGlobalUni(filter), title = Marshal.StringToHGlobalUni("Su-Su"), defExt = Marshal.StringToHGlobalUni(ext);
         try
         {

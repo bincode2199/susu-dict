@@ -184,8 +184,33 @@ public sealed class FavoritesRepository(Database db, IClock clock, IFaultPoint? 
     public bool Resolve(string entryId, string targetInstanceId, long entryRevision, bool delivered) => db.Write(w => w.Exec(
         delivered
             ? "UPDATE vocab_deliveries SET state='Succeeded', next_at=0 WHERE entry_id=$e AND target_instance_id=$t AND entry_revision=$r AND state IN ('Uncertain','Failed');"
-            : "UPDATE vocab_deliveries SET state='Pending', attempts=0, next_at=0 WHERE entry_id=$e AND target_instance_id=$t AND entry_revision=$r AND state IN ('Uncertain','Failed');",
+            // "Not delivered" resends with the same operationId, except for an entry the user has since unfavorited: that row is cancelled.
+            : "UPDATE vocab_deliveries SET state=CASE WHEN EXISTS (SELECT 1 FROM vocab_entries v WHERE v.entry_id=vocab_deliveries.entry_id AND v.deleted_at IS NOT NULL) THEN 'Cancelled' ELSE 'Pending' END, attempts=0, next_at=0 WHERE entry_id=$e AND target_instance_id=$t AND entry_revision=$r AND state IN ('Uncertain','Failed');",
         ("$e", entryId), ("$t", targetInstanceId), ("$r", entryRevision)) == 1);
+
+    public IReadOnlyList<VocabDeliveryCount> DeliveryCounts() => db.Read(c =>
+    {
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT target_instance_id, state, count(*) FROM vocab_deliveries GROUP BY target_instance_id, state;";
+        using var r = cmd.ExecuteReader();
+        var list = new List<VocabDeliveryCount>();
+        while (r.Read()) list.Add(new VocabDeliveryCount(r.GetString(0), Enum.Parse<DeliveryState>(r.GetString(1)), r.GetInt32(2)));
+        return list;
+    });
+
+    public IReadOnlyList<VocabDelivery> DeliveriesIn(IReadOnlyCollection<DeliveryState> states, int limit) => states.Count == 0 ? [] : db.Read(c =>
+    {
+        using var cmd = c.CreateCommand();
+        var names = states.Select((s, i) => { cmd.Parameters.AddWithValue($"$s{i}", s.ToString()); return $"$s{i}"; }).ToList();
+        cmd.CommandText = DeliveryColumns + $" WHERE state IN ({string.Join(',', names)}) ORDER BY rowid LIMIT $limit;";
+        cmd.Parameters.AddWithValue("$limit", Math.Max(0, limit));
+        using var r = cmd.ExecuteReader();
+        var list = new List<VocabDelivery>();
+        while (r.Read()) list.Add(Delivery(r));
+        return list;
+    });
+
+    public int ActiveCount() => db.Read(c => Database.Scalar(c, null, "SELECT count(*) FROM vocab_entries WHERE deleted_at IS NULL;") is long n ? (int)n : 0);
 
     public int RecoverInterrupted() => db.Write(w => w.Exec("UPDATE vocab_deliveries SET state='Uncertain' WHERE state='Sending';"));
 }

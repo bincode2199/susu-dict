@@ -185,3 +185,17 @@ public sealed class VocabExporter(Database db, IFavorites favorites, IClock cloc
 
     private static VocabExportResult Fail(string code) => new(false, code, false, null, null, 0, 0, null, []);
 }
+
+/// <summary>F15.4: the SetVocab "export now" over <see cref="VocabExporter"/>: maps the page's format and content choices to the F15.2 options.</summary>
+public sealed class VocabFileExporter(VocabExporter exporter) : IVocabFileExporter
+{
+    public VocabExportOutcome Export(VocabExportRequest request, CancellationToken cancellationToken)
+    {
+        var format = request.Format switch { "txt" => VocabExportFormat.EudicTxt, "csv" => VocabExportFormat.Csv, "apkg" => VocabExportFormat.Apkg, _ => (VocabExportFormat?)null };
+        if (format is null) return new VocabExportOutcome(false, VocabExportErrors.PathInvalid, false, null, 0, 0, []);
+        var content = (request.Definitions ? VocabContent.Definitions : 0) | (request.Phonetics ? VocabContent.Phonetics : 0) | (request.Examples ? VocabContent.Examples : 0);
+        string deck = string.IsNullOrWhiteSpace(request.Deck) ? VocabFormats.DefaultDeck : request.Deck.Trim();
+        var r = exporter.Export(request.Path, new VocabExportOptions(format.Value, content, request.OnlyNew, deck), cancellationToken);
+        return new VocabExportOutcome(r.Ok, r.Error, r.Retryable, r.Ok ? r.Path : null, r.Exported, r.Skipped, r.Issues);
+    }
+}

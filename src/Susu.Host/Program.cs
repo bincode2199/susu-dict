@@ -143,7 +143,7 @@ internal static class MainMode
 
         var usage = new UsageRepository(db, clock);
         // F15.1: local favorites; Sending rows left by a crash become Uncertain, never resent blindly (DATA06).
-        // The card button and sync consumers arrive in F15.2-F15.4.
+        // F15.4: the card star, the sync loop and SetVocab are wired below with the coordinator.
         var favorites = new FavoritesRepository(db, clock);
         favorites.RecoverInterrupted();
         // F15.2: an export interrupted between the file move and the DB commit is resolved by file hash; no second copy is made.
@@ -172,6 +172,7 @@ internal static class MainMode
             Capability.Tts => speechPort is { } port && port.Tts(config.State.Effective, config.State.Effective.Speech.Tts.Instance) is not null,
             Capability.Ocr => translation.Supervisor is { } ocrHost && PluginOcrProviders.Resolve(config.State.Effective, secrets.Has, ocrHost, schemas) is not null,
             Capability.Asr => translation.Supervisor is { } asrHost && PluginAsrProviders.Create(config.State.Effective, SpeechSlot.Asr, secrets.Has, asrHost, schemas) is not null,
+            Capability.Vocab => translation.Supervisor is not null, // F15.4: the vocabulary packages run in the plugin host
             _ => false,
         };
         // F10.1 native SAPI (no plugin host). F10.3: its phase timings are logged (no text), and the engine is warmed once, off the
@@ -249,6 +250,15 @@ internal static class MainMode
         // service, one text per request (an items-capable plugin API is not wired yet). The Transcribe window (F14.4) sets Confirmation.
         var mediaTokens = new MediaTokens();
         coordinator.MediaTokens = mediaTokens;
+        // F15.4: favorites, the vocabulary sync loop and the file export. Favorites and export work without any target or the plugin host; a target is
+        // built from the current settings for each pass, only for services that are enabled and have what they need (key saved and granted, a loopback
+        // AnkiConnect address). The loop runs at start, after every favorite and on a timer; it is stopped (bounded) before the plugin host goes.
+        var vocabService = new VocabService(favorites,
+            new VocabSyncWorker(favorites, id => translation.Supervisor is { } vocabHost ? PluginVocabTargets.Create(config.State.Effective, id, vocabHost, schemas) : null, clock),
+            () => translation.Supervisor is null ? [] : VocabTargets.Usable(config.State.Effective, secrets.Has), clock,
+            new VocabFileExporter(new VocabExporter(db, favorites, clock)));
+        coordinator.Vocab = vocabService;
+        coordinator.VocabSavePicker = new Win32VocabSavePicker();
         coordinator.MediaPicker = new Win32MediaPicker(mediaTokens);
         coordinator.SubtitleSavePicker = new Win32SubtitleSavePicker();
         coordinator.VideoJobs = new VideoJobs(mediaTokens, new MediaFoundationDecoder(), new LeasedFiles(leases),
@@ -275,6 +285,7 @@ internal static class MainMode
 
         if (!tray.Add()) log.Event("tray.add-failed");
         coordinator.Start();
+        vocabService.Start();
         var failed = coordinator.HotkeyResults.Where(r => !r.Value).Select(r => r.Key).ToList();
         if (failed.Count > 0)
             tray.Notify("Su-Su", config.State.Effective.General.UiLanguage == "en" ? "A hotkey could not be registered. Choose another one in Settings." : "有快捷键注册失败，请在设置中更换。");
@@ -295,6 +306,7 @@ internal static class MainMode
 
         coordinator.ReleaseAudio(); // a recording still running (or a minimized one) is discarded and the microphone released (REC02)
         coordinator.VideoJobs?.CancelActive(); // F14.2: a running video job stops its upload and releases its slices
+        vocabService.StopAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult(); // F15.4: a call in flight is cancelled (its row becomes Uncertain, not resent blindly)
         log.Event("app.exit");
         translation.Supervisor?.Dispose(); // bounded: kills the plugin-host child process (ARCHITECTURE 5.2)
         smoke?.Finish();

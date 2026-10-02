@@ -153,6 +153,13 @@ public class UiCommandTests
     [InlineData(WindowKind.Main, UiCommands.SettingsSave, false)]
     [InlineData(WindowKind.Tray, UiCommands.SubmitText, false)]
     [InlineData(WindowKind.Main, "Http.Fetch", false)]
+    [InlineData(WindowKind.Main, UiCommands.Collect, true)]
+    [InlineData(WindowKind.Settings, UiCommands.Collect, false)]
+    [InlineData(WindowKind.Settings, UiCommands.VocabExport, true)]
+    [InlineData(WindowKind.Settings, UiCommands.VocabResolve, true)]
+    [InlineData(WindowKind.Settings, UiCommands.VocabSync, true)]
+    [InlineData(WindowKind.Main, UiCommands.VocabExport, false)]
+    [InlineData(WindowKind.Voice, UiCommands.VocabResolve, false)]
     [InlineData(WindowKind.Settings, null, false)]
     public void Commands_are_whitelisted_per_window(WindowKind window, string? command, bool allowed)
         => Assert.Equal(allowed, UiCommands.IsAllowed(window, command));

@@ -138,7 +138,7 @@ onBeforeUnmount(() => { observer?.disconnect(); mutations?.disconnect(); if (fra
         @retry="bridge.command(UI_COMMANDS.RetryCard, { serviceId: card.serviceId })"
         @copy="(text: string) => bridge.command(UI_COMMANDS.CopyText, { text })"
         @settings="bridge.command(UI_COMMANDS.OpenSettings)"
-        :speech="state.speech" :can-speak="canSpeak" @speak="(phonetic?: number) => speakCard(card.serviceId, phonetic)"
+        :speech="state.speech" :can-speak="canSpeak" :bridge="bridge" @speak="(phonetic?: number) => speakCard(card.serviceId, phonetic)"
         @stop-speech="bridge.command(UI_COMMANDS.SpeechStop, {})" />
     </main>
     <footer class="statusbar" :class="{ offline }">

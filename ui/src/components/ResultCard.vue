@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { CardSnapshot, SpeechStateView } from '@protocol/ui';
+import { UI_COMMANDS, type CardSnapshot, type CollectView, type CommandResult, type SpeechStateView } from '@protocol/ui';
 import Icon from './Icon.vue';
 import { t } from '../locales/i18n';
 import DictionaryEntry from './DictionaryEntry.vue';
@@ -9,7 +9,9 @@ import { entryPlainText } from './dictionary';
 // DESIGN 8: 1 px line, 8 px radius; 38 px header (26 px toggle · name · right status · icon buttons);
 // body indented 38 px. Service text is always rendered as text (mustache), never as HTML (PLAN 4.5.5, S08).
 // F10.2: speech is the one player's state; canSpeak says a pronunciation service can run (the pronunciation feature).
-const props = defineProps<{ card: CardSnapshot; from: string; to: string; speech?: SpeechStateView | null; canSpeak?: boolean }>();
+// F15.4: `bridge` carries the favorite star (Vocab.Collect); without it the star stays unavailable.
+interface Commands { command(name: string, payload?: object): Promise<CommandResult> }
+const props = defineProps<{ card: CardSnapshot; from: string; to: string; speech?: SpeechStateView | null; canSpeak?: boolean; bridge?: Commands }>();
 // `copy` carries the text to copy: the card text, or the entry's plain-text projection on a dictionary card (DICT03).
 // `speak` reads the card (no index) or one dictionary phonetic (its index); `stopSpeech` stops what this card is playing.
 const emit = defineEmits<{ toggle: []; retry: []; copy: [text: string]; settings: []; speak: [phonetic?: number]; stopSpeech: [] }>();
@@ -46,6 +48,34 @@ function readAloud(): void {
   else emit('speak');
 }
 
+// F15.4 favorite star: the host keeps the entry locally (works with no sync target) and queues it to the enabled targets. The star asks the host for the
+// state when the shown entry changes; a host without the vocabulary service answers unavailable and the star stays greyed. Unfavoriting never deletes a remote entry.
+const favorite = ref<{ phase: 'unknown' | 'unavailable' | 'ready' | 'busy'; on: boolean; targets: number; failed: boolean }>({ phase: 'unknown', on: false, targets: 0, failed: false });
+async function askFavorite(): Promise<void> {
+  const bridge = props.bridge;
+  if (!bridge || !entry.value) { favorite.value = { phase: 'unavailable', on: false, targets: 0, failed: false }; return; }
+  const serviceId = props.card.serviceId;
+  const result = await bridge.command(UI_COMMANDS.Collect, { serviceId });
+  if (serviceId !== props.card.serviceId) return;
+  favorite.value = result.ok ? { phase: 'ready', on: (result.value as CollectView).favorited, targets: (result.value as CollectView).targets, failed: false } : { phase: 'unavailable', on: false, targets: 0, failed: false };
+}
+watch(() => [props.card.serviceId, entry.value?.word, props.from, props.bridge], () => { void askFavorite(); }, { immediate: true });
+async function toggleFavorite(): Promise<void> {
+  const bridge = props.bridge;
+  if (!bridge || favorite.value.phase === 'busy' || favorite.value.phase === 'unavailable') return;
+  const was = favorite.value;
+  favorite.value = { ...was, phase: 'busy' };
+  const result = await bridge.command(UI_COMMANDS.Collect, { serviceId: props.card.serviceId, favorite: !was.on });
+  favorite.value = result.ok ? { phase: 'ready', on: (result.value as CollectView).favorited, targets: (result.value as CollectView).targets, failed: false } : { ...was, phase: 'ready', failed: true };
+}
+const favoriteTitle = computed(() => {
+  const f = favorite.value;
+  if (f.phase === 'unavailable' || f.phase === 'unknown') return t('card.needsVocab');
+  if (f.failed) return t('card.favoriteFailed');
+  if (!f.on) return t('card.favorite');
+  return f.targets > 0 ? t('card.favorited') : t('card.favoritedLocal');
+});
+
 function copy(): void {
   emit('copy', entry.value ? entryPlainText(entry.value) : props.card.text);
   copied.value = true;
@@ -69,7 +99,10 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
           <Icon :name="reading ? 'stop' : 'audio'" />
         </button>
         <button type="button" class="icon-btn" data-action="copy" :aria-label="t('card.copy')" :title="t('card.copy')" @click="copy"><Icon name="copy" /></button>
-        <button v-if="entry" type="button" class="icon-btn unavailable" data-action="favorite" disabled :aria-label="t('card.favorite')" :title="t('card.needsVocab')"><Icon name="star" /></button>
+        <button v-if="entry" type="button" class="icon-btn" :class="{ unavailable: favorite.phase !== 'ready', favorited: favorite.on, failed: favorite.failed }" data-action="favorite"
+          :disabled="favorite.phase === 'unavailable' || favorite.phase === 'unknown'" :aria-pressed="favorite.on" :aria-busy="favorite.phase === 'busy'" :aria-label="t('card.favorite')" :title="favoriteTitle" @click="toggleFavorite">
+          <Icon name="star" />
+        </button>
       </div>
     </header>
     <div v-if="!collapsed" class="body">
@@ -96,6 +129,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .actions { display: flex; gap: 2px; }
 .unavailable:disabled { opacity: 0.45; cursor: default; }
 .reading { color: var(--ink); }
+.favorited { color: var(--accent, var(--ink)); }
+.failed { color: var(--error); }
 .body { padding: 0 14px 12px 38px; }
 .text { margin: 0; font-size: 14.5px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; }
 .error { margin: 0; font-size: 12px; color: var(--error); display: flex; gap: 10px; align-items: baseline; }

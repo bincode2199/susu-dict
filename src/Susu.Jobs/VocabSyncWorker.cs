@@ -20,7 +20,7 @@ public sealed record VocabSyncPolicy(int MaxAttempts = 6, TimeSpan? BaseDelay = 
 }
 
 /// <summary>What one pass over one target did. <see cref="Error"/> is set when the pass itself failed (a target that threw never stops the others).</summary>
-public sealed record VocabSyncReport(string Target, int Succeeded = 0, int Confirmed = 0, int Retrying = 0, int Failed = 0, int Uncertain = 0, string? Error = null);
+public sealed record VocabSyncReport(string Target, int Succeeded = 0, int Confirmed = 0, int Retrying = 0, int Failed = 0, int Uncertain = 0, string? Error = null, ErrorKind? LastError = null);
 
 /// <summary>
 /// F15.3: the host consumer of the F15.1 outbox. Per target it first settles Uncertain rows by lookup when the package supports one
@@ -127,14 +127,14 @@ public sealed class VocabSyncWorker(IFavorites favorites, Func<string, IVocabSyn
                 if (row.Attempts >= rules.MaxAttempts)
                 {
                     Done(DeliveryState.Failed);
-                    return (report with { Failed = report.Failed + 1 }, true);
+                    return (report with { Failed = report.Failed + 1, LastError = retry.Error.Kind }, true);
                 }
                 Done(DeliveryState.RetryWait, after: rules.Backoff(row.Attempts, retry.Error.RetryAfter));
-                return (report with { Retrying = report.Retrying + 1 }, true);
+                return (report with { Retrying = report.Retrying + 1, LastError = retry.Error.Kind }, true);
             case VocabSyncOutcome.Failure failure:
                 Done(DeliveryState.Failed);
                 // The account or key is wrong for every row of this target: do not fail the rest one by one.
-                return (report with { Failed = report.Failed + 1 }, failure.Error.Kind is ErrorKind.Auth or ErrorKind.Quota);
+                return (report with { Failed = report.Failed + 1, LastError = failure.Error.Kind }, failure.Error.Kind is ErrorKind.Auth or ErrorKind.Quota);
             default: // Absent for a write is a protocol error of the target
                 Done(DeliveryState.Uncertain);
                 return (report with { Uncertain = report.Uncertain + 1 }, true);

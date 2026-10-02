@@ -15,6 +15,9 @@ public sealed record VocabEntrySnapshot(string EntryId, string Lang, string Disp
 /// <summary>One per-target outbox row for (entry, entryRevision, target).</summary>
 public sealed record VocabDelivery(string EntryId, string TargetInstanceId, long EntryRevision, string OperationId, DeliveryState State, string? RemoteId, int Attempts, long NextAtMs);
 
+/// <summary>Number of outbox rows of one target in one state (F15.4 status).</summary>
+public sealed record VocabDeliveryCount(string TargetInstanceId, DeliveryState State, int Count);
+
 /// <summary>
 /// Local favorites (ARCHITECTURE 8.2/8.3). Works with no network and no sync target: an empty target list stores the
 /// entry only. Entry write and outbox rows commit in one transaction. Unfavorite marks the entry deleted and cancels
@@ -38,6 +41,30 @@ public interface IFavorites
     VocabDelivery? ClaimUncertain(string targetInstanceId);
     /// <summary>F15.3 manual check: an Uncertain or Failed row becomes Succeeded (the user confirms it is on the remote) or Pending (resend, same operationId, attempts reset).</summary>
     bool Resolve(string entryId, string targetInstanceId, long entryRevision, bool delivered);
+    /// <summary>F15.4: outbox rows per target and state (one grouped query; no entry is read).</summary>
+    IReadOnlyList<VocabDeliveryCount> DeliveryCounts();
+    /// <summary>F15.4: outbox rows in the given states, oldest first, at most <paramref name="limit"/> (the manual-check list).</summary>
+    IReadOnlyList<VocabDelivery> DeliveriesIn(IReadOnlyCollection<DeliveryState> states, int limit);
+    /// <summary>F15.4: number of entries that are currently favorites.</summary>
+    int ActiveCount();
     /// <summary>At start-up: Sending rows become Uncertain (never blindly resent). Returns the count.</summary>
     int RecoverInterrupted();
+}
+
+/// <summary>F15.4: what the SetVocab "export now" asks of the exporter. <see cref="Format"/>: txt, csv or apkg.</summary>
+public sealed record VocabExportRequest(string Format, string Path, bool Definitions, bool Phonetics, bool Examples, bool OnlyNew, string Deck);
+
+/// <summary>Outcome of an export; <see cref="Path"/> is set only when a file was written, <see cref="Error"/> is an error code (export.*).</summary>
+public sealed record VocabExportOutcome(bool Ok, string? Error, bool Retryable, string? Path, int Exported, int Skipped, IReadOnlyList<string> Issues);
+
+/// <summary>The file exporters (Eudic txt, CSV, Anki apkg) as the shell sees them (implemented over the F15.2 exporter in storage).</summary>
+public interface IVocabFileExporter
+{
+    VocabExportOutcome Export(VocabExportRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>The save-file dialog for a vocabulary export: the chosen path, or null when the user cancelled.</summary>
+public interface IVocabSavePicker
+{
+    Task<string?> PickAsync(string suggestedFileName, string format, CancellationToken cancellationToken);
 }

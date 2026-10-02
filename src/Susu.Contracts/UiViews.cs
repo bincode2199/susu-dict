@@ -170,7 +170,8 @@ public sealed record SettingsView(
     AccountView[] Accounts,
     PromptView? Prompt = null,
     SpeechView? Speech = null,
-    OcrSettingsView? Ocr = null);
+    OcrSettingsView? Ocr = null,
+    VocabSettingsView? Vocab = null);
 
 [TsExport("ui")]
 public sealed record SettingsIssueView(string Path, string Code, string Message, int Line);
@@ -386,3 +387,56 @@ public sealed record OcrChoiceView(string InstanceId, string ServiceId, bool Ena
 /// <summary>Settings.SaveOcr: the SetOcr fields only (service, auto-translate, keep screenshots, retention days).</summary>
 [TsExport("ui")]
 public sealed record OcrSaveRequest(long ExpectedRevision, string ExpectedFileHash, string Service, bool AutoTranslate, bool KeepScreenshots, int RetentionDays);
+
+// ---- F15.4 vocabulary: the card star and the SetVocab page ----
+
+/// <summary>
+/// Vocab.Collect from a result window: <see cref="Favorite"/> true favorites the shown dictionary entry of the card, false unfavorites it
+/// (a local change only; nothing is deleted on a remote), null only asks the state. The host builds the saved content from the entry it shows;
+/// the page sends the card id, never text.
+/// </summary>
+[TsExport("ui")]
+public sealed record CollectRequest(string ServiceId, bool? Favorite = null);
+
+/// <summary>Value of Vocab.Collect: whether the entry is a favorite now, and to how many sync targets it was queued (0: saved on this computer only).</summary>
+[TsExport("ui")]
+public sealed record CollectView(bool Favorited, int Targets);
+
+/// <summary>
+/// SetVocab (F15.4). Favorites: entries kept on this computer. Targets: every vocabulary service (AnkiConnect, Eudic) with its state and outbox counts.
+/// Rows: Uncertain and Failed deliveries for the manual check. Export: the last file export of this run. Exporting needs a save dialog:
+/// CanExport says whether this build has one. UnfavoriteKeepsRemote is always true (unfavorite never deletes a remote entry).
+/// </summary>
+[TsExport("ui")]
+public sealed record VocabSettingsView(int Favorites, VocabTargetView[] Targets, VocabRowView[] Rows, VocabExportView? Export, bool CanExport);
+
+/// <summary>
+/// One vocabulary service. Usable: it can take deliveries now; ReasonKey (vocab.reason.*) says what is missing otherwise. Origin: the exact address it calls.
+/// Counts are outbox rows. LastError: the last failure kind of a pass (until a pass delivers something); PassFailed: the last pass itself broke.
+/// Lookup: it can confirm an uncertain write by itself; without it Uncertain rows wait for the manual check.
+/// </summary>
+[TsExport("ui")]
+public sealed record VocabTargetView(string InstanceId, bool Enabled, string Availability, bool Usable, string? ReasonKey, string Origin, bool Local, bool Lookup,
+    int Pending, int Retrying, int Failed, int Uncertain, int Succeeded, ErrorKind? LastError, bool PassFailed);
+
+/// <summary>An outbox row that needs the user. State: Uncertain | Failed.</summary>
+[TsExport("ui")]
+public sealed record VocabRowView(string EntryId, string Word, string Target, long Revision, string State, int Attempts);
+
+/// <summary>The last export: Path when saved, Error (export.*) otherwise. Exported entries written, Skipped left out by "only new", Issues the cleaning notes.</summary>
+[TsExport("ui")]
+public sealed record VocabExportView(string Format, string? Path, string? Error, bool Retryable, int Exported, int Skipped, string[] Issues);
+
+/// <summary>Vocab.Export: Format txt | csv | apkg. Definitions/Phonetics/Examples are the content columns or fields; Deck names the apkg deck.</summary>
+[TsExport("ui")]
+public sealed record VocabExportCommand(string Format, bool Definitions, bool Phonetics, bool Examples, bool OnlyNew, string? Deck = null);
+
+/// <summary>
+/// Vocab.Resolve: Delivered true marks the row delivered (the user saw the word on the target), false sends it again with the same operationId.
+/// Vocab.Sync (VocabSyncCommand): Action sync (a pass now) | retryFailed (all Failed rows of Target again) | queueExisting (favorites that predate Target).
+/// </summary>
+[TsExport("ui")]
+public sealed record VocabResolveRequest(string EntryId, string Target, long Revision, bool Delivered);
+
+[TsExport("ui")]
+public sealed record VocabSyncCommand(string Action, string? Target = null);

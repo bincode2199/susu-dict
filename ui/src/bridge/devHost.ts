@@ -148,6 +148,17 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     });
     return inserted ? out : `${out}\n\n${text}`;
   };
+  // F15.4 fixture state: the favorited card ids, the rows to check and the last export (dev preview only).
+  const favorited = new Set<string>();
+  let vocabRows: NonNullable<SettingsView['vocab']>['rows'] = [{ entryId: 'e1', word: 'serendipity', target: 'eudic', revision: 1, state: 'Uncertain', attempts: 1 }];
+  let vocabExport: NonNullable<SettingsView['vocab']>['export'];
+  const vocabView = (): NonNullable<SettingsView['vocab']> => ({
+    favorites: 3 + favorited.size, canExport: true, rows: vocabRows, export: vocabExport,
+    targets: [
+      { instanceId: 'ankiconnect', enabled: true, availability: 'Ready', usable: true, origin: 'http://127.0.0.1:8765', local: true, lookup: true, pending: 0, retrying: 0, failed: 1, uncertain: 0, succeeded: 2, lastError: 'network', passFailed: false },
+      { instanceId: 'eudic', enabled: false, availability: 'Disabled', usable: false, reasonKey: 'vocab.reason.disabled', origin: 'https://api.frdic.com', local: false, lookup: true, pending: 0, retrying: 0, failed: 0, uncertain: 1, succeeded: 0, passFailed: false },
+    ],
+  });
   // F11.3 fixture: SetOcr fields and a recognized OCR window (dev preview only; nothing is captured or sent).
   const ocrSettings = { service: 'tencent-ocr', autoTranslate: true, keepScreenshots: false, retentionDays: 7 };
   const ocrView = {
@@ -170,6 +181,9 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     settings.services.push(...(['tencent-ocr/ocr', 'simple-latex/ocr'] as const).map((id, i) => ({ ...service(id, i === 0 ? ['secretId', 'secretKey'] : ['apiKey']), capability: 'ocr', page: 'ocr', enabled: i === 0, availability: i === 0 ? 'MissingCredential' : 'Disabled', order: -1 })));
     settings.ocr = { ...ocrSettings, minRetentionDays: 1, maxRetentionDays: 365, hotkey: 'Alt+S', ready: false, reasonKey: 'feature.noService.ocr',
       choices: ['tencent-ocr', 'simple-latex'].map((id) => ({ instanceId: id, serviceId: `${id}/ocr`, enabled: id === 'tencent-ocr', availability: id === 'tencent-ocr' ? 'MissingCredential' : 'Disabled', usable: false })) };
+    // F15.4 fixture: SetVocab with one enabled-looking target and one row to check (dev preview only; nothing is sent or written).
+    settings.services.push(...(['ankiconnect/vocab', 'eudic/vocab'] as const).map((id) => ({ ...service(id, ['apiKey']), capability: 'vocab', page: 'vocab', enabled: id.startsWith('anki'), availability: id.startsWith('anki') ? 'Ready' : 'Disabled', order: -1 })));
+    settings.vocab = vocabView();
     return structuredClone(settings);
   };
 
@@ -301,6 +315,24 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         ok(project());
         return;
       }
+      case 'Vocab.Collect': {
+        const id = String(payload?.serviceId);
+        if (payload?.favorite === true) favorited.add(id);
+        else if (payload?.favorite === false) favorited.delete(id);
+        ok({ favorited: favorited.has(id), targets: 1 });
+        return;
+      }
+      case 'Vocab.Export':
+        vocabExport = { format: String(payload?.format), path: `C:\\Users\\you\\Documents\\su-su-vocabulary.${String(payload?.format)}`, retryable: false, exported: 3, skipped: 0, issues: [] };
+        ok(project());
+        return;
+      case 'Vocab.Resolve':
+        vocabRows = vocabRows.filter((r) => !(r.entryId === payload?.entryId && r.target === payload?.target));
+        ok(project());
+        return;
+      case 'Vocab.Sync':
+        ok(project());
+        return;
       case 'Audio.StartRecording':
       case 'Audio.PauseRecording':
       case 'Audio.StopRecording':
