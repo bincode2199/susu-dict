@@ -155,7 +155,24 @@ internal static class MainMode
         {
             [BuiltInCatalog.NativeTts] = SapiTtsProvider.Schema,
         };
-        var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log, ReleaseAfter(mode) ?? TimeSpan.FromMinutes(10), schemas);
+        // F16.1/F16.2: plugin installation. User packages live in the roaming plugins folder; the host keyring is empty until the release build embeds
+        // the offline root (F18), so no package counts as host-signed yet and a built-in id cannot be overridden. The sandboxed host may read the
+        // packages folder (HostSession.Options.ExtraReadRoots), so the post-switch health check is a real sandbox load once the plugin host exists.
+        var hostControl = new LateHostControl();
+        Func<HostSession.Options>? probeOptions = null;
+        var kv = new PluginKvRepository(db);
+        var pluginInstaller = new Susu.Plugins.Install.PluginInstaller(paths.UserPlugins, new PluginInstallationRepository(db),
+            Susu.Plugins.Install.BuiltInPackages.FromDirectory(Path.Combine(exeFolder, "plugins")), Susu.Plugins.Install.HostKeyring.Empty,
+            health: request => probeOptions is { } options ? Susu.Plugins.Install.PluginLoadProbe.Create(options)(request) : Susu.Plugins.Install.PluginInstaller.Structural(request),
+            host: hostControl, removeData: id => kv.DeletePackage(id));
+        try { pluginInstaller.Recover(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) { log.Event("plugin.recover-failed", ("code", e.GetType().Name)); }
+        var translation = BuildTranslationRuntime(exeFolder, settings, secrets, config, leases, clock, log, ReleaseAfter(mode) ?? TimeSpan.FromMinutes(10), schemas, pluginInstaller, kv);
+        if (translation.Supervisor is { } pluginSupervisor)
+        {
+            hostControl.Target = new Susu.Plugins.Install.PluginHostController<HostSession>(pluginSupervisor, diagnostic: text => log.Event("plugin-host.control", ("text", text)));
+            probeOptions = translation.ProbeOptions;
+        }
         Func<AppSettings, TranslationSession?> sessions = s =>
         {
             var providers = translation.Providers(s);
@@ -259,14 +276,8 @@ internal static class MainMode
             new VocabFileExporter(new VocabExporter(db, favorites, clock)));
         coordinator.Vocab = vocabService;
         coordinator.VocabSavePicker = new Win32VocabSavePicker();
-        // F16.1: plugin installation from the Settings window. User packages live in the roaming plugins folder; the host keyring is empty until the
-        // release build embeds the offline root (F18), so no package counts as host-signed yet and a built-in id cannot be overridden. The sandbox
-        // cannot read the roaming folder yet either (its ACL covers the program folder only), so the post-switch health check is structural here.
-        var pluginInstaller = new Susu.Plugins.Install.PluginInstaller(paths.UserPlugins, new PluginInstallationRepository(db),
-            Susu.Plugins.Install.BuiltInPackages.FromDirectory(Path.Combine(exeFolder, "plugins")), Susu.Plugins.Install.HostKeyring.Empty);
-        try { pluginInstaller.Recover(); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) { log.Event("plugin.recover-failed", ("code", e.GetType().Name)); }
         coordinator.PluginInstaller = pluginInstaller;
+        coordinator.PluginUpdates = new Susu.Plugins.Install.PluginUpdateService(pluginInstaller, source: null, Path.Combine(paths.UserPlugins, ".downloads")); // no update feed is specified yet (DEV-PLAN F16.2): no source, so the page offers no check
         coordinator.PluginPicker = new Win32PluginPackagePicker();
         coordinator.MediaPicker = new Win32MediaPicker(mediaTokens);
         coordinator.SubtitleSavePicker = new Win32SubtitleSavePicker();
@@ -317,6 +328,7 @@ internal static class MainMode
         coordinator.VideoJobs?.CancelActive(); // F14.2: a running video job stops its upload and releases its slices
         vocabService.StopAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult(); // F15.4: a call in flight is cancelled (its row becomes Uncertain, not resent blindly)
         log.Event("app.exit");
+        (hostControl.Target as IDisposable)?.Dispose();
         translation.Supervisor?.Dispose(); // bounded: kills the plugin-host child process (ARCHITECTURE 5.2)
         smoke?.Finish();
 #if DEV_PREVIEW
@@ -334,9 +346,17 @@ internal static class MainMode
         => mode.SmokeReport is not null ? TimeSpan.FromSeconds(2)
         : Program.DevelopmentBuild && mode.ReleaseAfterSeconds is int seconds ? TimeSpan.FromSeconds(seconds) : null;
 
+    /// <summary>The plugin-host controller exists only after the translation runtime is built, which itself needs the installer: this forwards to it once it is set.</summary>
+    private sealed class LateHostControl : IPluginHostControl
+    {
+        public IPluginHostControl? Target { get; set; }
+        public IReadOnlyList<PluginTaskInfo> InFlight(string packageId) => Target?.InFlight(packageId) ?? [];
+        public int Restart(string packageId) => Target?.Restart(packageId) ?? 0;
+    }
+
     /// <summary>Providers are built from the settings each call (F06.3a), so service changes need no restart.</summary>
     private sealed record TranslationRuntime(Supervisor<HostSession>? Supervisor, Func<AppSettings, IReadOnlyList<ITranslationProvider>> Providers,
-        Func<AppSettings, string, ITranslationProvider?> ValidationProvider, NetworkBrokerProvider? Network = null);
+        Func<AppSettings, string, ITranslationProvider?> ValidationProvider, NetworkBrokerProvider? Network = null, Func<HostSession.Options>? ProbeOptions = null);
 
     /// <summary>
     /// F06.1/F06.3a composition root: the real F04/F05 plugin runtime (NetworkBrokerProvider, Supervisor
@@ -359,7 +379,7 @@ internal static class MainMode
     /// F03 uses for the WebView (10 minutes in production; shortened for --smoke/--release-after-seconds).
     /// </summary>
     private static TranslationRuntime BuildTranslationRuntime(string exeFolder, SettingsStore settings, SecretStore secrets, ConfigService config, FileLeases leases, IClock clock, RedactingLog log, TimeSpan idleTimeout,
-        IReadOnlyDictionary<string, IReadOnlyList<ConfigField>> schemas)
+        IReadOnlyDictionary<string, IReadOnlyList<ConfigField>> schemas, Susu.Plugins.Install.PluginInstaller installer, PluginKvRepository kv)
     {
         try
         {
@@ -367,14 +387,17 @@ internal static class MainMode
             var accountAuthorization = new AccountAuthorization(() => (config.State.Effective.Accounts, config.State.Effective.Instances));
             string executable = Environment.ProcessPath ?? Path.Combine(exeFolder, "susu.exe");
             var hostOptions = new HostSession.Options(executable, exeFolder, "quickjs",
-                MakeBroker: () => new Broker(networkBrokerProvider, leases, secrets, accountAuthorization));
+                MakeBroker: () => new Broker(networkBrokerProvider, leases, secrets, accountAuthorization) { PluginKv = kv });
+            // F16.2: the installed-plugin folder is readable by the sandbox once it exists; each launch asks again so a first install is picked up.
+            HostSession.Options Options() => hostOptions with { ExtraReadRoots = Directory.Exists(installer.PackagesFolder) ? [installer.PackagesFolder] : null };
             var supervisor = new Supervisor<HostSession>(
-                () => PluginTranslationProviders.LoadAll(HostSession.Start(hostOptions), (package, _) => log.Event("plugin.load-failed", ("package", package))),
+                () => PluginTranslationProviders.LoadAll(HostSession.Start(Options()), (package, _) => log.Event("plugin.load-failed", ("package", package)),
+                    installer.ActiveDirectory, installer.ActivePackages),
                 clock, idleTimeout);
             supervisor.RestartFailed += error => log.Event("plugin-host.restart-failed", ("code", error.GetType().Name));
             supervisor.Stalled += () => log.Event("plugin-host.stalled");
             return new TranslationRuntime(supervisor, settings => PluginTranslationProviders.Build(settings, secrets.Has, supervisor, schemas),
-                (settings, serviceId) => PluginTranslationProviders.ForValidation(settings, serviceId, supervisor, schemas), networkBrokerProvider);
+                (settings, serviceId) => PluginTranslationProviders.ForValidation(settings, serviceId, supervisor, schemas), networkBrokerProvider, () => hostOptions with { ExtraReadRoots = [installer.PackagesFolder] });
         }
         catch (Exception error)
         {

@@ -165,22 +165,38 @@ public sealed class PluginInstallTests : IDisposable
         Assert.Equal(["https://a.example.com:443"], diff.RemovedOrigins);
         Assert.Equal(["token"], diff.AddedSecrets);
         Assert.True(diff.HasAdditions);
-        Assert.True(installer.Install(preview.Token!).Ok);
+        Assert.Equal(["permissions-expanded"], preview.Reasons);
+        Assert.Equal("install.needsConfirmation", installer.Install(preview.Token!).Error); // held: the old version keeps running until acknowledged
+        Assert.Equal("1.0.0", Assert.Single(installer.Installed()).Version);
+        Assert.True(installer.Install(preview.Token!, acknowledged: true).Ok);
         Assert.Equal("1.1.0", Assert.Single(installer.Installed()).Version);
         // The replaced version stays until a later install prunes it (rollback material); the active row is the new one.
         Assert.True(Directory.Exists(Path.Combine(userRoot, "packages", "com.example.echo", "1.0.0")));
     }
 
-    [Fact]
-    public void A_signed_package_cannot_be_replaced_by_another_signer_or_an_unsigned_one_and_versions_must_increase()
+    [Fact] // UPD03: a signer change or a dropped signature is held for explicit acknowledgement (not refused, not silent); versions must still increase
+    public void A_signer_change_or_dropped_signature_is_held_until_acknowledged_and_versions_must_increase()
     {
         var installer = Installer();
         Assert.True(installer.Install(installer.Preview(Basic(seed: PackageFactory.SeedB)).Token!).Ok);
-        Assert.Contains(installer.Preview(Basic(version: "1.1.0", seed: PackageFactory.SeedA, keyId: PackageFactory.ThirdPartyKeyId(PackageFactory.SeedA))).Issues, i => i.Code == "signer-changed");
-        Assert.Contains(installer.Preview(Basic(version: "1.1.0")).Issues, i => i.Code == "signature-removed");
+        var otherSigner = installer.Preview(Basic(version: "1.1.0", seed: PackageFactory.SeedA, keyId: PackageFactory.ThirdPartyKeyId(PackageFactory.SeedA)));
+        Assert.True(otherSigner.Ok);
+        Assert.Contains("signer-changed", otherSigner.Reasons);
+        var unsigned = installer.Preview(Basic(version: "1.1.0"));
+        Assert.True(unsigned.Ok);
+        Assert.Contains("signature-removed", unsigned.Reasons);
         Assert.Contains(installer.Preview(Basic(version: "1.0.0", seed: PackageFactory.SeedB)).Issues, i => i.Code == "not-newer");
         Assert.Contains(installer.Preview(Basic(version: "0.9.0", seed: PackageFactory.SeedB)).Issues, i => i.Code == "not-newer");
-        Assert.True(installer.Preview(Basic(version: "1.0.1", seed: PackageFactory.SeedB)).Ok);
+        var same = installer.Preview(Basic(version: "1.0.1", seed: PackageFactory.SeedB));
+        Assert.True(same.Ok);
+        Assert.Empty(same.Reasons);
+
+        // unsigned (the last preview replaced nothing: only the newest manual preview is pending) -> hold, then acknowledge applies it
+        var again = installer.Preview(Basic(version: "1.1.0"));
+        Assert.Equal("install.needsConfirmation", installer.Install(again.Token!).Error);
+        Assert.Equal(PackageFactory.ThirdPartyKeyId(PackageFactory.SeedB), PackageIdentity.FromKey(store.Active("com.example.echo")!.Signer).Signer);
+        Assert.True(installer.Install(again.Token!, acknowledged: true).Ok);
+        Assert.Equal("1.1.0", store.Active("com.example.echo")!.Version);
     }
 
     // ---------- UPD02: built-in override ----------
@@ -205,7 +221,7 @@ public sealed class PluginInstallTests : IDisposable
         Assert.Equal("1.2.0", preview.OverridesBuiltIn);
         Assert.Equal(["https://extra.example.com:443"], preview.Diff.AddedOrigins);
         Assert.Equal("host", preview.SignerKind);
-        Assert.True(installer.Install(preview.Token!).Ok);
+        Assert.True(installer.Install(preview.Token!, acknowledged: true).Ok);
         var listed = Assert.Single(installer.Installed());
         Assert.Equal("1.2.0", listed.OverridesBuiltIn);
         Assert.NotNull(installer.ActiveDirectory(id));
