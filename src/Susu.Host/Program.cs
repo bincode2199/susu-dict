@@ -146,6 +146,8 @@ internal static class MainMode
         // The card button and sync consumers arrive in F15.2-F15.4.
         var favorites = new FavoritesRepository(db, clock);
         favorites.RecoverInterrupted();
+        // F15.2: an export interrupted between the file move and the DB commit is resolved by file hash; no second copy is made.
+        foreach (var r in new VocabExporter(db, favorites, clock).Recover()) log.Event("vocab.export-recovered", ("exportId", r.ExportId), ("recovered", r.Recovered.ToString()));
         // F07.2: settings controls come from each package's manifest schema; F07.3: the same schema gates model
         // parameters (temperature) on every plugin call.
         // F10.1: the native SAPI instance has no manifest; its voice/speed controls come from its built-in schema.

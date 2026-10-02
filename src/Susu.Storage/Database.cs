@@ -21,10 +21,10 @@ public sealed class DatabaseVersionException(int found, int supported, string? c
 /// </summary>
 public sealed class Database : IDisposable
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
     private const int BusyTimeoutMs = 5000;
 
-    /// <summary>Forward-only migrations. Version 2 (F15.1) adds the vocabulary tables.</summary>
+    /// <summary>Forward-only migrations. Version 2 (F15.1) adds the vocabulary tables; version 3 (F15.2) adds the export target path for recovery.</summary>
     public static readonly IReadOnlyDictionary<int, string> Migrations = new Dictionary<int, string>
     {
         [1] = """
@@ -54,6 +54,7 @@ public sealed class Database : IDisposable
             CREATE TABLE vocab_export_items (export_id TEXT NOT NULL REFERENCES vocab_exports(export_id) ON DELETE CASCADE, entry_id TEXT NOT NULL,
                 entry_revision INTEGER NOT NULL, PRIMARY KEY (export_id, entry_id, entry_revision));
             """,
+        [3] = "ALTER TABLE vocab_exports ADD COLUMN path TEXT;",
     };
 
     private readonly string connectionString;

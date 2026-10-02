@@ -514,29 +514,29 @@ public class DatabaseTests
     public async Task Failed_migration_and_rollback_to_an_older_app()
     {
         using var root = new TempRoot();
-        var migrations = new Dictionary<int, string>(Database.Migrations) { [3] = "CREATE TABLE f99_probe (id TEXT PRIMARY KEY);" };
+        var migrations = new Dictionary<int, string>(Database.Migrations) { [4] = "CREATE TABLE f99_probe (id TEXT PRIMARY KEY);" };
         using (var v1 = Database.Open(root.Paths.Database)) { new WindowStateRepository(v1).Save(new WindowPlacement("main", "m", 1, 2, 96)); await v1.FlushAsync(); }
 
-        Assert.Throws<SimulatedCrash>(() => Database.Open(root.Paths.Database, new FaultAt("migrate:3"), 3, migrations));
+        Assert.Throws<SimulatedCrash>(() => Database.Open(root.Paths.Database, new FaultAt("migrate:4"), 4, migrations));
         using (var still = Database.Open(root.Paths.Database))
         {
-            Assert.Equal(2, still.Version);
+            Assert.Equal(3, still.Version);
             Assert.Equal(0L, still.Read(c => Database.Scalar(c, null, "SELECT count(*) FROM sqlite_master WHERE name='f99_probe';")));
             Assert.NotNull(new WindowStateRepository(still).Get("main"));
         }
 
-        using (var v2 = Database.Open(root.Paths.Database, null, 3, migrations))
+        using (var v2 = Database.Open(root.Paths.Database, null, 4, migrations))
         {
-            Assert.Equal(Database.BackupPath(root.Paths.Database, 2), v2.MigrationBackup);
+            Assert.Equal(Database.BackupPath(root.Paths.Database, 3), v2.MigrationBackup);
             new WindowStateRepository(v2).Save(new WindowPlacement("main", "m", 9, 9, 96));
             await v2.FlushAsync();
         }
         var refused = Assert.Throws<DatabaseVersionException>(() => Database.Open(root.Paths.Database));
-        Assert.Equal((3, 2), (refused.Found, refused.Supported));
+        Assert.Equal((4, 3), (refused.Found, refused.Supported));
         Assert.NotNull(refused.CompatibleBackup);
         Database.RestoreBackup(refused.CompatibleBackup!, root.Paths.Database);
         using var old = Database.Open(root.Paths.Database);
-        Assert.Equal(2, old.Version);
+        Assert.Equal(3, old.Version);
         Assert.Equal(1, new WindowStateRepository(old).Get("main")!.X); // data matching the program version
     }
 

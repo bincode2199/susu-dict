@@ -214,7 +214,7 @@ flowchart LR
 ### F15 · 收藏、导出和同步
 
 - [x] F15.1 卡片收藏/取消、本地 entries 和分目标 outbox 事务、内容 revision 与去重；无 API 也可收藏导出。
-- [ ] F15.2 欧路 txt/CSV/apkg 三生成器，共用快照、文件事务、恢复记录；在指定 Anki 版本实际导入校验。
+- [x] F15.2 欧路 txt/CSV/apkg 三生成器，共用快照、文件事务、恢复记录；在指定 Anki 版本实际导入校验。
 - [ ] F15.3 P-V01/P-V02、options 牌组/生词本、operationId、lookup/upsert、Uncertain 人工核对与可重试边界；重启不盲目重发。
 - [ ] F15.4 SetVocab 的出口/字段/目标配置与状态；不新造独立生词管理窗口，不默认删除远端词条。
 
