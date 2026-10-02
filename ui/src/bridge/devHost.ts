@@ -160,6 +160,15 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
   let pluginUpdates: NonNullable<PluginsFixture['updates']> = [];
   let pluginCheck: PluginsFixture['check'];
   const pluginsView = (): PluginsFixture => ({ installed: pluginInstalled, pending: pluginPending, last: pluginLast, canPick: true, updates: pluginUpdates, canCheckUpdates: true, check: pluginCheck });
+  // F17.1 fixture: a backup flow with no real file (dev preview only; nothing is written or restored).
+  type BackupFixture = NonNullable<SettingsView['backup']>;
+  let backupStep: BackupFixture['step'] = 'idle';
+  let backupLast: BackupFixture['last'];
+  let backupScheduled = false;
+  const backupPreview = (): NonNullable<BackupFixture['preview']> => ({ token: 'dev-backup', created: '2026-01-01T00:00:00.0000000Z', appVersion: '1.0.0', encrypted: true, includesSecrets: false, schemaOlder: false,
+    deltas: [{ area: 'settings', current: 0, backup: 0, differs: true }, { area: 'accounts', current: 1, backup: 2, differs: true }, { area: 'instances', current: 23, backup: 23, differs: false }, { area: 'enabledServices', current: 3, backup: 4, differs: true }, { area: 'prompts', current: 0, backup: 1, differs: true }],
+    plugins: [{ id: 'dev.sample', backupVersion: '1.0.0', status: 'missing' }], missingPackages: ['dev.sample'], disabledInstances: ['sample'], accounts: [{ id: 'acct-deepl', label: 'DeepL', missingSecrets: ['apiKey'] }], backupSecrets: 0, keysRemoved: 1, keptFavorites: 12, keptOutbox: 2, conflicts: ['plugins-missing', 'accounts-need-authorization'] });
+  const backupView = (): BackupFixture => ({ canExport: true, canImport: true, step: backupStep, fileName: backupStep === 'idle' ? undefined : 'su-su-backup.susubak', preview: backupStep === 'preview' ? backupPreview() : undefined, last: backupLast, scheduled: backupScheduled, scheduledSource: backupScheduled ? 'backup' : undefined, canUndo: false });
   const vocabView = (): NonNullable<SettingsView['vocab']> => ({
     favorites: 3 + favorited.size, canExport: true, rows: vocabRows, export: vocabExport,
     targets: [
@@ -193,6 +202,7 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     settings.services.push(...(['ankiconnect/vocab', 'eudic/vocab'] as const).map((id) => ({ ...service(id, ['apiKey']), capability: 'vocab', page: 'vocab', enabled: id.startsWith('anki'), availability: id.startsWith('anki') ? 'Ready' : 'Disabled', order: -1 })));
     settings.vocab = vocabView();
     settings.plugins = pluginsView();
+    settings.backup = backupView();
     return structuredClone(settings);
   };
 
@@ -373,6 +383,32 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
       case 'Plugin.Uninstall':
         pluginInstalled = pluginInstalled.filter((p) => p.id !== payload?.id);
         pluginLast = { action: 'uninstall', id: String(payload?.id), issues: [] };
+        ok(project());
+        return;
+      case 'Backup.Export':
+        backupLast = payload?.includeSecrets && !payload?.password ? { action: 'export', error: 'password-required', encrypted: false, includedSecrets: false, secretCount: 0 } : { action: 'export', fileName: 'su-su-backup.susubak', encrypted: !!payload?.password, includedSecrets: !!payload?.includeSecrets, secretCount: payload?.includeSecrets ? 2 : 0 };
+        ok(project());
+        return;
+      case 'Backup.Pick':
+        backupLast = undefined;
+        backupStep = 'password';
+        ok(project());
+        return;
+      case 'Backup.Unlock':
+        backupLast = payload?.password === 'correct horse battery' ? undefined : { action: 'preview', error: 'decrypt-failed', fileName: 'su-su-backup.susubak', encrypted: false, includedSecrets: false, secretCount: 0 };
+        if (!backupLast) backupStep = 'preview';
+        ok(project());
+        return;
+      case 'Backup.Apply':
+        backupStep = 'idle';
+        backupScheduled = true;
+        backupLast = { action: 'apply', encrypted: false, includedSecrets: false, secretCount: 0 };
+        ok(project());
+        return;
+      case 'Backup.Discard':
+        backupStep = 'idle';
+        backupScheduled = false;
+        backupLast = undefined;
         ok(project());
         return;
       case 'Vocab.Sync':
