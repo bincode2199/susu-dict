@@ -59,6 +59,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (InstallerMode.IsInstallerCommand(args)) return InstallerMode.Run(args); // F18.1: installer/uninstaller helper commands, before any service starts
         var mode = StartupMode.Parse(args);
         switch (mode.Kind)
         {
@@ -340,6 +341,9 @@ internal static class MainMode
         coordinator.Diagnostic += message => log.Event("ui", ("code", message));
         coordinator.Timing += (kind, phase, ms) => log.Event("timing", ("window", kind.ToString()), ("phase", phase), ("durationMs", Math.Round(ms, 1)));
         dispatcher.ActivateRequested += coordinator.OnActivateRequest;
+        // F18.1: the installer asks the running instance to exit (or how many tasks are in flight) through the instance's own message window.
+        dispatcher.InFlightProvider = () => (coordinator.IsRecording ? 1 : 0) + (coordinator.VideoJobs?.Active is not null ? 1 : 0)
+            + (translation.Supervisor is { } supervisor && supervisor.TryGetCurrent(out var current) ? current!.InFlightCalls().Count : 0);
         tray.DoubleClick += coordinator.OnTrayDoubleClick;
         tray.MenuRequested += coordinator.OnTrayMenu;
         // F12.3: a recording that continues in a minimized (hidden) voice window stays visible as the icon's tooltip (DESIGN 窗口关闭).
@@ -347,6 +351,7 @@ internal static class MainMode
             tray.SetTip(phase is null ? "Su-Su" : $"Su-Su · {(config.State.Effective.General.UiLanguage == "en" ? (phase == "paused" ? "Recording paused" : "Recording") : (phase == "paused" ? "录音已暂停" : "录音中"))} {(int)captured.TotalMinutes}:{captured.Seconds:00}");
         bool exiting = false;
         platform.ExitRequested += () => { if (!exiting) { exiting = true; dispatcher.Quit(); } };
+        dispatcher.InstallerExitRequested += () => { if (!exiting) { exiting = true; log.Event("app.exit-requested", ("by", "installer")); dispatcher.Quit(); } };
 
         if (!tray.Add()) log.Event("tray.add-failed");
         coordinator.Start();
@@ -355,6 +360,7 @@ internal static class MainMode
         if (failed.Count > 0)
             tray.Notify("Su-Su", config.State.Effective.General.UiLanguage == "en" ? "A hotkey could not be registered. Choose another one in Settings." : "有快捷键注册失败，请在设置中更换。");
 
+        if (InstallOptions.ApplyPending(paths, config) is { } installed) log.Event("install.options", ("launchAtStartup", installed));
         if (!Program.DevelopmentBuild && mode.DataRoot is null) ApplyAutostart(config.State.Effective.General.LaunchAtStartup);
         config.Changed += state => { if (!Program.DevelopmentBuild && mode.DataRoot is null) ApplyAutostart(state.Effective.General.LaunchAtStartup); };
 
@@ -465,6 +471,6 @@ internal static class MainMode
     }
 
     /// <summary>One instance per user; a separate data root (tests, development) is its own instance.</summary>
-    private static string InstanceName(string? dataRoot)
+    internal static string InstanceName(string? dataRoot)
         => dataRoot is null ? "Su-Su.Instance" : $"Su-Su.Instance.{AtomicFile.Hash(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(dataRoot).ToLowerInvariant()))[..16]}";
 }

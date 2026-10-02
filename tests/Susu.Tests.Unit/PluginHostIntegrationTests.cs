@@ -13,7 +13,7 @@ namespace Susu.Tests.Unit;
 /// </summary>
 public class PluginHostIntegrationTests
 {
-    private static string? FindHostBuildOutput()
+    internal static string? FindHostBuildOutput()
     {
         // The AppContainer profile grants read+execute to exactly one directory, and a Debug
         // (framework-dependent) susu.exe cannot load the shared .NET runtime from outside it - so
@@ -34,7 +34,7 @@ public class PluginHostIntegrationTests
     /// bridges) must live inside it, alongside the plugin packages under a "plugins" subfolder - the
     /// same staging shape as the F00 X-matrix harness (tools/Susu.Probes/PluginHost/XMatrix.Stage).
     /// </summary>
-    private static string? StageHost()
+    internal static string? StageHost()
     {
         string? output = FindHostBuildOutput();
         if (output is null) return null;

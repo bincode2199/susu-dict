@@ -73,6 +73,10 @@ public sealed class UiDispatcher : IMessageTarget, IDisposable
     public const string MessageClass = "SuSu.Host.Message";
     internal const uint WM_INVOKE = WM_APP + 1, WM_TRAY = WM_APP + 2;
     public const string ActivateToken = "Su-Su:activate";
+    /// <summary>F18.1: the installer asks how many tasks are in flight (no side effect).</summary>
+    public const string QueryToken = "Su-Su:query";
+    /// <summary>F18.1: the installer asks the running instance to exit cleanly (the same path as the tray's Exit).</summary>
+    public const string ExitToken = "Su-Su:exit";
 
     private readonly ConcurrentQueue<Action> queue = new();
     private readonly Dictionary<nuint, Action> timers = [];
@@ -93,6 +97,10 @@ public sealed class UiDispatcher : IMessageTarget, IDisposable
 
     public event Action<int>? HotkeyPressed;
     public event Action? ActivateRequested;
+    /// <summary>F18.1: an installer (susu.exe --installer-exit) asked this instance to exit; raised on the UI thread.</summary>
+    public event Action? InstallerExitRequested;
+    /// <summary>F18.1: counts the tasks in flight (recording, video job, plugin calls); called on the UI thread, must not block.</summary>
+    public Func<int>? InFlightProvider { get; set; }
     public event Action<uint, int, int>? TrayEvent; // event, x, y
     public event Action? TaskbarRecreated;
 
@@ -140,11 +148,22 @@ public sealed class UiDispatcher : IMessageTarget, IDisposable
                 {
                     var data = (COPYDATASTRUCT*)lParam;
                     if (data->Length == ActivateToken.Length * 2 && new string((char*)data->Pointer, 0, ActivateToken.Length) == ActivateToken) { Post(() => ActivateRequested?.Invoke()); return 1; }
+                    if (Matches(data, QueryToken)) return 1 + SafeInFlight();
+                    if (Matches(data, ExitToken)) { int count = SafeInFlight(); Post(() => InstallerExitRequested?.Invoke()); return 1 + count; }
                 }
                 return 0;
         }
         if (message == taskbarCreated && taskbarCreated != 0) { TaskbarRecreated?.Invoke(); return 0; }
         return null;
+    }
+
+    private static unsafe bool Matches(COPYDATASTRUCT* data, string token)
+        => data->Length == token.Length * 2 && new string((char*)data->Pointer, 0, token.Length) == token;
+
+    private int SafeInFlight()
+    {
+        try { return Math.Max(0, InFlightProvider?.Invoke() ?? 0); }
+        catch (Exception) { return 0; }
     }
 
     private void Drain()
@@ -191,6 +210,34 @@ public sealed class SingleInstance : IDisposable
         if (handle != 0) CloseHandle(handle);
         SignalExisting(name);
         return null;
+    }
+
+    /// <summary>
+    /// F18.1 installer coordination: asks the instance with this name for its in-flight task count (<paramref name="exit"/> false) or to exit
+    /// (true). Returns false when no such instance answers; otherwise <paramref name="inFlight"/> is its count at the time of the request.
+    /// </summary>
+    public static unsafe bool Request(string name, bool exit, out int inFlight)
+    {
+        inFlight = 0;
+        nint target = FindWindowEx(HWND_MESSAGE, 0, UiDispatcher.MessageClass, name);
+        if (target == 0) return false;
+        string text = exit ? UiDispatcher.ExitToken : UiDispatcher.QueryToken;
+        fixed (char* token = text)
+        {
+            var data = new COPYDATASTRUCT { Data = 1, Length = text.Length * 2, Pointer = (nint)token };
+            if (SendMessageTimeoutW(target, WM_COPYDATA, 0, (nint)(&data), 0x2, 5000, out nint result) == 0 || result < 1) return false;
+            inFlight = (int)(result - 1);
+            return true;
+        }
+    }
+
+    /// <summary>True while an instance with this name holds the single-instance mutex.</summary>
+    public static bool IsRunning(string name)
+    {
+        nint handle = CreateMutex(0, false, $"Local\\{name}");
+        int error = Marshal.GetLastPInvokeError();
+        if (handle != 0) CloseHandle(handle);
+        return handle != 0 && error == ERROR_ALREADY_EXISTS;
     }
 
     /// <summary>Asks the instance with this name (never any other Su-Su instance) to wake up.</summary>
