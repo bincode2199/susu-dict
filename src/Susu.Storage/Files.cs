@@ -93,6 +93,13 @@ public static class AtomicFile
 /// target is replaced and Committed afterwards. Startup recovery rolls back every file of a Prepared
 /// transaction and cleans up a Committed one. Backups keep the original bytes, so secrets stay DPAPI ciphertext.
 /// </summary>
+/// <summary>Classifies storage failures so the user is told "disk full" and not a generic write error (F17.3).</summary>
+public static class StorageErrors
+{
+    /// <summary>ERROR_HANDLE_DISK_FULL (0x27) or ERROR_DISK_FULL (0x70).</summary>
+    public static bool IsDiskFull(IOException e) => (e.HResult & 0xFFFF) is 0x27 or 0x70;
+}
+
 public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint? faults = null)
 {
     public sealed record Journal(string State, JournalFile[] Files);
@@ -103,7 +110,7 @@ public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint?
         PrivateFolder.Ensure(transactionsDirectory);
         string dir = Path.Combine(transactionsDirectory, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
-        bool prepared = false;
+        bool prepared = false, committed = false;
         try
         {
             var entries = new JournalFile[files.Count];
@@ -123,13 +130,14 @@ public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint?
                 AtomicFile.Write(files[i].Target, File.ReadAllBytes(Path.Combine(dir, $"{i}.new")), faults, $"replace:{i}");
             }
             WriteJournal(dir, new Journal("Committed", entries));
+            committed = true;
             faults?.Hit("committed");
-            Directory.Delete(dir, recursive: true);
+            TryDelete(dir); // the commit is durable; a locked leftover folder is cleaned at the next start and must not turn a done commit into a failure
         }
-        catch (IOException)
+        catch (IOException) when (!committed)
         {
             // A real I/O failure (disk full, sharing violation) in this process: undo now rather than at next start.
-            if (prepared) RecoverOne(dir);
+            if (prepared) RecoverOne(dir, faults);
             else TryDelete(dir);
             throw;
         }
@@ -141,11 +149,11 @@ public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint?
         if (!Directory.Exists(transactionsDirectory)) return 0;
         int rolledBack = 0;
         foreach (var dir in Directory.GetDirectories(transactionsDirectory))
-            if (RecoverOne(dir)) rolledBack++;
+            if (RecoverOne(dir, faults)) rolledBack++;
         return rolledBack;
     }
 
-    private static bool RecoverOne(string dir)
+    private static bool RecoverOne(string dir, IFaultPoint? faults = null)
     {
         string journalPath = Path.Combine(dir, "journal.json");
         Journal? journal = null;
@@ -160,7 +168,7 @@ public sealed class ConfigTransaction(string transactionsDirectory, IFaultPoint?
             for (int i = 0; i < journal.Files.Length; i++)
             {
                 var file = journal.Files[i];
-                if (file.HadOld) AtomicFile.Write(file.Target, File.ReadAllBytes(Path.Combine(dir, $"{i}.old")));
+                if (file.HadOld) AtomicFile.Write(file.Target, File.ReadAllBytes(Path.Combine(dir, $"{i}.old")), faults, $"rollback:{i}");
                 else if (File.Exists(file.Target)) File.Delete(file.Target);
             }
             rolledBack = true;

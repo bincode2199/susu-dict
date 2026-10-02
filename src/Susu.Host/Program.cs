@@ -121,7 +121,7 @@ internal static class MainMode
         catch (DatabaseVersionException e)
         {
             log.Event("db.version", ("code", $"{e.Found}>{e.Supported}"));
-            Win32Prompt.Error("Su-Su", e.Message);
+            Win32Prompt.Error("Su-Su", e.UserMessage(config.State.Effective.General.UiLanguage != "en"));
             return 4;
         }
         using var db = database;

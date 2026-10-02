@@ -149,7 +149,15 @@ public sealed partial class ShellCoordinator
     private CommandResult ApplyBackup(BackupTokenRequest request)
     {
         if (backup is not { } service) return new CommandResult(false, "unavailable");
-        if (backupPreview?.Token != request.Token || !service.Apply(request.Token)) return new CommandResult(false, "not-found");
+        if (backupPreview?.Token != request.Token) return new CommandResult(false, "not-found");
+        try { if (!service.Apply(request.Token)) return new CommandResult(false, "not-found"); }
+        catch (BackupException e)
+        {
+            // Nothing was scheduled and the stage is gone (disk full or locked): the page says why and the import starts again from the file choice.
+            backupPreview = null; backupPath = null; backupLocked = false;
+            lastBackup = new BackupOutcomeView("apply", e.Code, null, false, false, 0);
+            return Ok(SettingsElement());
+        }
         lastBackup = new BackupOutcomeView("apply", null, backupPath is null ? null : Path.GetFileName(backupPath), backupPreview.Encrypted, backupPreview.IncludesSecrets, backupPreview.BackupSecrets);
         backupPreview = null; backupPath = null; backupLocked = false;
         return Ok(SettingsElement());
@@ -166,7 +174,12 @@ public sealed partial class ShellCoordinator
     private CommandResult UndoBackup()
     {
         if (backup is not { } service) return new CommandResult(false, "unavailable");
-        if (!service.ScheduleUndo()) return new CommandResult(false, "unavailable");
+        try { if (!service.ScheduleUndo()) return new CommandResult(false, "unavailable"); }
+        catch (BackupException e)
+        {
+            lastBackup = new BackupOutcomeView("undo", e.Code, null, false, false, 0);
+            return Ok(SettingsElement());
+        }
         backupPreview = null; backupPath = null; backupLocked = false;
         lastBackup = new BackupOutcomeView("undo", null, null, false, false, 0);
         return Ok(SettingsElement());

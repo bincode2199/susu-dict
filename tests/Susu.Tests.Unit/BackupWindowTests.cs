@@ -258,6 +258,38 @@ public sealed class BackupWindowTests
         Assert.Equal(("undo", true, "undo"), (undo.Last!.Action, undo.Scheduled, undo.ScheduledSource));
     }
 
+    [Fact] // F17.3: a full disk while preparing, confirming or scheduling an undo reaches the page as the disk-full reason, with nothing scheduled
+    public void A_full_disk_while_preparing_confirming_or_scheduling_undo_reaches_the_page_as_disk_full()
+    {
+        using var source = new BackupRig();
+        source.Seed("Source");
+        string file = source.Export("plain.susubak", new BackupExportOptions(false, null));
+        using var rig = new Rig();
+        rig.Backup.Seed("Local");
+        BackupService Faulty(string stage) => new(rig.Backup.Paths, rig.Backup.Store, rig.Backup.Secrets, rig.Backup.Protector, rig.Backup.Clock,
+            new BackupHost("1.2.3", () => rig.Backup.Available, () => rig.Backup.UserPlugins, () => rig.Backup.Local), new FaultAt(stage, _ => new IOException("full", unchecked((int)0x80070070))));
+        rig.Dialog.OpenPath = file;
+
+        rig.Shell.Backup = Faulty("import-stage:secrets"); // preparing
+        var preparing = rig.View(rig.Run(UiCommands.BackupPick));
+        Assert.Equal(("idle", "preview", "disk-full"), (preparing.Step, preparing.Last!.Action, preparing.Last.Error));
+        Assert.Null(preparing.Preview);
+
+        rig.Shell.Backup = rig.Backup.Service;
+        var preview = rig.View(rig.Run(UiCommands.BackupPick)).Preview!;
+        rig.Shell.Backup = Faulty("import-apply:pending"); // confirming
+        var confirming = rig.View(rig.Run(UiCommands.BackupApply, new { token = preview.Token }));
+        Assert.Equal(("idle", "apply", "disk-full", false), (confirming.Step, confirming.Last!.Action, confirming.Last.Error, confirming.Scheduled));
+        Assert.Null(confirming.Preview);
+
+        rig.Shell.Backup = rig.Backup.Service; // a real import, so there is something to undo
+        rig.Run(UiCommands.BackupApply, new { token = rig.View(rig.Run(UiCommands.BackupPick)).Preview!.Token });
+        rig.Backup.Restart();
+        rig.Shell.Backup = Faulty("import-stage:secrets"); // scheduling the undo
+        var undo = rig.View(rig.Run(UiCommands.BackupUndo));
+        Assert.Equal(("undo", "disk-full", false, true), (undo.Last!.Action, undo.Last.Error, undo.Scheduled, undo.CanUndo));
+    }
+
     [Fact] // without a service there is no section and every command is unavailable
     public void Without_a_service_the_section_is_absent()
     {

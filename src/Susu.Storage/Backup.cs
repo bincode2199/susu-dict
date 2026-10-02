@@ -21,7 +21,7 @@ internal sealed record BackupRestorePointMeta(string Token, bool HadSettings, bo
 /// (<see cref="BackupImport.ApplyPending"/>) commits both files through the journaled <see cref="ConfigTransaction"/> after keeping a restore point of the
 /// old pair. Plugin code, caches, the database and granted authorizations are never in a backup, so an import cannot install or authorize anything.
 /// </summary>
-public sealed class BackupService(AppPaths paths, ISettingsStore settings, SecretStore secrets, ISecretProtector protector, IClock clock, BackupHost host) : IBackupService
+public sealed class BackupService(AppPaths paths, ISettingsStore settings, SecretStore secrets, ISecretProtector protector, IClock clock, BackupHost host, IFaultPoint? faults = null) : IBackupService
 {
     private readonly object gate = new();
 
@@ -60,13 +60,23 @@ public sealed class BackupService(AppPaths paths, ISettingsStore settings, Secre
         string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllBytes(temp, file);
+            // Written beside the target under a temporary name and moved into place only when complete and flushed, so a failure at any point (disk full,
+            // lock, power loss) never leaves a partial .susubak and an existing file of that name stays whole.
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                int half = file.Length / 2;
+                stream.Write(file, 0, half);
+                faults?.Hit("export:partial");
+                stream.Write(file, half, file.Length - half);
+                stream.Flush(flushToDisk: true);
+            }
+            faults?.Hit("export:written");
             File.Move(temp, path, overwrite: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             try { File.Delete(temp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-            return new BackupExportOutcome(false, "write-failed", encrypted, false, 0);
+            return new BackupExportOutcome(false, BackupImport.FailureCode(e, "write-failed"), encrypted, false, 0);
         }
         return new BackupExportOutcome(true, null, encrypted, options.IncludeSecrets, secretCount);
     }
@@ -104,7 +114,12 @@ public sealed class BackupService(AppPaths paths, ISettingsStore settings, Secre
         string token = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
         lock (gate)
         {
-            BackupImport.Stage(paths, new BackupPending(token, "Previewed", AtomicFile.Hash(settingsBytes), AtomicFile.Hash(secretsBytes), null, 0, clock.UtcNow.UtcDateTime.ToString("O"), "backup", disabled.Count), settingsBytes, secretsBytes);
+            try { BackupImport.Stage(paths, new BackupPending(token, "Previewed", AtomicFile.Hash(settingsBytes), AtomicFile.Hash(secretsBytes), null, 0, clock.UtcNow.UtcDateTime.ToString("O"), "backup", disabled.Count), settingsBytes, secretsBytes, faults); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                BackupImport.ClearStage(paths); // nothing half-staged is left, and an earlier preview's token no longer applies
+                throw new BackupException(BackupImport.FailureCode(e, "stage-failed"));
+            }
         }
 
         var plugins = contents.Plugins.Select(p =>
@@ -152,7 +167,16 @@ public sealed class BackupService(AppPaths paths, ISettingsStore settings, Secre
             var pending = BackupImport.ReadPending(paths);
             if (pending is null || pending.Token != token || pending.State != "Previewed") return false;
             if (!BackupImport.StagedMatches(paths, pending)) { BackupImport.ClearStage(paths); return false; }
-            BackupImport.WritePending(paths, pending with { State = "Ready" });
+            try
+            {
+                faults?.Hit("import-apply:pending");
+                BackupImport.WritePending(paths, pending with { State = "Ready" });
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                BackupImport.ClearStage(paths);
+                throw new BackupException(BackupImport.FailureCode(e, "stage-failed"));
+            }
             return true;
         }
     }
@@ -169,7 +193,15 @@ public sealed class BackupService(AppPaths paths, ISettingsStore settings, Secre
     /// </summary>
     public bool ScheduleUndo()
     {
-        lock (gate) return BackupImport.StageRestorePoint(paths, protector, clock);
+        lock (gate)
+        {
+            try { return BackupImport.StageRestorePoint(paths, protector, clock, faults); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                BackupImport.ClearStage(paths);
+                throw new BackupException(BackupImport.FailureCode(e, "stage-failed"));
+            }
+        }
     }
 
     public BackupStatus Status()
@@ -215,14 +247,20 @@ public static class BackupImport
     private static string ResultPath(AppPaths p) => Path.Combine(p.Imports, "result.json");
     private static string RestorePointDir(AppPaths p) => Path.Combine(p.Imports, "restore-point");
 
-    internal static void Stage(AppPaths p, BackupPending pending, byte[] settingsBytes, byte[] secretsBytes)
+    /// <summary>The user-facing code for a failed write: "disk-full" when the disk is full, else <paramref name="otherwise"/>.</summary>
+    internal static string FailureCode(Exception e, string otherwise) => e is IOException io && StorageErrors.IsDiskFull(io) ? "disk-full" : otherwise;
+
+    internal static void Stage(AppPaths p, BackupPending pending, byte[] settingsBytes, byte[] secretsBytes, IFaultPoint? faults = null)
     {
         ClearStage(p);
         PrivateFolder.Ensure(p.Imports);
         Directory.CreateDirectory(StageDir(p));
         AtomicFile.WriteFlushed(Path.Combine(StageDir(p), "settings.yaml"), settingsBytes);
+        faults?.Hit("import-stage:settings");
         AtomicFile.WriteFlushed(Path.Combine(StageDir(p), "secrets.dat"), secretsBytes);
+        faults?.Hit("import-stage:secrets");
         WritePending(p, pending);
+        faults?.Hit("import-stage:pending");
     }
 
     internal static void ClearStage(AppPaths p)
@@ -270,7 +308,7 @@ public static class BackupImport
 
     internal static bool HasRestorePoint(AppPaths p) => File.Exists(Path.Combine(RestorePointDir(p), "meta.json")) && File.Exists(Path.Combine(RestorePointDir(p), "settings.yaml"));
 
-    internal static bool StageRestorePoint(AppPaths p, ISecretProtector protector, IClock clock)
+    internal static bool StageRestorePoint(AppPaths p, ISecretProtector protector, IClock clock, IFaultPoint? faults = null)
     {
         if (!HasRestorePoint(p)) return false;
         string dir = RestorePointDir(p);
@@ -279,7 +317,7 @@ public static class BackupImport
         byte[] secretsBytes = File.Exists(Path.Combine(dir, "secrets.dat")) ? File.ReadAllBytes(Path.Combine(dir, "secrets.dat")) : SecretStore.BuildFile(protector, []);
         string token = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
         var pending = new BackupPending(token, "Ready", AtomicFile.Hash(settingsBytes), AtomicFile.Hash(secretsBytes), null, 0, clock.UtcNow.UtcDateTime.ToString("O"), "undo", 0);
-        Stage(p, pending, settingsBytes, secretsBytes);
+        Stage(p, pending, settingsBytes, secretsBytes, faults);
         return true;
     }
 
@@ -340,18 +378,29 @@ public static class BackupImport
                 EnsureRestorePoint(paths, pending.Token, clock, faults);
                 faults?.Hit("import:before-commit");
                 new ConfigTransaction(paths.Transactions, faults).Commit([(paths.Settings, finalBytes), (paths.Secrets, secretsBytes)]);
-                faults?.Hit("import:committed");
             }
-            var applied = new BackupResult("Applied", null, pending.Token, clock.UtcNow.UtcDateTime.ToString("O"), pending.Disabled, pending.Source);
-            WriteReplacing(ResultPath(paths), JsonSerializer.SerializeToUtf8Bytes(applied, BackupJson.Default.BackupResult));
-            ClearStage(paths);
-            faults?.Hit("import:done");
+            try
+            {
+                if (!alreadyCommitted) faults?.Hit("import:committed");
+                var applied = new BackupResult("Applied", null, pending.Token, clock.UtcNow.UtcDateTime.ToString("O"), pending.Disabled, pending.Source);
+                WriteReplacing(ResultPath(paths), JsonSerializer.SerializeToUtf8Bytes(applied, BackupJson.Default.BackupResult));
+                ClearStage(paths);
+                faults?.Hit("import:done");
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // The switch is done and durable; only the bookkeeping failed (disk full, lock). It is reported as applied, never as failed, and the next
+                // start recognises the finished commit and tidies up.
+                return new BackupApplyResult("Applied", null, pending.Source, pending.Disabled, clock.UtcNow);
+            }
             return ReadResult(paths);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            // Disk full or a locked file: ConfigTransaction has already put the old pair back; the import is dropped, the user can try again.
-            return Fail(paths, clock, "io", pending.Token, pending.Source);
+            // Disk full or a locked file: ConfigTransaction has put the old pair back. If even that rollback failed it is finished here, so this start never
+            // runs on a half-switched pair (the journal is also recovered at every start). The import is dropped, the user can try again.
+            try { new ConfigTransaction(paths.Transactions).Recover(); } catch (Exception r) when (r is IOException or UnauthorizedAccessException) { }
+            return Fail(paths, clock, FailureCode(e, "io"), pending.Token, pending.Source);
         }
     }
 
@@ -382,6 +431,7 @@ public static class BackupImport
     {
         int disabled = ReadPending(paths)?.Disabled ?? 0;
         ClearStage(paths);
+        try { if (Directory.Exists(RestorePointDir(paths) + ".tmp")) Directory.Delete(RestorePointDir(paths) + ".tmp", recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         var failed = new BackupResult("Failed", code, token, clock.UtcNow.UtcDateTime.ToString("O"), disabled, source);
         try { WriteReplacing(ResultPath(paths), JsonSerializer.SerializeToUtf8Bytes(failed, BackupJson.Default.BackupResult)); }
         catch (IOException) { }

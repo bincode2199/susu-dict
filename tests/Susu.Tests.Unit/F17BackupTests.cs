@@ -91,11 +91,11 @@ public class F17BackupTests
     private const string Password = "correct horse battery";
     private static readonly BackupExportOptions WithKeys = new(true, Password);
 
-    private static string CodeOf(Action action) => Assert.Throws<BackupException>(action).Code;
+    internal static string CodeOf(Action action) => Assert.Throws<BackupException>(action).Code;
 
     // ---------- archive crafting ----------
 
-    private static byte[] ValidSettings(Func<string, string>? edit = null)
+    internal static byte[] ValidSettings(Func<string, string>? edit = null)
     {
         string text = SettingsYaml.Write(BuiltInCatalog.Defaults() with { Revision = 3 });
         return Encoding.UTF8.GetBytes(edit is null ? text : edit(text));
@@ -121,7 +121,7 @@ public class F17BackupTests
     }
 
     /// <summary>A structurally valid plain backup with a consistent manifest, for the cases that change one thing.</summary>
-    private static byte[] Craft(Action<Dictionary<string, byte[]>>? edit = null, int formatVersion = 1, int schema = 1, bool? includesSecrets = null)
+    internal static byte[] Craft(Action<Dictionary<string, byte[]>>? edit = null, int formatVersion = 1, int schema = 1, bool? includesSecrets = null)
     {
         var files = new Dictionary<string, byte[]> { ["settings.yaml"] = ValidSettings(), ["plugins.json"] = Encoding.UTF8.GetBytes("{\"plugins\":[]}") };
         edit?.Invoke(files);
@@ -129,7 +129,7 @@ public class F17BackupTests
         return ZipOf(files.Select(f => (f.Key, f.Value)));
     }
 
-    private static string WriteTemp(BackupRig rig, byte[] bytes, string name = "in.susubak")
+    internal static string WriteTemp(BackupRig rig, byte[] bytes, string name = "in.susubak")
     {
         string path = Path.Combine(rig.Root.Root, name);
         File.WriteAllBytes(path, bytes);
@@ -474,7 +474,7 @@ public class F17BackupTests
 
     // ---------- apply at start ----------
 
-    private static (BackupRig Target, string File) Pair()
+    internal static (BackupRig Target, string File) Pair()
     {
         using var source = new BackupRig();
         source.Seed("Source", "sk-source-KEY");

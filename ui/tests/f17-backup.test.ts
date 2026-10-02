@@ -154,6 +154,14 @@ describe('Backup page', () => {
     expect(wrapper.find('[data-backup-applied-failed]').text()).toBe(t('backup.failed', { reason: t('backup.error.io') }));
   });
 
+  it('a failed confirm or undo shows its reason (disk full) next to the restore controls', async () => {
+    for (const action of ['apply', 'undo'] as const) {
+      const { wrapper } = await mountPage(backup({ canUndo: true, last: { action, error: 'disk-full', encrypted: false, includedSecrets: false, secretCount: 0 } }));
+      expect(wrapper.find('[data-backup-action-error]').text()).toBe(t('backup.error.disk-full'));
+      wrapper.unmount();
+    }
+  });
+
   it('shows host errors for an unavailable or busy backup and has no page content without a view', async () => {
     const { wrapper } = await mountPage(backup(), () => ({ ok: false, error: 'busy' }));
     await wrapper.find('[data-backup-pick]').trigger('click');
@@ -175,7 +183,7 @@ describe('Backup page', () => {
       const { wrapper } = await mountPage(backup({ step: 'preview', fileName: 'p.susubak', preview: preview({ includesSecrets: true, schemaOlder: true }), canUndo: true,
         applied: { state: 'Failed', error: 'too-many-attempts', source: 'undo', disabledInstances: 1, at: '2026-01-01T00:00:00Z' }, last: { action: 'preview', error: 'kdf-params', encrypted: false, includedSecrets: false, secretCount: 0 } }));
       const text = wrapper.find('[data-backup]').text();
-      expect(text).not.toMatch(/\bbackup\.[a-zA-Z.-]+/);
+      expect(text).not.toMatch(/\bbackup\.[a-z][a-zA-Z.-]*/); // a raw key has a lower-case letter after the dot; a sentence ending "backup." runs into the next element's capital
       expect(text).not.toMatch(/\bnav\.backup\b/);
       expect(text).toContain(t('backup.error.kdf-params'));
       wrapper.unmount();

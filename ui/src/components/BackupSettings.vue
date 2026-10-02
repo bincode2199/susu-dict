@@ -90,6 +90,7 @@ const lastError = computed(() => (backup.value.last?.error ? errorText(backup.va
       <button type="button" class="btn" :disabled="!backup.canImport || !!busy" data-backup-pick @click="pick">{{ busy === 'pick' ? t('backup.choosing') : t('backup.choose') }}</button>
     </SettingRow>
     <p v-if="backup.last?.action === 'preview' && backup.last.error" class="result small error-text" role="alert" data-backup-preview-error>{{ lastError }}</p>
+    <p v-if="(backup.last?.action === 'apply' || backup.last?.action === 'undo') && backup.last.error" class="result small error-text" role="alert" data-backup-action-error>{{ lastError }}</p>
 
     <div v-if="backup.step === 'password'" class="pending" data-backup-unlock>
       <h3>{{ t('backup.unlock.title', { file: backup.fileName ?? '' }) }}</h3>

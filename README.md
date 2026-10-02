@@ -27,6 +27,7 @@ Each folder has a `README.md` that indexes its documents. Every document names i
     - [PLAN](docs/product/PLAN.md) · 项目方案: the authoritative product spec: features, services, plugin API, data, flows, milestones.
     - [RECORD](docs/product/RECORD.md) · 方案记录: decision log (D-xx), rejected options, research and measurements.
     - [REVIEW](docs/product/REVIEW.md) · 技术方案评审: findings R01–R13 of the third-version review and how each was resolved.
+    - [RECOVERY](docs/product/RECOVERY.md) · 备份与恢复故障说明: what to do when backup, restore or settings go wrong: wrong password, full disk, power loss, version mismatch.
   - [Design](docs/design/README.md): how Su-Su looks and behaves.
     - [DESIGN](docs/design/DESIGN.md) · 设计基础: visual and interaction spec: colors, type, controls, cards, windows, accessibility, artboard index.
     - [ARTBOARDS](docs/design/ARTBOARDS.md) · 画板源文件: the `design/` artboard sources, how to view and restore them, editing rules.

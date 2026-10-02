@@ -12,6 +12,15 @@ public sealed class DatabaseVersionException(int found, int supported, string? c
     public int Found { get; } = found;
     public int Supported { get; } = supported;
     public string? CompatibleBackup { get; } = compatibleBackup;
+
+    /// <summary>What the user is shown (F17.3): what happened, that the data was not touched, and what to do.</summary>
+    public string UserMessage(bool chinese)
+    {
+        string file = CompatibleBackup is null ? "" : Path.GetFileName(CompatibleBackup);
+        return chinese
+            ? $"数据库版本（{Found}）比这个 Su-Su 能读的版本（{Supported}）新，可能是运行过更新的版本。数据没有被改动。请安装新版 Su-Su。" + (file.Length == 0 ? "" : $"如果一定要继续用旧版：退出后把 {file} 恢复为 susu.db（升级之后新增的数据不在其中）。详见恢复说明。")
+            : $"The database (version {Found}) is newer than this Su-Su can read (version {Supported}); a newer version has probably run on this data. Nothing was changed. Install the newer Su-Su." + (file.Length == 0 ? "" : $" To keep using this older version, quit and restore {file} as susu.db (anything saved after the upgrade is not in it). See the recovery notes.");
+    }
 }
 
 /// <summary>
@@ -106,7 +115,7 @@ public sealed class Database : IDisposable
             if (version > 0 && version < targetVersion)
             {
                 backup = BackupPath(path, version);
-                BackupTo(connection, backup);
+                BackupTo(connection, backup, faults);
                 faults?.Hit("migrate:backed-up");
             }
             for (int next = version + 1; next <= targetVersion; next++)
@@ -143,12 +152,34 @@ public sealed class Database : IDisposable
     /// <summary>Online backup through the SQLite backup API; consistent even with an active WAL.</summary>
     public Task BackupToAsync(string destination) => WriteAsync(w => { BackupTo(w.Connection, destination); return true; }, transactional: false);
 
-    private static void BackupTo(SqliteConnection connection, string destination)
+    /// <summary>
+    /// Writes the copy beside the destination and moves it into place only when complete, so a failure (disk full, power loss) never leaves a partial
+    /// file under the name an older app would restore from, and a good earlier copy survives a failed new one.
+    /// </summary>
+    private static void BackupTo(SqliteConnection connection, string destination, IFaultPoint? faults = null)
     {
-        if (File.Exists(destination)) File.Delete(destination);
-        using var target = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = destination, Pooling = false }.ToString());
-        target.Open();
-        connection.BackupDatabase(target);
+        string temp = destination + ".tmp";
+        TryDeleteFile(temp);
+        try
+        {
+            using (var target = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = temp, Pooling = false }.ToString()))
+            {
+                target.Open();
+                connection.BackupDatabase(target);
+                faults?.Hit("migrate:backup-writing");
+            }
+            File.Move(temp, destination, overwrite: true);
+        }
+        catch
+        {
+            TryDeleteFile(temp);
+            throw;
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>Queues a write on the single writer; by default it runs in one short transaction that rolls back on any exception.</summary>
