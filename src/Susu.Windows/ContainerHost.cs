@@ -41,6 +41,51 @@ public sealed partial class ContainerHost : IDisposable
         return new ContainerHost(name, handle, created == 1, new string(text));
     }
 
+    private static readonly object AclGate = new(); // read-modify-write of one folder's DACL must not interleave between sessions of this process
+
+    /// <summary>
+    /// F16.2: lets this container read and execute under one more directory (the user's installed-plugin folder), which the native profile grant does
+    /// not cover. The returned handle removes exactly the entry it added. The grant is per container SID, so sessions never share it.
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public IDisposable GrantRead(string directory)
+    {
+        var sid = new System.Security.Principal.SecurityIdentifier(SidText);
+        var rule = new System.Security.AccessControl.FileSystemAccessRule(sid, System.Security.AccessControl.FileSystemRights.ReadAndExecute,
+            System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+            System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Allow);
+        var info = new DirectoryInfo(directory);
+        lock (AclGate)
+        {
+            var security = info.GetAccessControl();
+            security.AddAccessRule(rule);
+            info.SetAccessControl(security);
+        }
+        return new ReadGrant(info, rule);
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private sealed class ReadGrant(DirectoryInfo directory, System.Security.AccessControl.FileSystemAccessRule rule) : IDisposable
+    {
+        private int disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 1) return;
+            try
+            {
+                lock (AclGate)
+                {
+                    if (!directory.Exists) return;
+                    var security = directory.GetAccessControl();
+                    security.RemoveAccessRuleSpecific(rule);
+                    directory.SetAccessControl(security);
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException) { } // a stale entry for a deleted profile SID is inert
+        }
+    }
+
     public SafePipeHandle CreatePipe(string pipeName, string? extraSid = null, bool rejectRemote = true)
     {
         Marshal.ThrowExceptionForHR(Pipe(handle, pipeName, extraSid, rejectRemote ? 1 : 0, out nint pipe));

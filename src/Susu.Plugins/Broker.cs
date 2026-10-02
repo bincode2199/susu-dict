@@ -114,6 +114,9 @@ public sealed class Broker : IDisposable
     /// plugin's own next $http.stream.read.</summary>
     public event Action<string, string>? Progress;
 
+    /// <summary>F16.2: where <c>$store</c> persists, keyed by the grant's package id. Null keeps the per-process in-memory store (tests, tools).</summary>
+    public IPluginKv? PluginKv { get; init; }
+
     public Broker(NetworkBroker? network = null, FileLeases? leases = null, ISecretStore? secretStore = null, AccountAuthorization? accounts = null)
     {
         ownedNetwork = network ?? new NetworkBroker(new NetworkBrokerOptions());
@@ -276,6 +279,17 @@ public sealed class Broker : IDisposable
         if (!call.Args.TryGetProperty("key", out var keyElement) || keyElement.ValueKind != JsonValueKind.String || keyElement.GetString()!.Length is 0 or > 256)
             return Deny(call.ApiId, "invalid store key");
         string key = keyElement.GetString()!;
+        if (PluginKv is { } kv)
+        {
+            // The key space is the grant's package id, never a plugin-supplied value, so a plugin cannot reach another package's data.
+            try
+            {
+                if (call.Op == "store.get") return Allow(call.ApiId, kv.Get(grant.PluginId, key) ?? "null");
+                kv.Set(grant.PluginId, key, call.Args.TryGetProperty("value", out var stored) ? stored.GetRawText() : "null");
+                return Allow(call.ApiId, "true");
+            }
+            catch (Susu.Storage.PluginKvQuotaException) { return Deny(call.ApiId, "plugin store quota exceeded"); }
+        }
         lock (stores)
         {
             // Namespace is the grant's plugin id, never a plugin-supplied value.

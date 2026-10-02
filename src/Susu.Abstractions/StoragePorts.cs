@@ -60,10 +60,10 @@ public interface IWindowStateStore
     void Save(WindowPlacement placement);
 }
 
-/// <summary>Plugin <c>$store</c> backed by plugin_kv; the namespace is bound by the host, never chosen by the plugin.</summary>
+/// <summary>Plugin <c>$store</c> backed by plugin_kv, keyed by package id (F16.2); the id and namespace are bound by the host, never chosen by the plugin.</summary>
 public interface IPluginKv
 {
-    string? Get(string installationId, string key);
-    void Set(string installationId, string key, string valueJson);
-    bool Delete(string installationId, string key);
+    string? Get(string packageId, string key);
+    void Set(string packageId, string key, string valueJson);
+    bool Delete(string packageId, string key);
 }

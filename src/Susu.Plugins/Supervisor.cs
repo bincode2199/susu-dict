@@ -199,6 +199,27 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
         return fresh;
     }
 
+    /// <summary>
+    /// F16.2: detaches the live session without disposing it, so the next <see cref="Acquire"/> launches a fresh one that loads the packages as they
+    /// are now. The caller owns the returned session (null when none was running): it interrupts what must stop, lets the rest drain, and disposes it.
+    /// Detaching is not a crash: no backoff, no failure counted, and the old session's later Disconnected is ignored by the identity check.
+    /// </summary>
+    public TSession? Recycle()
+    {
+        lock (gate)
+        {
+            if (disposed) return null;
+            stopped = false;
+            crashBackoffPending = false;
+            recentFailures.Clear();
+            idleCts?.Cancel();
+            idleCts = null;
+            var old = session;
+            session = null;
+            return old;
+        }
+    }
+
     public void Dispose()
     {
         TSession? old;

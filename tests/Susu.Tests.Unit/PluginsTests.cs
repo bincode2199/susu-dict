@@ -249,8 +249,20 @@ internal sealed class FakeSession : IHostSessionHandle
 {
     public event Action? Disconnected;
     public bool Disposed { get; private set; }
+    public List<InFlightCall> Calls { get; } = [];
+    public List<string> Interrupted { get; } = [];
     public void Crash() => Disconnected?.Invoke();
     public void Dispose() => Disposed = true;
+    public IReadOnlyList<InFlightCall> InFlightCalls(string? pluginId = null) { lock (Calls) return [.. Calls.Where(c => pluginId is null || c.PluginId == pluginId)]; }
+    public int Interrupt(string pluginId)
+    {
+        lock (Calls)
+        {
+            int n = Calls.RemoveAll(c => c.PluginId == pluginId);
+            if (n > 0) Interrupted.Add(pluginId);
+            return n;
+        }
+    }
 }
 
 public class SupervisorTests

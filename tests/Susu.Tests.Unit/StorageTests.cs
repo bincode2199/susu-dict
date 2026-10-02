@@ -489,8 +489,6 @@ public class DatabaseTests
         Assert.Equal(Database.SchemaVersion, db.Version);
         Assert.Equal("wal", db.Read(c => Database.Scalar(c, null, "PRAGMA journal_mode;")));
         Assert.Equal(1L, db.Read(c => Database.Scalar(c, null, "PRAGMA foreign_keys;")));
-        var kv = new PluginKvRepository(db);
-        Assert.ThrowsAny<SqliteException>(() => kv.Set("not-installed", "k", "1")); // FK enforced
     }
 
     [Fact] // DATA03: consistent backup while the WAL holds uncheckpointed pages
@@ -578,18 +576,54 @@ public class DatabaseTests
         using var root = new TempRoot();
         using var db = Database.Open(root.Paths.Database);
         var kv = new PluginKvRepository(db, perInstallationBytes: 100, totalBytes: 150);
-        kv.RegisterInstallation("inst-a", "app.susu.deepl", "1.0.0", "builtin", "h1");
-        kv.RegisterInstallation("inst-b", "com.other.plugin", "1.0.0", "unsigned:inst-b", "h2");
-        kv.Set("inst-a", "token", "\"a-value\"");
-        Assert.Null(kv.Get("inst-b", "token"));
-        Assert.Equal("\"a-value\"", kv.Get("inst-a", "token"));
-        Assert.Throws<PluginKvQuotaException>(() => kv.Set("inst-a", "big", new string('x', 100)));
-        kv.Set("inst-a", "token", new string('y', 80)); // replacing a key counts only the new size
-        kv.Set("inst-b", "k", new string('z', 40));
-        Assert.Throws<PluginKvQuotaException>(() => kv.Set("inst-b", "k2", new string('z', 40))); // total 150
-        Assert.Equal(85, kv.BytesUsed("inst-a"));
-        Assert.True(kv.Delete("inst-a", "token"));
-        Assert.False(kv.Delete("inst-a", "token"));
+        const string a = "app.susu.deepl", b = "com.other.plugin";
+        kv.Set(a, "token", "\"a-value\"");
+        Assert.Null(kv.Get(b, "token"));
+        Assert.Equal("\"a-value\"", kv.Get(a, "token"));
+        Assert.Throws<PluginKvQuotaException>(() => kv.Set(a, "big", new string('x', 100)));
+        kv.Set(a, "token", new string('y', 80)); // replacing a key counts only the new size
+        kv.Set(b, "k", new string('z', 40));
+        Assert.Throws<PluginKvQuotaException>(() => kv.Set(b, "k2", new string('z', 40))); // total 150
+        Assert.Equal(85, kv.BytesUsed(a));
+        Assert.True(kv.Delete(a, "token"));
+        Assert.False(kv.Delete(a, "token"));
+    }
+
+    [Fact] // F16.2: data is per package id, survives version changes and an uninstall, and goes only when the user chose to remove it
+    public void Plugin_kv_is_keyed_by_package_id_and_removed_only_on_request()
+    {
+        using var root = new TempRoot();
+        using var db = Database.Open(root.Paths.Database);
+        var installs = new PluginInstallationRepository(db);
+        var kv = new PluginKvRepository(db);
+        installs.Activate("com.example.echo", "1.0.0", "unsigned:x", "h1");
+        kv.Set("com.example.echo", "state", "{\"n\":1}");
+        kv.Set("com.other.plugin", "state", "{\"n\":2}");
+        installs.Activate("com.example.echo", "1.1.0", "unsigned:x", "h2"); // an update is a new installation row
+        Assert.Equal("{\"n\":1}", kv.Get("com.example.echo", "state"));
+        installs.Deactivate("com.example.echo"); // uninstall keeps the data
+        Assert.Equal("{\"n\":1}", kv.Get("com.example.echo", "state"));
+        installs.Activate("com.example.echo", "1.2.0", "unsigned:x", "h3");
+        Assert.Equal("{\"n\":1}", kv.Get("com.example.echo", "state"));
+        Assert.Equal(1, kv.DeletePackage("com.example.echo"));
+        Assert.Null(kv.Get("com.example.echo", "state"));
+        Assert.Equal("{\"n\":2}", kv.Get("com.other.plugin", "state")); // another package is untouched
+    }
+
+    [Fact] // F16.2: migrating schema 3 to 4 moves existing plugin_kv rows under their package id
+    public void Plugin_kv_rows_survive_the_schema_4_migration()
+    {
+        using var root = new TempRoot();
+        using (var old = Database.Open(root.Paths.Database, targetVersion: 3))
+        {
+            old.Write(w => w.Exec("INSERT INTO plugin_installations(installation_id, package_id, version, signer, hash, active) VALUES ('p@1', 'p', '1', 's', 'h', 0), ('p@2', 'p', '2', 's', 'h', 1);"));
+            old.Write(w => w.Exec("INSERT INTO plugin_kv(installation_id, namespace, key, value_json, bytes) VALUES ('p@1', 'store', 'old', '1', 4), ('p@2', 'store', 'new', '2', 4), ('p@1', 'store', 'both', '\"v1\"', 9), ('p@2', 'store', 'both', '\"v2\"', 9);"));
+        }
+        using var db = Database.Open(root.Paths.Database);
+        var kv = new PluginKvRepository(db);
+        Assert.Equal("1", kv.Get("p", "old"));
+        Assert.Equal("2", kv.Get("p", "new"));
+        Assert.Equal("\"v2\"", kv.Get("p", "both")); // the active version wins a clash
     }
 }
 

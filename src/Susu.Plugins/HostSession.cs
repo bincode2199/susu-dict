@@ -31,7 +31,9 @@ public sealed class HostSession : IHostSessionHandle
         /// <summary>Builds this session's Broker; defaults to a production-real <c>new Broker()</c>
         /// (real NetworkBroker, no file leases/secrets configured). A composition root - or a test that
         /// needs $file handle support - passes one that wires real FileLeases/ISecretStore.</summary>
-        Func<Broker>? MakeBroker = null)
+        Func<Broker>? MakeBroker = null,
+        /// <summary>F16.2: directories outside <see cref="Resources"/> the sandboxed child may read and load plugins from (the user's installed-plugin folder). Absolute paths; each is granted to this session's container only and revoked when the session ends.</summary>
+        IReadOnlyList<string>? ExtraReadRoots = null)
     {
         public string ResolvedHostBuild => HostBuild ?? Susu.Contracts.HostBuild.Current;
     }
@@ -44,6 +46,7 @@ public sealed class HostSession : IHostSessionHandle
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> calls = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IpcEnvelope>> loads = new();
     private readonly ConcurrentDictionary<string, string> callGrants = new();
+    private readonly ConcurrentDictionary<string, InFlightCall> inFlight = new();
     /// <summary>Streaming capabilities only (F06.2a): the caller's onChunk for one in-flight Invoke,
     /// keyed by request id. Populated in <see cref="Invoke"/>, drained on Completed/Failed.</summary>
     private readonly ConcurrentDictionary<string, Func<string, ValueTask>> chunkHandlers = new();
@@ -52,6 +55,7 @@ public sealed class HostSession : IHostSessionHandle
     private readonly bool keepProfile;
     private readonly string hostBuild;
     private AnonymousPipeServerStream? diagnostics;
+    private readonly List<IDisposable> grants;
 
     public Broker Broker { get; }
     public StartTimings Timings { get; }
@@ -66,9 +70,9 @@ public sealed class HostSession : IHostSessionHandle
     /// <summary>Raised when the reader loop ends (child disconnected, crashed or was told to shut down).</summary>
     public event Action? Disconnected;
 
-    private HostSession(ContainerHost container, ContainerProcess process, NamedPipeServerStream pipe, StartTimings timings, bool keepProfile, string hostBuild, Func<Broker>? makeBroker)
+    private HostSession(ContainerHost container, ContainerProcess process, NamedPipeServerStream pipe, StartTimings timings, bool keepProfile, string hostBuild, Func<Broker>? makeBroker, List<IDisposable>? grants = null)
     {
-        this.container = container; this.process = process; this.pipe = pipe; Timings = timings; this.keepProfile = keepProfile; this.hostBuild = hostBuild;
+        this.container = container; this.process = process; this.pipe = pipe; Timings = timings; this.keepProfile = keepProfile; this.hostBuild = hostBuild; this.grants = grants ?? [];
         Broker = makeBroker?.Invoke() ?? new Broker();
         // Fire-and-forget: a slow or throwing onChunk must never block the plugin's own next
         // $http.stream.read (its await on $emit already returned once Broker replied ok).
@@ -85,6 +89,7 @@ public sealed class HostSession : IHostSessionHandle
         NamedPipeServerStream? pipe = null;
         ContainerProcess? process = null;
         AnonymousPipeServerStream? diagnostics = null;
+        var grants = new List<IDisposable>();
         try
         {
             string pipeName = $"Susu.Plugin.{Guid.NewGuid():N}";
@@ -92,7 +97,9 @@ public sealed class HostSession : IHostSessionHandle
             using var nonceOut = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.Inheritable);
             diagnostics = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
             string nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-            process = container.Start(options.Executable, $"{options.ChildMode} {pipeName} {Environment.ProcessId} {options.Engine}",
+            foreach (string extra in options.ExtraReadRoots ?? []) grants.Add(container.GrantRead(Path.GetFullPath(extra)));
+            string roots = string.Concat((options.ExtraReadRoots ?? []).Select(r => " \"" + Path.GetFullPath(r).TrimEnd(Path.DirectorySeparatorChar) + "\""));
+            process = container.Start(options.Executable, $"{options.ChildMode} {pipeName} {Environment.ProcessId} {options.Engine}{roots}",
                 [nonceOut.ClientSafePipeHandle, diagnostics.ClientSafePipeHandle], nonceOut.ClientSafePipeHandle, diagnostics.ClientSafePipeHandle, options.MemoryLimit);
             nonceOut.DisposeLocalCopyOfClientHandle();
             diagnostics.DisposeLocalCopyOfClientHandle();
@@ -126,7 +133,7 @@ public sealed class HostSession : IHostSessionHandle
                 throw new UnauthorizedAccessException("Handshake nonce/process mismatch.");
             var negotiated = ProtocolNegotiation.Negotiate(ProtocolVersions.SupportedIpc, hello.ProtocolVersion, "plugin-host", payload.Role, options.ResolvedHostBuild, payload.HostBuild);
             if (!negotiated.Accepted) throw new UnauthorizedAccessException($"Plugin host handshake rejected: {negotiated.Reason}");
-            var session = new HostSession(container, process, pipe, new StartTimings(launch, connect, timer.Elapsed.TotalMilliseconds), options.KeepProfile, options.ResolvedHostBuild, options.MakeBroker) { diagnostics = diagnostics };
+            var session = new HostSession(container, process, pipe, new StartTimings(launch, connect, timer.Elapsed.TotalMilliseconds), options.KeepProfile, options.ResolvedHostBuild, options.MakeBroker, grants) { diagnostics = diagnostics };
             return session;
         }
         catch
@@ -135,6 +142,7 @@ public sealed class HostSession : IHostSessionHandle
             diagnostics?.Dispose();
             process?.Dispose();
             container.Close(deleteProfile: !options.KeepProfile);
+            foreach (var grant in grants) grant.Dispose();
             throw;
         }
     }
@@ -156,10 +164,10 @@ public sealed class HostSession : IHostSessionHandle
         }
     }
 
-    public LoadedPayload Load(string pluginId, string directory, int memoryMiB = 64, int timeoutMs = 5000)
+    public LoadedPayload Load(string pluginId, string directory, int memoryMiB = 64, int timeoutMs = 5000, string entry = "main.js")
     {
         var waiter = loads[pluginId] = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Load, PluginId: pluginId, Payload: Json(new LoadPayload(directory, "main.js", memoryMiB))));
+        Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Load, PluginId: pluginId, Payload: Json(new LoadPayload(directory, entry, memoryMiB))));
         if (!waiter.Task.Wait(timeoutMs)) throw new TimeoutException($"Load {pluginId} timed out.");
         return waiter.Task.Result.Payload!.Value.Deserialize(ContractsJson.Default.LoadedPayload)!;
     }
@@ -185,6 +193,7 @@ public sealed class HostSession : IHostSessionHandle
         var grant = Broker.Issue(requestId, pluginId, callId, origins, secrets, handles, instanceId: instanceId, signer: signer, maxRequestBytes: maxRequestBytes);
         var waiter = calls[requestId] = new TaskCompletionSource<IpcEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         callGrants[requestId] = grant.Grant;
+        inFlight[requestId] = new InFlightCall(pluginId, capability, requestId, jobId, callId);
         if (adoptResultFiles) lock (adoptGate) adoptPending.Add(requestId);
         if (onChunk is not null) chunkHandlers[requestId] = onChunk;
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Invoke, requestId, jobId, PluginId: pluginId, Grant: grant.Grant,
@@ -199,6 +208,24 @@ public sealed class HostSession : IHostSessionHandle
         // the background just because the plugin-visible promise already rejected (F05.2).
         if (callGrants.TryGetValue(requestId, out var grant)) Broker.CancelCall(grant);
         Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Cancel, requestId, jobId, PluginId: pluginId, Payload: Json(new CancelPayload(callId))));
+    }
+
+    public IReadOnlyList<InFlightCall> InFlightCalls(string? pluginId = null)
+        => [.. inFlight.Values.Where(c => pluginId is null || string.Equals(c.PluginId, pluginId, StringComparison.Ordinal))];
+
+    /// <summary>
+    /// F16.2: cancels every in-flight call of one package before its version changes. Cancel aborts the call's upstream I/O first and then asks
+    /// the child to fail it, so each caller's result completes as a clean "cancelled" failure instead of staying open. Nothing is re-sent.
+    /// </summary>
+    public int Interrupt(string pluginId)
+    {
+        int count = 0;
+        foreach (var call in InFlightCalls(pluginId))
+        {
+            try { Cancel(call.PluginId, call.RequestId, call.JobId, call.CallId); count++; }
+            catch (Exception e) when (e is IOException or ObjectDisposedException) { break; } // the child is gone; the reader loop fails the rest
+        }
+        return count;
     }
 
     private readonly object adoptGate = new();
@@ -276,6 +303,7 @@ public sealed class HostSession : IHostSessionHandle
                         });
                         break;
                     case IpcMessageType.Completed or IpcMessageType.Failed:
+                        if (envelope.RequestId is not null) inFlight.TryRemove(envelope.RequestId, out _);
                         if (envelope.RequestId is not null && calls.TryRemove(envelope.RequestId, out var waiter))
                         {
                             if (callGrants.TryRemove(envelope.RequestId, out var grant))
@@ -304,6 +332,7 @@ public sealed class HostSession : IHostSessionHandle
         foreach (var requestId in callGrants.Keys) if (callGrants.TryRemove(requestId, out var orphan)) Broker.Revoke(orphan);
         lock (adoptGate) adoptPending.Clear();
         foreach (var waiter in calls.Values) waiter.TrySetException(new IOException("Plugin host disconnected."));
+        inFlight.Clear();
         Disconnected?.Invoke();
     }
 
@@ -320,6 +349,7 @@ public sealed class HostSession : IHostSessionHandle
         diagnostics?.Dispose();
         reader.Join(2000);
         container.Close(deleteProfile: !keepProfile);
+        foreach (var grant in grants) grant.Dispose();
         Broker.Dispose();
     }
 }

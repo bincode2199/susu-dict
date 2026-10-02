@@ -6,7 +6,7 @@ public sealed record InstallationRecord(string InstallationId, string PackageId,
 /// <summary>
 /// plugin_installations as the active-version pointer (ARCHITECTURE 8.1, F16.1). One row per package version; the unique partial index allows
 /// at most one active row per package, so <see cref="Activate"/> is the atomic switch: it deactivates the old row and activates the new one in
-/// one transaction. Rows are never deleted here (plugin_kv cascades from them), so data survives an uninstall until a data-removal option exists.
+/// one transaction. Rows are never deleted here plugin_kv is keyed by package id, not by these rows, F16.2.
 /// </summary>
 public sealed class PluginInstallationRepository(Database db)
 {

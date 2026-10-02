@@ -77,17 +77,23 @@ public sealed class PluginInstaller : IPluginInstallService
     private readonly IHostKeyring keyring;
     private readonly Func<HealthRequest, HealthResult> health;
     private readonly Action<string>? fault;
+    private readonly IPluginHostControl? host;
+    private readonly Action<string>? removeData;
     private readonly object gate = new();
-    private Pending? pending;
+    private Pending? manual;
+    private readonly Dictionary<string, Pending> updates = new(StringComparer.Ordinal);
 
-    private sealed record Pending(string Token, string Directory, PackageManifest Manifest, string Version, PackageIdentity Identity, string Hash);
+    private sealed record Pending(string Token, string Directory, PackageManifest Manifest, string Version, PackageIdentity Identity, string Hash, string? BaseVersion, PluginPreviewInfo Info);
 
     public event Action? Changed;
 
     /// <param name="root">The user plugin folder (%APPDATA%\Su-Su\plugins); staging and the journal live under it too.</param>
     /// <param name="health">Runs after the switch. The default checks the activated files again; a composition root can add a sandbox load.</param>
     /// <param name="fault">Test seam: called with the step name before each step and may throw to simulate a failure there.</param>
-    public PluginInstaller(string root, PluginInstallationRepository store, IBuiltInPackages builtIns, IHostKeyring keyring, Func<HealthRequest, HealthResult>? health = null, Action<string>? fault = null)
+    /// <param name="host">The running plugin host: told to restart after a committed install or uninstall, and asked what is in flight. Null: nothing is running.</param>
+    /// <param name="removeData">Deletes a package's stored data; called only when the user chose that at uninstall.</param>
+    public PluginInstaller(string root, PluginInstallationRepository store, IBuiltInPackages builtIns, IHostKeyring keyring, Func<HealthRequest, HealthResult>? health = null, Action<string>? fault = null,
+        IPluginHostControl? host = null, Action<string>? removeData = null)
     {
         this.root = Path.GetFullPath(root);
         this.store = store;
@@ -95,6 +101,8 @@ public sealed class PluginInstaller : IPluginInstallService
         this.keyring = keyring;
         this.health = health ?? Structural;
         this.fault = fault;
+        this.host = host;
+        this.removeData = removeData;
         Directory.CreateDirectory(this.root);
     }
 
@@ -104,7 +112,35 @@ public sealed class PluginInstaller : IPluginInstallService
     public string DirectoryOf(string id, string version) => Path.Combine(PackagesRoot, id, version);
 
     /// <summary>The directory of the active user version of a package, or null when the built-in one (or nothing) is in effect.</summary>
-    public string? ActiveDirectory(string id) => store.Active(id) is { } r ? DirectoryOf(r.PackageId, r.Version) : null;
+    public string? ActiveDirectory(string id)
+    {
+        lock (gate) return store.Active(id) is { } r ? DirectoryOf(r.PackageId, r.Version) : null; // waits for a switch in progress, so a launch never loads a version still being health-checked
+    }
+
+    /// <summary>The folder that holds every installed version (packages/&lt;id&gt;/&lt;version&gt;); the sandbox is granted read access to this one only, never to staging.</summary>
+    public string PackagesFolder => PackagesRoot;
+
+    /// <summary>Every active user package with its directory and manifest entry, for the plugin host to load (F16.2).</summary>
+    public IReadOnlyList<InstalledPackage> ActivePackages()
+    {
+        lock (gate)
+        {
+            var list = new List<InstalledPackage>();
+            foreach (var row in store.ActiveRecords())
+            {
+                string dir = DirectoryOf(row.PackageId, row.Version);
+                string entry = "main.js";
+                try
+                {
+                    string path = Path.Combine(dir, "manifest.yaml");
+                    if (File.Exists(path) && PackageManifest.Parse(File.ReadAllText(path)).Manifest is { } m) entry = m.Entry;
+                }
+                catch (IOException) { }
+                list.Add(new InstalledPackage(row.PackageId, dir, entry));
+            }
+            return list;
+        }
+    }
 
     /// <summary>The default health check: manifest still parses to the same identity, the entry file is there, and the files hash as recorded.</summary>
     public static HealthResult Structural(HealthRequest request)
@@ -119,11 +155,22 @@ public sealed class PluginInstaller : IPluginInstallService
 
     // ---------- stage ----------
 
-    public PluginPreviewInfo Preview(string packagePath)
+    public PluginPreviewInfo Preview(string packagePath) => Stage(packagePath, update: false);
+
+    public PluginPreviewInfo StageUpdate(string packagePath) => Stage(packagePath, update: true);
+
+    public IReadOnlyList<PluginPreviewInfo> StagedUpdates()
+    {
+        lock (gate) return [.. updates.Values.Select(p => p.Info).OrderBy(i => i.Id, StringComparer.Ordinal)];
+    }
+
+    public IReadOnlyList<PluginTaskInfo> InFlight(string packageId) => host?.InFlight(packageId) ?? [];
+
+    private PluginPreviewInfo Stage(string packagePath, bool update)
     {
         lock (gate)
         {
-            DiscardPendingLocked();
+            if (!update) DiscardManualLocked();
             string token = Guid.NewGuid().ToString("N");
             string dir = Path.Combine(StagingRoot, token);
             Directory.CreateDirectory(StagingRoot);
@@ -135,7 +182,8 @@ public sealed class PluginInstaller : IPluginInstallService
                 string manifestPath = Path.Combine(dir, "manifest.yaml");
                 if (!File.Exists(manifestPath)) return Rejected([new ManifestIssue("manifest.yaml", "missing", "manifest.yaml is required at the package root")], dir);
                 var (manifest, manifestIssues) = PackageManifest.Parse(File.ReadAllText(manifestPath));
-                if (manifest is null || manifestIssues.Count > 0) return Rejected(manifestIssues, dir);
+                if (manifest is null || manifestIssues.Count > 0)
+                    return Rejected(manifestIssues.Select(i => i.Path == "apiVersion" && i.Code == "unsupported" ? i with { Code = "api-unsupported" } : i), dir);
                 if (manifest.Version is null) return Rejected([new ManifestIssue("version", "missing", "'version' is required (major.minor.patch)")], dir);
                 if (manifest.MinHost > HostLevel) return Rejected([new ManifestIssue("minHost", "host-too-old", $"needs host level {manifest.MinHost}; this host is {HostLevel}")], dir);
                 if (!File.Exists(Path.Combine(dir, manifest.Entry))) return Rejected([new ManifestIssue("entry", "missing", $"'{manifest.Entry}' is not in the package")], dir);
@@ -146,6 +194,8 @@ public sealed class PluginInstaller : IPluginInstallService
                 PackageVersion.TryParse(manifest.Version, out var version);
                 var builtIn = builtIns.Find(manifest.Id);
                 var installed = store.Active(manifest.Id);
+                var reasons = new List<string>();
+                if (update && installed is null) issues.Add(new ManifestIssue("id", "not-installed", "an update applies only to an installed package"));
                 if (builtIn is not null)
                 {
                     if (identity.Kind != SignerKind.Host) issues.Add(new ManifestIssue("id", "builtin-id-not-host-signed", "this id belongs to a built-in package; only a package signed by the host may use it"));
@@ -156,19 +206,27 @@ public sealed class PluginInstaller : IPluginInstallService
                 {
                     if (PackageVersion.TryParse(installed.Version, out var current) && !(version > current))
                         issues.Add(new ManifestIssue("version", "not-newer", $"must be newer than the installed {installed.Version}"));
+                    // A signer change or dropping the signature is not silent and not refused: it is held for the user's explicit acknowledgement (UPD03).
                     var previous = PackageIdentity.FromKey(installed.Signer);
                     if (previous.Kind != SignerKind.Unsigned && identity.Key != installed.Signer)
-                        issues.Add(new ManifestIssue("signature", identity.Kind == SignerKind.Unsigned ? "signature-removed" : "signer-changed",
-                            "an installed package keeps its signer; a different or missing signature is rejected"));
+                        reasons.Add(identity.Kind == SignerKind.Unsigned ? "signature-removed" : "signer-changed");
                 }
                 if (issues.Count > 0) return Rejected(issues, dir);
 
                 var (baseSet, against, baseVersion) = BaseOf(installed, builtIn);
                 var diff = PermissionSet.Of(manifest).DiffFrom(baseSet, against, baseVersion);
+                if (diff.HasAdditions && against != "none") reasons.Add("permissions-expanded");
                 string hash = PackageTrust.PackageHash(dir);
-                pending = new Pending(token, dir, manifest, manifest.Version, identity, hash);
-                return new PluginPreviewInfo(true, token, manifest.Id, manifest.Name, manifest.Version, KindName(identity.Kind), identity.Signer,
-                    builtIn?.Version, installed?.Version, diff, []);
+                var info = new PluginPreviewInfo(true, token, manifest.Id, manifest.Name, manifest.Version, KindName(identity.Kind), identity.Signer,
+                    builtIn?.Version, installed?.Version, diff, [], [.. reasons], update);
+                var staged = new Pending(token, dir, manifest, manifest.Version, identity, hash, installed?.Version, info);
+                if (update)
+                {
+                    if (updates.Remove(manifest.Id, out var older)) SafeUnzip.TryDelete(older.Directory);
+                    updates[manifest.Id] = staged;
+                }
+                else manual = staged;
+                return info;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
@@ -202,24 +260,51 @@ public sealed class PluginInstaller : IPluginInstallService
 
     public void Discard(string token)
     {
-        lock (gate) { if (pending?.Token == token) DiscardPendingLocked(); }
+        lock (gate)
+        {
+            if (manual?.Token == token) DiscardManualLocked();
+            else if (updates.FirstOrDefault(u => u.Value.Token == token) is { Value: { } staged }) { SafeUnzip.TryDelete(staged.Directory); updates.Remove(staged.Manifest.Id); }
+        }
     }
 
-    private void DiscardPendingLocked()
+    private void DiscardManualLocked()
     {
-        if (pending is null) return;
-        SafeUnzip.TryDelete(pending.Directory);
-        pending = null;
+        if (manual is null) return;
+        SafeUnzip.TryDelete(manual.Directory);
+        manual = null;
     }
 
     // ---------- activate ----------
 
-    public PluginInstallOutcome Install(string token)
+    public PluginInstallOutcome Install(string token, bool acknowledged = false)
     {
+        PluginInstallOutcome outcome;
+        string? changedId = null;
         lock (gate)
         {
-            if (pending is not { } staged || staged.Token != token) return Fail("install.noPending");
-            pending = null;
+            Pending? staged = manual?.Token == token ? manual : updates.Values.FirstOrDefault(u => u.Token == token);
+            if (staged is null) return Fail("install.noPending");
+            // Held changes (new signer, dropped signature, wider permissions) apply only on explicit acknowledgement; until then the package stays staged and the old version runs.
+            if (staged.Info.Reasons.Length > 0 && !acknowledged) return Fail("install.needsConfirmation");
+            if (manual == staged) manual = null; else updates.Remove(staged.Manifest.Id);
+            outcome = Activate(staged);
+            if (outcome.Ok) changedId = staged.Manifest.Id;
+        }
+        if (changedId is null) return outcome;
+        int interrupted = RestartHost(changedId);
+        Changed?.Invoke();
+        return outcome with { Interrupted = interrupted };
+    }
+
+    private int RestartHost(string id)
+    {
+        try { return host?.Restart(id) ?? 0; }
+        catch (Exception e) when (e is not OutOfMemoryException) { return 0; } // the switch is committed; a host that cannot restart now loads it on its next launch
+    }
+
+    private PluginInstallOutcome Activate(Pending staged)
+    {
+        {
             string id = staged.Manifest.Id, version = staged.Version;
             string finalDir = DirectoryOf(id, version);
             bool moved = false, switched = false;
@@ -230,6 +315,8 @@ public sealed class PluginInstaller : IPluginInstallService
                 // The bytes the user confirmed must be the bytes that go live: hash again, and the file rules again.
                 if (!Directory.Exists(staged.Directory) || PackageTrust.PackageHash(staged.Directory) != staged.Hash || SafePackage.Validate(staged.Directory).Count > 0)
                 { SafeUnzip.TryDelete(staged.Directory); return Fail("install.changed"); }
+                // What was staged was judged against the version that ran then; if that changed since (another install, an uninstall), stage again.
+                if (store.Active(id)?.Version != staged.BaseVersion) { SafeUnzip.TryDelete(staged.Directory); return Fail("install.stale"); }
 
                 previous = store.Active(id);
                 WriteJournal(new InstallJournal(id, version, previous?.Version, previous?.Signer, previous?.Hash));
@@ -258,7 +345,6 @@ public sealed class PluginInstaller : IPluginInstallService
                 SafeUnzip.TryDelete(staged.Directory);
                 return Fail(e is HealthFailedException ? "install.healthFailed" : restored ? "install.activationFailed" : "install.rollbackFailed");
             }
-            Changed?.Invoke();
             return new PluginInstallOutcome(true, null, id, version, []);
         }
     }
@@ -292,18 +378,26 @@ public sealed class PluginInstaller : IPluginInstallService
 
     // ---------- uninstall ----------
 
-    public PluginInstallOutcome Uninstall(string packageId)
+    public PluginInstallOutcome Uninstall(string packageId, bool removeData = false)
     {
+        InstallationRecord active;
         lock (gate)
         {
-            var active = store.Active(packageId);
+            active = store.Active(packageId)!;
             if (active is null) return Fail("uninstall.notInstalled");
             try { store.Deactivate(packageId); }
             catch (Exception) { return Fail("uninstall.failed"); }
-            SafeUnzip.TryDelete(Path.Combine(PackagesRoot, packageId)); // best effort; Recover removes what a running host still held
-            Changed?.Invoke();
-            return new PluginInstallOutcome(true, null, packageId, active.Version, [], builtIns.Find(packageId)?.Version);
+            if (updates.Remove(packageId, out var staged)) SafeUnzip.TryDelete(staged.Directory);
         }
+        // The host stops using the package before its files go: in-flight calls are cancelled, and the next call loads the built-in package or none.
+        int interrupted = RestartHost(packageId);
+        lock (gate)
+        {
+            SafeUnzip.TryDelete(Path.Combine(PackagesRoot, packageId)); // best effort; Recover removes what a running host still held
+            if (removeData) { try { this.removeData?.Invoke(packageId); } catch (Exception e) when (e is not OutOfMemoryException) { } }
+        }
+        Changed?.Invoke();
+        return new PluginInstallOutcome(true, null, packageId, active.Version, [], builtIns.Find(packageId)?.Version, interrupted);
     }
 
     // ---------- state ----------
@@ -333,7 +427,8 @@ public sealed class PluginInstaller : IPluginInstallService
     {
         lock (gate)
         {
-            pending = null;
+            manual = null;
+            updates.Clear();
             SafeUnzip.TryDelete(StagingRoot);
             Directory.CreateDirectory(StagingRoot);
             bool changed = false;

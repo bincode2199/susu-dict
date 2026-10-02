@@ -30,6 +30,7 @@ export const UI_COMMANDS = {
   PluginConfirm: 'Plugin.Confirm',
   PluginDiscard: 'Plugin.Discard',
   PluginUninstall: 'Plugin.Uninstall',
+  PluginCheckUpdates: 'Plugin.CheckUpdates',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -223,6 +224,7 @@ export interface InstalledPluginView {
   origins: string[];
   secrets: string[];
   overridesBuiltIn?: string;
+  inFlight?: PluginTaskView[];
 }
 
 export interface LoadOptionsRequest {
@@ -341,6 +343,7 @@ export interface PluginOutcomeView {
   error?: string;
   issues: PluginIssueView[];
   restoredBuiltIn?: string;
+  interrupted?: number;
 }
 
 export interface PluginPreviewView {
@@ -360,14 +363,35 @@ export interface PluginPreviewView {
   removedOrigins: string[];
   addedSecrets: string[];
   removedSecrets: string[];
+  reasons?: string[];
+  isUpdate?: boolean;
+  inFlight?: PluginTaskView[];
+}
+
+export interface PluginTaskView {
+  capability: string;
+  count: number;
 }
 
 export interface PluginTokenRequest {
   token: string;
+  acknowledged?: boolean;
 }
 
 export interface PluginUninstallRequest {
   id: string;
+  removeData?: boolean;
+}
+
+export interface PluginUpdateCheckView {
+  checked: number;
+  staged: number;
+  failures: PluginUpdateFailureView[];
+}
+
+export interface PluginUpdateFailureView {
+  id: string;
+  code: string;
 }
 
 export interface PluginsView {
@@ -375,6 +399,9 @@ export interface PluginsView {
   pending?: PluginPreviewView;
   last?: PluginOutcomeView;
   canPick: boolean;
+  updates?: PluginPreviewView[];
+  canCheckUpdates?: boolean;
+  check?: PluginUpdateCheckView;
 }
 
 export interface PromptPreviewRequest {

@@ -21,6 +21,7 @@ public sealed class ChildHost : IRuntimeCallbacks
     private readonly RuntimeFactory factory;
     private readonly string engineName;
     private readonly string pluginRoot;
+    private readonly string[] extraRoots;
     private readonly string hostBuild;
     private readonly PriorityWorkQueue work = new();
     private readonly Dictionary<string, Slot> slots = new(StringComparer.Ordinal);
@@ -45,11 +46,11 @@ public sealed class ChildHost : IRuntimeCallbacks
         public HashSet<int> Apis { get; } = [];
     }
 
-    private ChildHost(Stream pipe, RuntimeFactory factory, string engineName, string pluginRoot, string hostBuild)
-    { this.pipe = pipe; this.factory = factory; this.engineName = engineName; this.pluginRoot = pluginRoot; this.hostBuild = hostBuild; }
+    private ChildHost(Stream pipe, RuntimeFactory factory, string engineName, string pluginRoot, string hostBuild, string[] extraRoots)
+    { this.pipe = pipe; this.factory = factory; this.engineName = engineName; this.pluginRoot = pluginRoot; this.hostBuild = hostBuild; this.extraRoots = extraRoots; }
 
     /// <summary>Exit codes: 0 clean shutdown, 20 server PID mismatch, 21 nonce missing, 22 connect failure, 23 protocol error.</summary>
-    public static int Run(string pipeName, int expectedServerPid, RuntimeFactory factory, string engineName, string hostBuild, TextReader? nonceSource = null)
+    public static int Run(string pipeName, int expectedServerPid, RuntimeFactory factory, string engineName, string hostBuild, TextReader? nonceSource = null, IReadOnlyList<string>? extraRoots = null)
     {
         string? nonce = (nonceSource ?? Console.In).ReadLine();
         if (string.IsNullOrWhiteSpace(nonce) || nonce.Length > 128) { Console.Error.WriteLine("nonce-missing"); return 21; }
@@ -58,7 +59,7 @@ public sealed class ChildHost : IRuntimeCallbacks
         catch (Exception error) { Console.Error.WriteLine($"connect-failed {error.GetType().Name} 0x{error.HResult:X8}"); return 22; }
         int serverPid = Susu.Windows.ContainerHost.GetServerPid(client.SafePipeHandle);
         if (serverPid != expectedServerPid) { Console.Error.WriteLine($"server-pid-mismatch expected={expectedServerPid} actual={serverPid}"); return 20; }
-        var host = new ChildHost(client, factory, engineName, AppContext.BaseDirectory, hostBuild);
+        var host = new ChildHost(client, factory, engineName, AppContext.BaseDirectory, hostBuild, [.. (extraRoots ?? []).Where(Path.IsPathFullyQualified).Select(Path.GetFullPath)]);
         host.Send(new IpcEnvelope(ProtocolVersions.Ipc, IpcMessageType.Hello, Payload: Json(new HelloPayload("plugin-host", hostBuild, nonce, Environment.ProcessId))));
         var engineThread = new Thread(host.EngineLoop) { IsBackground = true, Name = "susu-engine-0" };
         engineThread.Start();
@@ -153,10 +154,13 @@ public sealed class ChildHost : IRuntimeCallbacks
             Payload: Json(new LoadedPayload(error is null, error, timer.Elapsed.TotalMilliseconds, bytes))));
     }
 
+    private static bool IsUnder(string path, string root)
+        => path.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
     private string? Build(Slot slot)
     {
         string root = Path.GetFullPath(Path.Combine(pluginRoot, slot.Load.Directory));
-        if (!root.StartsWith(Path.GetFullPath(pluginRoot), StringComparison.OrdinalIgnoreCase)) return "plugin directory outside host resources";
+        if (!root.StartsWith(Path.GetFullPath(pluginRoot), StringComparison.OrdinalIgnoreCase) && !extraRoots.Any(r => IsUnder(root, r))) return "plugin directory outside host resources";
         int memory = Math.Clamp(slot.Load.MemoryMiB, 16, 256);
         try { slot.Runtime = factory(slot.PluginId, root, memory, slot.Budget, this); }
         catch (Exception error) { return error.Message; }

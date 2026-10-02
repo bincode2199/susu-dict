@@ -443,23 +443,37 @@ public sealed record VocabResolveRequest(string EntryId, string Target, long Rev
 public sealed record VocabSyncCommand(string Action, string? Target = null);
 
 /// <summary>
-/// SetPlugins (F16.1). Installed: user-installed packages (the built-in ones are not listed here). Pending: a staged package waiting for the user to
-/// confirm its permission diff. Last: the outcome of the last install or uninstall. CanPick: this build has a file dialog; without it the page says so.
+/// SetPlugins (F16.1, F16.2). Installed: user-installed packages (the built-in ones are not listed here). Pending: a package the user picked, waiting for
+/// confirmation of its permission diff. Updates: updates an update check staged while the installed versions keep running. Last: the outcome of the last
+/// install or uninstall. CanPick: this build has a file dialog. CanCheckUpdates: an update source is configured (none is in this build, and the page
+/// says so). Check: the result of the last update check.
 /// </summary>
 [TsExport("ui")]
-public sealed record PluginsView(InstalledPluginView[] Installed, PluginPreviewView? Pending, PluginOutcomeView? Last, bool CanPick);
+public sealed record PluginsView(InstalledPluginView[] Installed, PluginPreviewView? Pending, PluginOutcomeView? Last, bool CanPick,
+    PluginPreviewView[]? Updates = null, bool CanCheckUpdates = false, PluginUpdateCheckView? Check = null);
 
 /// <summary>
 /// A user-installed package. SignerKind: unsigned | host | thirdParty (Signer is the verified key id; a third-party key is only the identity the user
 /// accepted, not host endorsement). OverridesBuiltIn: the shipped version this package replaces; uninstalling it brings that version back.
+/// InFlight: calls of this package running now, which uninstalling would cancel.
 /// </summary>
 [TsExport("ui")]
-public sealed record InstalledPluginView(string Id, string Name, string Version, string SignerKind, string Signer, string[] Capabilities, string[] Origins, string[] Secrets, string? OverridesBuiltIn);
+public sealed record InstalledPluginView(string Id, string Name, string Version, string SignerKind, string Signer, string[] Capabilities, string[] Origins, string[] Secrets, string? OverridesBuiltIn,
+    PluginTaskView[]? InFlight = null);
 
-/// <summary>A staged package and what it would change. Against: none (first install: Added is the full set) | installed | builtin.</summary>
+/// <summary>Calls of one capability running for a package.</summary>
+[TsExport("ui")]
+public sealed record PluginTaskView(string Capability, int Count);
+
+/// <summary>
+/// A staged package and what it would change. Against: none (first install: Added is the full set) | installed | builtin. Reasons: changes the user must
+/// acknowledge before it replaces the running version (signer-changed, signature-removed, permissions-expanded). IsUpdate: found by an update check.
+/// InFlight: calls of the package it replaces that applying it would cancel.
+/// </summary>
 [TsExport("ui")]
 public sealed record PluginPreviewView(string Token, string Id, string Name, string Version, string SignerKind, string Signer, string? OverridesBuiltIn, string? ReplacesVersion,
-    string Against, string? BaseVersion, string[] AddedCapabilities, string[] RemovedCapabilities, string[] AddedOrigins, string[] RemovedOrigins, string[] AddedSecrets, string[] RemovedSecrets);
+    string Against, string? BaseVersion, string[] AddedCapabilities, string[] RemovedCapabilities, string[] AddedOrigins, string[] RemovedOrigins, string[] AddedSecrets, string[] RemovedSecrets,
+    string[]? Reasons = null, bool IsUpdate = false, PluginTaskView[]? InFlight = null);
 
 /// <summary>One reason a package was refused: Code (a stable key the page translates) and Path (the entry or field).</summary>
 [TsExport("ui")]
@@ -467,14 +481,25 @@ public sealed record PluginIssueView(string Path, string Code);
 
 /// <summary>
 /// The last plugin action. Action: install | uninstall | preview. Error is an install.*, uninstall.* key when it failed; Issues lists why a package
-/// was refused. RestoredBuiltIn: the shipped version in effect again after uninstalling an override.
+/// was refused. RestoredBuiltIn: the shipped version in effect again after uninstalling an override. Interrupted: in-flight calls the switch cancelled.
 /// </summary>
 [TsExport("ui")]
-public sealed record PluginOutcomeView(string Action, string? Id, string? Version, string? Error, PluginIssueView[] Issues, string? RestoredBuiltIn);
+public sealed record PluginOutcomeView(string Action, string? Id, string? Version, string? Error, PluginIssueView[] Issues, string? RestoredBuiltIn, int Interrupted = 0);
 
-/// <summary>Plugin.Confirm and Plugin.Discard name the pending package by its token; Plugin.Uninstall names an installed package id.</summary>
+/// <summary>The last update check: how many packages were asked, how many updates are staged, and which checks failed (Code is a stable key; a failed check is never shown as up to date).</summary>
 [TsExport("ui")]
-public sealed record PluginTokenRequest(string Token);
+public sealed record PluginUpdateCheckView(int Checked, int Staged, PluginUpdateFailureView[] Failures);
 
 [TsExport("ui")]
-public sealed record PluginUninstallRequest(string Id);
+public sealed record PluginUpdateFailureView(string Id, string Code);
+
+/// <summary>
+/// Plugin.Confirm and Plugin.Discard name the pending or staged package by its token; Acknowledged is true only when the user ticked the box for the
+/// changes the package carries (Confirm refuses a package with Reasons otherwise). Plugin.Uninstall names an installed package id; RemoveData asks to
+/// delete what the package stored (otherwise it is kept).
+/// </summary>
+[TsExport("ui")]
+public sealed record PluginTokenRequest(string Token, bool Acknowledged = false);
+
+[TsExport("ui")]
+public sealed record PluginUninstallRequest(string Id, bool RemoveData = false);

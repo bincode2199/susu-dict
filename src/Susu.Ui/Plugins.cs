@@ -15,6 +15,7 @@ public sealed partial class ShellCoordinator
     private IPluginInstallService? plugins;
     private PluginPreviewInfo? pendingPlugin;
     private PluginOutcomeView? lastPlugin;
+    private PluginUpdateCheckView? lastUpdateCheck;
     private int pluginBusy;
 
     /// <summary>The file-open dialog. Null: the page offers no "choose a package" (drop still works when native code calls <see cref="PreviewPluginPackageAsync"/>).</summary>
@@ -35,15 +36,44 @@ public sealed partial class ShellCoordinator
     private void OnPluginsChanged() => platform.StartTimer(TimeSpan.Zero, () =>
         Broadcast(UiMessageKind.Event, "settings", JsonSerializer.SerializeToElement(ProjectSettings(config.State), ContractsJson.Default.SettingsView), WindowKind.Settings));
 
+    /// <summary>The update check (F16.2). Null or not <see cref="IPluginUpdateService.Available"/>: the page has no "check for updates" and says none is configured.</summary>
+    public IPluginUpdateService? PluginUpdates { get; set; }
+
+    private static PluginTaskView[] Tasks(IEnumerable<PluginTaskInfo> tasks) => [.. tasks.Select(t => new PluginTaskView(t.Capability, t.Count))];
+
+    private PluginPreviewView ViewOf(PluginPreviewInfo p, IPluginInstallService service)
+        => new(p.Token!, p.Id!, p.Name!, p.Version!, p.SignerKind, p.Signer, p.OverridesBuiltIn, p.ReplacesVersion, p.Diff!.Against, p.Diff.BaseVersion,
+            p.Diff.AddedCapabilities, p.Diff.RemovedCapabilities, p.Diff.AddedOrigins, p.Diff.RemovedOrigins, p.Diff.AddedSecrets, p.Diff.RemovedSecrets,
+            p.Reasons, p.IsUpdate, Tasks(service.InFlight(p.Id!)));
+
     private PluginsView? ProjectPlugins()
     {
         if (plugins is not { } service) return null;
-        var installed = service.Installed().Select(p => new InstalledPluginView(p.Id, p.Name, p.Version, p.SignerKind, p.Signer, p.Capabilities, p.Origins, p.Secrets, p.OverridesBuiltIn)).ToArray();
-        PluginPreviewView? pending = null;
-        if (pendingPlugin is { Ok: true, Token: { } token, Diff: { } diff } p)
-            pending = new PluginPreviewView(token, p.Id!, p.Name!, p.Version!, p.SignerKind, p.Signer, p.OverridesBuiltIn, p.ReplacesVersion, diff.Against, diff.BaseVersion,
-                diff.AddedCapabilities, diff.RemovedCapabilities, diff.AddedOrigins, diff.RemovedOrigins, diff.AddedSecrets, diff.RemovedSecrets);
-        return new PluginsView(installed, pending, lastPlugin, PluginPicker is not null);
+        var installed = service.Installed().Select(p => new InstalledPluginView(p.Id, p.Name, p.Version, p.SignerKind, p.Signer, p.Capabilities, p.Origins, p.Secrets, p.OverridesBuiltIn, Tasks(service.InFlight(p.Id)))).ToArray();
+        PluginPreviewView? pending = pendingPlugin is { Ok: true, Token: not null, Diff: not null } p ? ViewOf(p, service) : null;
+        var updates = service.StagedUpdates().Where(u => u is { Ok: true, Token: not null, Diff: not null }).Select(u => ViewOf(u, service)).ToArray();
+        return new PluginsView(installed, pending, lastPlugin, PluginPicker is not null, updates, PluginUpdates?.Available == true, lastUpdateCheck);
+    }
+
+    private async Task<CommandResult> CheckPluginUpdatesAsync()
+    {
+        if (plugins is null || PluginUpdates is not { Available: true } updater) return new CommandResult(false, "unavailable");
+        if (Interlocked.Exchange(ref pluginBusy, 1) == 1) return new CommandResult(false, "busy");
+        try
+        {
+            try
+            {
+                var outcome = await updater.CheckAsync(CancellationToken.None);
+                lastUpdateCheck = new PluginUpdateCheckView(outcome.Checked, outcome.Staged, [.. outcome.Failures.Select(f => new PluginUpdateFailureView(f.PackageId, f.Code))]);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                Diagnostic?.Invoke("plugin.update-check-failed " + e.GetType().Name);
+                lastUpdateCheck = new PluginUpdateCheckView(0, 0, [new PluginUpdateFailureView("", "check-failed")]); // an error is never shown as "up to date"
+            }
+            return Ok(SettingsElement());
+        }
+        finally { Interlocked.Exchange(ref pluginBusy, 0); }
     }
 
     private async Task<CommandResult> PickPluginAsync()
@@ -106,20 +136,21 @@ public sealed partial class ShellCoordinator
     private async Task<CommandResult> ConfirmPluginAsync(PluginTokenRequest request)
     {
         if (plugins is not { } service) return new CommandResult(false, "unavailable");
-        if (pendingPlugin?.Token != request.Token) return new CommandResult(false, "not-found");
+        var staged = pendingPlugin?.Token == request.Token ? pendingPlugin : service.StagedUpdates().FirstOrDefault(u => u.Token == request.Token);
+        if (staged is null) return new CommandResult(false, "not-found");
         if (Interlocked.Exchange(ref pluginBusy, 1) == 1) return new CommandResult(false, "busy");
         try
         {
             PluginInstallOutcome outcome;
-            try { outcome = await Task.Run(() => service.Install(request.Token)); }
+            try { outcome = await Task.Run(() => service.Install(request.Token, request.Acknowledged)); }
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 Diagnostic?.Invoke("plugin.install-failed " + e.GetType().Name);
                 outcome = new PluginInstallOutcome(false, "install.activationFailed", null, null, []);
             }
-            lastPlugin = new PluginOutcomeView("install", outcome.Id ?? pendingPlugin.Id, outcome.Version ?? pendingPlugin.Version, outcome.Error,
-                [.. outcome.Issues.Select(i => new PluginIssueView(i.Path, i.Code))], null);
-            pendingPlugin = null;
+            lastPlugin = new PluginOutcomeView("install", outcome.Id ?? staged.Id, outcome.Version ?? staged.Version, outcome.Error,
+                [.. outcome.Issues.Select(i => new PluginIssueView(i.Path, i.Code))], null, outcome.Interrupted);
+            if (outcome.Error != "install.needsConfirmation" && pendingPlugin?.Token == request.Token) pendingPlugin = null; // it stays staged until acknowledged or discarded
             return Ok(SettingsElement());
         }
         finally { Interlocked.Exchange(ref pluginBusy, 0); }
@@ -128,7 +159,8 @@ public sealed partial class ShellCoordinator
     private CommandResult DiscardPlugin(PluginTokenRequest request)
     {
         if (plugins is not { } service) return new CommandResult(false, "unavailable");
-        if (pendingPlugin?.Token == request.Token) { service.Discard(request.Token); pendingPlugin = null; }
+        service.Discard(request.Token);
+        if (pendingPlugin?.Token == request.Token) pendingPlugin = null;
         return Ok(SettingsElement());
     }
 
@@ -139,13 +171,13 @@ public sealed partial class ShellCoordinator
         try
         {
             PluginInstallOutcome outcome;
-            try { outcome = service.Uninstall(request.Id); }
+            try { outcome = service.Uninstall(request.Id, request.RemoveData); }
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 Diagnostic?.Invoke("plugin.uninstall-failed " + e.GetType().Name);
                 outcome = new PluginInstallOutcome(false, "uninstall.failed", request.Id, null, []);
             }
-            lastPlugin = new PluginOutcomeView("uninstall", request.Id, outcome.Version, outcome.Error, [], outcome.RestoredBuiltIn);
+            lastPlugin = new PluginOutcomeView("uninstall", request.Id, outcome.Version, outcome.Error, [], outcome.RestoredBuiltIn, outcome.Interrupted);
             return Ok(SettingsElement());
         }
         finally { Interlocked.Exchange(ref pluginBusy, 0); }

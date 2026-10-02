@@ -21,7 +21,7 @@ public sealed class DatabaseVersionException(int found, int supported, string? c
 /// </summary>
 public sealed class Database : IDisposable
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
     private const int BusyTimeoutMs = 5000;
 
     /// <summary>Forward-only migrations. Version 2 (F15.1) adds the vocabulary tables; version 3 (F15.2) adds the export target path for recovery.</summary>
@@ -55,6 +55,16 @@ public sealed class Database : IDisposable
                 entry_revision INTEGER NOT NULL, PRIMARY KEY (export_id, entry_id, entry_revision));
             """,
         [3] = "ALTER TABLE vocab_exports ADD COLUMN path TEXT;",
+        // F16.2: plugin storage is namespaced by package id, so an update (a new installation row) keeps its data and an uninstall can keep or drop it by choice.
+        [4] = """
+            CREATE TABLE plugin_kv_v4 (package_id TEXT NOT NULL, namespace TEXT NOT NULL, key TEXT NOT NULL, value_json TEXT NOT NULL, bytes INTEGER NOT NULL,
+                PRIMARY KEY (package_id, namespace, key));
+            INSERT OR REPLACE INTO plugin_kv_v4(package_id, namespace, key, value_json, bytes)
+                SELECT i.package_id, k.namespace, k.key, k.value_json, k.bytes FROM plugin_kv k JOIN plugin_installations i ON i.installation_id = k.installation_id
+                ORDER BY i.active, i.version;
+            DROP TABLE plugin_kv;
+            ALTER TABLE plugin_kv_v4 RENAME TO plugin_kv;
+            """,
     };
 
     private readonly string connectionString;
@@ -312,42 +322,41 @@ public sealed class UsageRepository(Database db, IClock clock) : IUsageSink
 public sealed class PluginKvQuotaException(string message) : Exception(message);
 
 /// <summary>
-/// plugin_kv (DATA04): the host binds installation and namespace; a plugin cannot name another package's
-/// data. Per-installation default quota 1 MiB, total 32 MiB, counted as UTF-8 bytes of key + value.
+/// plugin_kv (DATA04, F16.2): the host binds the package id and the namespace; a plugin cannot name another package's data. Data belongs to the
+/// package id, so it survives updates and is removed only by <see cref="DeletePackage"/> (an explicit choice at uninstall). Per-package default
+/// quota 1 MiB, total 32 MiB, counted as UTF-8 bytes of key + value.
 /// </summary>
 public sealed class PluginKvRepository(Database db, long perInstallationBytes = 1 << 20, long totalBytes = 32 << 20) : IPluginKv
 {
     public const string StoreNamespace = "store";
     public const int MaxKeyChars = 256;
 
-    public void RegisterInstallation(string installationId, string packageId, string version, string signer, string hash, bool active = true)
-        => db.Write(w => w.Exec(
-            "INSERT INTO plugin_installations(installation_id, package_id, version, signer, hash, active) VALUES ($i, $p, $v, $s, $h, $a) ON CONFLICT(installation_id) DO UPDATE SET active=excluded.active;",
-            ("$i", installationId), ("$p", packageId), ("$v", version), ("$s", signer), ("$h", hash), ("$a", active ? 1 : 0)));
+    public string? Get(string packageId, string key) => db.Read(connection =>
+        Database.Scalar(connection, null, "SELECT value_json FROM plugin_kv WHERE package_id=$i AND namespace=$n AND key=$k;", ("$i", packageId), ("$n", StoreNamespace), ("$k", key)) as string);
 
-    public string? Get(string installationId, string key) => db.Read(connection =>
-        Database.Scalar(connection, null, "SELECT value_json FROM plugin_kv WHERE installation_id=$i AND namespace=$n AND key=$k;", ("$i", installationId), ("$n", StoreNamespace), ("$k", key)) as string);
-
-    public void Set(string installationId, string key, string valueJson)
+    public void Set(string packageId, string key, string valueJson)
     {
         if (key.Length is 0 or > MaxKeyChars) throw new ArgumentException($"key must be 1..{MaxKeyChars} characters");
         long bytes = Encoding.UTF8.GetByteCount(key) + Encoding.UTF8.GetByteCount(valueJson);
         db.Write(w =>
         {
-            (string, object?)[] p = [("$i", installationId), ("$n", StoreNamespace), ("$k", key)];
-            long mine = (long)w.Scalar("SELECT coalesce(sum(bytes), 0) FROM plugin_kv WHERE installation_id=$i AND NOT (namespace=$n AND key=$k);", p)!;
+            (string, object?)[] p = [("$i", packageId), ("$n", StoreNamespace), ("$k", key)];
+            long mine = (long)w.Scalar("SELECT coalesce(sum(bytes), 0) FROM plugin_kv WHERE package_id=$i AND NOT (namespace=$n AND key=$k);", p)!;
             if (mine + bytes > perInstallationBytes) throw new PluginKvQuotaException($"store quota {perInstallationBytes} bytes exceeded");
-            long all = (long)w.Scalar("SELECT coalesce(sum(bytes), 0) FROM plugin_kv WHERE NOT (installation_id=$i AND namespace=$n AND key=$k);", p)!;
+            long all = (long)w.Scalar("SELECT coalesce(sum(bytes), 0) FROM plugin_kv WHERE NOT (package_id=$i AND namespace=$n AND key=$k);", p)!;
             if (all + bytes > totalBytes) throw new PluginKvQuotaException($"total store quota {totalBytes} bytes exceeded");
             return w.Exec(
-                "INSERT INTO plugin_kv(installation_id, namespace, key, value_json, bytes) VALUES ($i, $n, $k, $v, $b) ON CONFLICT(installation_id, namespace, key) DO UPDATE SET value_json=excluded.value_json, bytes=excluded.bytes;",
-                ("$i", installationId), ("$n", StoreNamespace), ("$k", key), ("$v", valueJson), ("$b", bytes));
+                "INSERT INTO plugin_kv(package_id, namespace, key, value_json, bytes) VALUES ($i, $n, $k, $v, $b) ON CONFLICT(package_id, namespace, key) DO UPDATE SET value_json=excluded.value_json, bytes=excluded.bytes;",
+                ("$i", packageId), ("$n", StoreNamespace), ("$k", key), ("$v", valueJson), ("$b", bytes));
         });
     }
 
-    public bool Delete(string installationId, string key) => db.Write(w =>
-        w.Exec("DELETE FROM plugin_kv WHERE installation_id=$i AND namespace=$n AND key=$k;", ("$i", installationId), ("$n", StoreNamespace), ("$k", key)) > 0);
+    public bool Delete(string packageId, string key) => db.Write(w =>
+        w.Exec("DELETE FROM plugin_kv WHERE package_id=$i AND namespace=$n AND key=$k;", ("$i", packageId), ("$n", StoreNamespace), ("$k", key)) > 0);
 
-    public long BytesUsed(string installationId) => db.Read(connection =>
-        (long)Database.Scalar(connection, null, "SELECT coalesce(sum(bytes), 0) FROM plugin_kv WHERE installation_id=$i;", ("$i", installationId))!);
+    public long BytesUsed(string packageId) => db.Read(connection =>
+        (long)Database.Scalar(connection, null, "SELECT coalesce(sum(bytes), 0) FROM plugin_kv WHERE package_id=$i;", ("$i", packageId))!);
+
+    /// <summary>Removes everything a package stored; returns the number of keys removed. Called only when the user chose to remove the data at uninstall.</summary>
+    public int DeletePackage(string packageId) => db.Write(w => w.Exec("DELETE FROM plugin_kv WHERE package_id=$i;", ("$i", packageId)));
 }

@@ -120,15 +120,29 @@ public static class PluginTranslationProviders
     /// Launch function body: loads every wired package into a fresh session. One package failing to load
     /// is reported and skipped (its calls then fail on their own card) instead of taking the others down;
     /// only a session where nothing loaded is a launch failure.
+    /// F16.2: <paramref name="activeDirectory"/> names the directory of a user-installed version of a wired package (a host-signed override), which is
+    /// loaded in place of the shipped one; <paramref name="installed"/> lists every user-installed package, and those the product does not wire
+    /// are loaded too so they are present in the host the moment they are installed.
     /// </summary>
-    public static HostSession LoadAll(HostSession session, Action<string, string?>? loadFailed = null)
+    public static HostSession LoadAll(HostSession session, Action<string, string?>? loadFailed = null, Func<string, string?>? activeDirectory = null,
+        Func<IReadOnlyList<InstalledPackage>>? installed = null)
     {
         int loaded = 0;
+        var done = new HashSet<string>(StringComparer.Ordinal);
         foreach (var package in WiredPackages)
         {
-            var result = session.Load(package.PackageId, package.Directory);
+            if (!done.Add(package.PackageId)) continue;
+            string directory = activeDirectory?.Invoke(package.PackageId) ?? package.Directory;
+            var result = session.Load(package.PackageId, directory);
             if (result.Ok) loaded++;
             else loadFailed?.Invoke(package.PackageId, result.Error);
+        }
+        foreach (var package in installed?.Invoke() ?? [])
+        {
+            if (!done.Add(package.Id)) continue;
+            var result = session.Load(package.Id, package.Directory, entry: package.Entry);
+            if (result.Ok) loaded++;
+            else loadFailed?.Invoke(package.Id, result.Error);
         }
         if (loaded == 0)
         {
@@ -138,3 +152,6 @@ public static class PluginTranslationProviders
         return session;
     }
 }
+
+/// <summary>A user-installed package the plugin host loads: its id, absolute directory and manifest entry file.</summary>
+public sealed record InstalledPackage(string Id, string Directory, string Entry);

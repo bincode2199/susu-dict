@@ -489,6 +489,7 @@ public sealed partial class ShellCoordinator
             case UiCommands.PluginConfirm: return await ConfirmPluginAsync(Read(payload, ContractsJson.Default.PluginTokenRequest));
             case UiCommands.PluginDiscard: return DiscardPlugin(Read(payload, ContractsJson.Default.PluginTokenRequest));
             case UiCommands.PluginUninstall: return UninstallPlugin(Read(payload, ContractsJson.Default.PluginUninstallRequest));
+            case UiCommands.PluginCheckUpdates: return await CheckPluginUpdatesAsync();
             case UiCommands.BeginCapture: return Recapture();
             case UiCommands.StartRecording: return await StartRecordingAsync();
             case UiCommands.PauseRecording: return await PauseRecordingAsync();
