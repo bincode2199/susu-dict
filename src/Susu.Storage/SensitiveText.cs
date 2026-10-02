@@ -112,10 +112,10 @@ public static partial class SensitiveText
 /// </summary>
 public sealed class SensitiveLiterals
 {
-    public const int MinLength = 4;
+    public const int MinLength = 4, MinEncodedPiece = 8;
     private readonly object gate = new();
     private readonly HashSet<string> values = new(StringComparer.Ordinal);
-    private List<string> forms = [];
+    private List<(string Form, StringComparison Comparison)> forms = [];
 
     public int Count { get { lock (gate) return values.Count; } }
 
@@ -125,9 +125,10 @@ public sealed class SensitiveLiterals
         lock (gate)
         {
             if (!values.Add(value)) return;
-            var set = new HashSet<string>(forms, StringComparer.Ordinal);
-            foreach (var form in FormsOf(value)) set.Add(form);
-            forms = [.. set.OrderByDescending(f => f.Length).ThenBy(f => f, StringComparer.Ordinal)];
+            var set = new HashSet<(string, StringComparison)>(forms);
+            foreach (var form in TextForms(value)) set.Add((form, StringComparison.OrdinalIgnoreCase));
+            foreach (var form in EncodedForms(value)) set.Add((form, StringComparison.Ordinal)); // Base64 and hex are matched exactly: a short case-folded piece would match ordinary words
+            forms = [.. set.OrderByDescending(f => f.Item1.Length).ThenBy(f => f.Item1, StringComparer.Ordinal)];
         }
     }
 
@@ -136,22 +137,25 @@ public sealed class SensitiveLiterals
     /// <summary>Replaces every known form with <see cref="SensitiveText.Mask"/>.</summary>
     public string Mask(string text)
     {
-        string[] snapshot;
+        (string Form, StringComparison Comparison)[] snapshot;
         lock (gate) snapshot = [.. forms];
-        foreach (var form in snapshot) text = text.Replace(form, SensitiveText.Mask, StringComparison.OrdinalIgnoreCase);
+        foreach (var (form, comparison) in snapshot) text = text.Replace(form, SensitiveText.Mask, comparison);
         return text;
     }
 
     /// <summary>True when any registered value occurs in <paramref name="text"/> in any known form.</summary>
     public bool Contains(string text)
     {
-        string[] snapshot;
+        (string Form, StringComparison Comparison)[] snapshot;
         lock (gate) snapshot = [.. forms];
-        foreach (var form in snapshot) if (text.Contains(form, StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (var (form, comparison) in snapshot) if (text.Contains(form, comparison)) return true;
         return false;
     }
 
-    public static IEnumerable<string> FormsOf(string value)
+    /// <summary>Every form a value is matched in (for tests and scanners).</summary>
+    public static IEnumerable<string> FormsOf(string value) => TextForms(value).Concat(EncodedForms(value));
+
+    private static IEnumerable<string> TextForms(string value)
     {
         yield return value;
         string escaped = Uri.EscapeDataString(value);
@@ -161,6 +165,10 @@ public sealed class SensitiveLiterals
         yield return JavaScriptEncoder.Default.Encode(value);
         yield return JavaScriptEncoder.UnsafeRelaxedJsonEscaping.Encode(value);
         yield return value.Replace("\\", "\\\\", StringComparison.Ordinal);
+    }
+
+    private static IEnumerable<string> EncodedForms(string value)
+    {
         byte[] utf8 = Encoding.UTF8.GetBytes(value);
         yield return Convert.ToHexStringLower(utf8);
         yield return Convert.ToHexString(utf8);
@@ -185,7 +193,7 @@ public sealed class SensitiveLiterals
             int skip = pad == 0 ? 0 : (pad * 8 + 5) / 6; // chars that include bytes in front of the value
             int stable = buffer.Length * 8 / 6;          // chars fully determined by the bytes up to the value's end
             int take = Math.Min(stable, b64.Length) - skip;
-            if (take >= 6) yield return b64.Substring(skip, take);
+            if (take >= MinEncodedPiece) yield return b64.Substring(skip, take);
         }
     }
 }

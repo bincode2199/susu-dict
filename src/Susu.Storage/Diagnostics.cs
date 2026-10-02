@@ -35,6 +35,9 @@ public sealed class DiagnosticsExporter(AppPaths paths, IClock clock, SensitiveL
     private static readonly string[] PrivateSuffixes = [".local", ".lan", ".internal", ".home", ".corp", ".intranet", ".localdomain", ".home.arpa"];
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Default };
 
+    /// <summary>The entry (never the value) in which the last export found a registered value; for the developer reading a leak-detected result.</summary>
+    public string? LastLeakEntry { get; private set; }
+
     public DiagnosticsOutcome Export(string path)
     {
         try
@@ -158,8 +161,9 @@ public sealed class DiagnosticsExporter(AppPaths paths, IClock clock, SensitiveL
     {
         var entries = new List<(string Name, string Text)> { ("README.txt", Readme()), ("diagnostics.json", InfoJson(files, kept, dropped)) };
         foreach (var (name, text) in logs) entries.Add(($"logs/{name}", text));
-        foreach (var (_, text) in entries)
-            if (literals.Contains(text)) throw new DiagnosticsLeakException();
+        LastLeakEntry = null;
+        foreach (var (name, text) in entries)
+            if (literals.Contains(text)) { LastLeakEntry = name; throw new DiagnosticsLeakException(); }
         using var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
@@ -212,9 +216,9 @@ public sealed class DiagnosticsExporter(AppPaths paths, IClock clock, SensitiveL
     }
 
     private static readonly Regex VersionShape = new(@"^[0-9]+(\.[0-9]+){1,3}([\-+][0-9A-Za-z.\-]{1,40})?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static string Version(string value) => VersionShape.IsMatch(value) ? value : "unknown";
+    private string Version(string value) => VersionShape.IsMatch(value) && !literals.Contains(value) ? value : "unknown";
 
-    private string Plain(string value) => PlainText.IsMatch(value) && !literals.Contains(value) && SensitiveText.Standard(value) == value ? value : "unknown";
+    private string Plain(string value) => PlainText.IsMatch(value) && !literals.Contains(value) ? value : "unknown";
 }
 
 /// <summary>A registered secret or identity was found in a finished diagnostics entry; nothing was written.</summary>
