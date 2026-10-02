@@ -1516,5 +1516,98 @@ public sealed class F17VerificationTests : IDisposable
         Assert.True(File.Exists(Path.Combine(dirOutside, "a.txt")));
     }
 
+    // ================= NOTICE and third-party list against what ships =================
+
+    private static string RepoRoot()
+    {
+        for (string? d = AppContext.BaseDirectory; d is not null; d = Path.GetDirectoryName(d))
+            if (File.Exists(Path.Combine(d, "CLAUDE.md")) && Directory.Exists(Path.Combine(d, "LICENSES"))) return d;
+        throw new InvalidOperationException("repository root not found");
+    }
+
+    private static JsonElement[] Components()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(RepoRoot(), "LICENSES", "third-party.json")));
+        return [.. doc.RootElement.GetProperty("components").EnumerateArray().Select(e => e.Clone())];
+    }
+
+    private static string Str(JsonElement e, string name) => e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()! : "";
+
+    [Fact]
+    public void Every_nuget_package_the_host_restores_for_the_app_has_a_notice_row_with_a_license()
+    {
+        string root = RepoRoot();
+        using var lockDoc = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "src", "Susu.Host", "packages.lock.json")));
+        var restored = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fw in lockDoc.RootElement.GetProperty("dependencies").EnumerateObject())
+            foreach (var pkg in fw.Value.EnumerateObject())
+                if (pkg.Value.TryGetProperty("type", out var t) && t.GetString() is not "Project") restored.Add(pkg.Name);
+        var rows = Components().Where(c => Str(c, "kind") == "nuget").ToArray();
+        var listed = rows.Select(r => Str(r, "name")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.NotEmpty(restored);
+        string[] buildOnly = ["Microsoft.DotNet.ILCompiler", "Microsoft.NET.ILLink.Tasks"]; // the compiler and the trimmer run at build time and are not redistributed; the runtime pack is listed
+        Assert.All(restored.Except(buildOnly, StringComparer.OrdinalIgnoreCase), n => Assert.Contains(n, listed));
+        Assert.All(rows, r => { Assert.NotEmpty(Str(r, "license")); Assert.NotEmpty(Str(r, "version")); Assert.NotEqual("unknown", Str(r, "license").ToLowerInvariant()); });
+        // and the versions are the restored ones
+        foreach (var fw in lockDoc.RootElement.GetProperty("dependencies").EnumerateObject())
+            foreach (var pkg in fw.Value.EnumerateObject())
+                if (pkg.Value.TryGetProperty("resolved", out var v) && rows.FirstOrDefault(r => Str(r, "name").Equals(pkg.Name, StringComparison.OrdinalIgnoreCase)) is { ValueKind: JsonValueKind.Object } row)
+                    Assert.Equal(v.GetString(), Str(row, "version"));
+    }
+
+    [Fact]
+    public void Every_native_library_the_host_ships_is_listed_and_the_notice_file_names_every_row()
+    {
+        string root = RepoRoot();
+        string csproj = File.ReadAllText(Path.Combine(root, "src", "Susu.Host", "Susu.Host.csproj"));
+        var shipped = System.Text.RegularExpressions.Regex.Matches(csproj, "Link=\"([^\"]+\\.dll)\"").Select(m => m.Groups[1].Value).ToArray();
+        Assert.Contains("susu_quickjs.dll", shipped);
+        Assert.Contains("susu_native.dll", shipped);
+        var rows = Components();
+        string ships(string name) => string.Join(" | ", rows.Where(r => Str(r, "name").Contains(name, StringComparison.OrdinalIgnoreCase)).Select(r => Str(r, "ships")));
+        Assert.Contains("susu_quickjs.dll", ships("QuickJS"));
+        Assert.NotEmpty(ships("WebView2"));
+        // SQLite ships as e_sqlite3.dll through SQLitePCLRaw
+        Assert.Contains(rows, r => Str(r, "name").StartsWith("SQLitePCLRaw.lib.e_sqlite3", StringComparison.Ordinal));
+        // DEFECT F17V-11 (low, documentation): src/Susu.Windows/native/CMakeLists.txt links WebView2LoaderStatic.lib into BOTH susu_windows_probe and susu_native; only the
+        // probe (a test artifact that is not in the Host's Content list) is named in the WebView2 row's "ships", and susu_native.dll, the shell the user runs, is not.
+        // The MSVC runtime row names susu_quickjs and susu_windows_probe but not susu_native, susu_plugin_sandbox or susu_selection, which are also /MT. The license
+        // rows themselves are present; only the "ships" attribution is wrong. Records today's text; when fixed the WebView2 row must name susu_native.dll.
+        string cmake = File.ReadAllText(Path.Combine(root, "src", "Susu.Windows", "native", "CMakeLists.txt"));
+        Assert.Contains("target_link_libraries(susu_native PRIVATE \"${WEBVIEW_SDK}/x64/WebView2LoaderStatic.lib\"", cmake, StringComparison.Ordinal);
+        Assert.DoesNotContain("susu_native.dll", ships("WebView2"), StringComparison.Ordinal);
+        Assert.Contains("susu_windows_probe.dll", ships("WebView2"), StringComparison.Ordinal);
+        // the NOTICE file lists every row by name and version
+        string notice = File.ReadAllText(Path.Combine(root, "LICENSES", "NOTICE.txt"));
+        Assert.All(rows, r => Assert.Contains(Str(r, "name") + " " + Str(r, "version"), notice, StringComparison.Ordinal));
+        // the copy compiled into the app (shown on the About page) is the file on disk, not a stale one
+        using var embedded = typeof(Susu.Ui.ShellCoordinator).Assembly.GetManifestResourceStream("third-party.json")!;
+        using var ms = new MemoryStream(); embedded.CopyTo(ms);
+        Assert.Equal(File.ReadAllText(Path.Combine(root, "LICENSES", "third-party.json")).ReplaceLineEndings("\n").TrimEnd(), Encoding.UTF8.GetString(ms.ToArray()).ReplaceLineEndings("\n").TrimEnd());
+        // the UI runtime that ships is listed
+        var names = rows.Select(r => Str(r, "name")).ToHashSet();
+        Assert.All(new[] { "vue", "@vue/runtime-dom", "@vue/runtime-core", "@vue/reactivity", "@vue/shared" }, n => Assert.Contains(n, names));
+    }
+
+    [Fact]
+    public void No_unlisted_binary_sits_in_the_shipped_source_folders()
+    {
+        string root = RepoRoot();
+        string[] binary = [".dll", ".exe", ".lib", ".so", ".dylib", ".node", ".wasm", ".ttf", ".otf", ".woff", ".woff2"];
+        var found = new List<string>();
+        foreach (string folder in new[] { Path.Combine(root, "src", "Susu.Host"), Path.Combine(root, "native"), Path.Combine(root, "ui", "src"), Path.Combine(root, "ui", "public") })
+        {
+            if (!Directory.Exists(folder)) continue;
+            foreach (var f in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+            {
+                string rel = Path.GetRelativePath(root, f);
+                if (rel.Contains("\\bin\\") || rel.Contains("\\obj\\") || rel.Contains("node_modules")) continue;
+                if (binary.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)) found.Add(rel);
+            }
+        }
+        // no vendored binary, font or wasm is checked in beside the sources: everything third-party reaches the build through the lock files, which the rows above cover
+        Assert.Empty(found);
+    }
+
     // === END ===
 }
