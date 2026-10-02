@@ -84,7 +84,7 @@ public sealed class VocabPluginTests : IDisposable
         public void Dispose() => supervisor.Dispose();
     }
 
-    private Rig? Build(string instanceId, string origin, Dictionary<string, string> extra, string? secret, TimeSpan? timeout = null)
+    private Rig? Build(string instanceId, string origin, Dictionary<string, string> extra, string? secret, TimeSpan? timeout = null, bool approveOrigin = true)
     {
         if (staged.Value is not { } dir) return null;
         var package = PluginTranslationProviders.WiredPackages.Single(p => p.InstanceId == instanceId);
@@ -105,7 +105,7 @@ public sealed class VocabPluginTests : IDisposable
         var supervisor = new Supervisor<HostSession>(() =>
         {
             var session = HostSession.Start(options);
-            session.Broker.ApproveLocalOrigin(origin); // the loopback fake (Eudic is not a local package, so the target never approves it)
+            if (approveOrigin) session.Broker.ApproveLocalOrigin(origin); // the loopback fake (Eudic is not a local package, so the target never approves it)
             var loaded = session.Load(package.PackageId, package.Directory);
             if (!loaded.Ok) { session.Shutdown(2000); throw new InvalidOperationException($"{package.PackageId} failed to load: {loaded.Error}"); }
             return session;
@@ -495,6 +495,22 @@ public sealed class VocabPluginTests : IDisposable
             Assert.False(other.Ok);
         }
         finally { rig.Supervisor.Release(); }
+    }
+
+    [Fact] // F15.4: the host's options call approves the loopback AnkiConnect address itself (the address typed on SetVocab is the approval); before this the deck list was refused
+    public async Task Anki_options_through_the_host_call_works_without_a_separate_origin_approval()
+    {
+        using var anki = new FakeAnki();
+        anki.Decks.Add("Zeta");
+        using var rig = Build(VocabCatalog.AnkiConnect, anki.Server.Origin, [], null, approveOrigin: false);
+        if (rig is null) return;
+        var defaults = BuiltInCatalog.Defaults();
+        var settings = defaults with { Instances = [.. defaults.Instances.Select(i => i.Id == VocabCatalog.AnkiConnect ? i with { Config = new Dictionary<string, string> { ["baseUrl"] = anki.Server.Origin } } : i)] };
+
+        var outcome = await PluginTranslationProviders.LoadOptionsAsync(rig.Supervisor, settings, VocabCatalog.AnkiConnect, OptionsSource.OptionsMethod, "deck", 1, null, TimeSpan.FromSeconds(10), Ct);
+
+        Assert.True(outcome.Ok, outcome.ErrorDetail);
+        Assert.Contains(outcome.Result!.Items, i => i.Value == "Zeta");
     }
 
     // ---------------- P-V02 Eudic ----------------

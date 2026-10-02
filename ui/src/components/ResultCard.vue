@@ -51,13 +51,18 @@ function readAloud(): void {
 // F15.4 favorite star: the host keeps the entry locally (works with no sync target) and queues it to the enabled targets. The star asks the host for the
 // state when the shown entry changes; a host without the vocabulary service answers unavailable and the star stays greyed. Unfavoriting never deletes a remote entry.
 const favorite = ref<{ phase: 'unknown' | 'unavailable' | 'ready' | 'busy'; on: boolean; targets: number; failed: boolean }>({ phase: 'unknown', on: false, targets: 0, failed: false });
+/** The star state from a Vocab.Collect answer, or null when the answer is not a usable one (refused or malformed). */
+function collected(result: CommandResult): { phase: 'ready'; on: boolean; targets: number; failed: false } | null {
+  const v = result.ok ? (result.value as CollectView | undefined) : undefined;
+  return v && typeof v.favorited === 'boolean' ? { phase: 'ready', on: v.favorited, targets: v.targets ?? 0, failed: false } : null;
+}
 async function askFavorite(): Promise<void> {
   const bridge = props.bridge;
   if (!bridge || !entry.value) { favorite.value = { phase: 'unavailable', on: false, targets: 0, failed: false }; return; }
   const serviceId = props.card.serviceId;
   const result = await bridge.command(UI_COMMANDS.Collect, { serviceId });
   if (serviceId !== props.card.serviceId) return;
-  favorite.value = result.ok ? { phase: 'ready', on: (result.value as CollectView).favorited, targets: (result.value as CollectView).targets, failed: false } : { phase: 'unavailable', on: false, targets: 0, failed: false };
+  favorite.value = collected(result) ?? { phase: 'unavailable', on: false, targets: 0, failed: false };
 }
 watch(() => [props.card.serviceId, entry.value?.word, props.from, props.bridge], () => { void askFavorite(); }, { immediate: true });
 async function toggleFavorite(): Promise<void> {
@@ -66,7 +71,7 @@ async function toggleFavorite(): Promise<void> {
   const was = favorite.value;
   favorite.value = { ...was, phase: 'busy' };
   const result = await bridge.command(UI_COMMANDS.Collect, { serviceId: props.card.serviceId, favorite: !was.on });
-  favorite.value = result.ok ? { phase: 'ready', on: (result.value as CollectView).favorited, targets: (result.value as CollectView).targets, failed: false } : { ...was, phase: 'ready', failed: true };
+  favorite.value = collected(result) ?? { ...was, phase: 'ready', failed: true };
 }
 const favoriteTitle = computed(() => {
   const f = favorite.value;

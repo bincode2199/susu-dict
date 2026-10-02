@@ -99,6 +99,8 @@ public static class PluginTranslationProviders
             string configJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>(instance.Config), Susu.Contracts.ContractsJson.Default.DictionaryStringString);
             string jobId = $"options-{Guid.NewGuid():N}";
             string[] origins = [package.Origin(instance.Config)];
+            // F15.4: the AnkiConnect address the user typed on SetVocab is approved here as it is for a sync call, but only when it is a loopback address.
+            if (package.Credentials is VocabPackage { Local: true } && VocabPackage.IsLoopback(origins[0])) host.Broker.ApproveLocalOrigin(origins[0]);
             if (method == OptionsSource.VoicesMethod)
             {
                 var voices = await CapabilityClient.InvokeAsync(host, package.PackageId, "voices", "{}", jobId, origins, Susu.Contracts.ContractsJson.Default.VoiceArray,

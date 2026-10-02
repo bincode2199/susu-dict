@@ -888,6 +888,10 @@ public sealed partial class ShellCoordinator
         if (request.DependsOnRevision != current) return Ok(JsonSerializer.SerializeToElement(Stale(current), ContractsJson.Default.OptionsView));
         if (TranslationPackages.Find(instance.Id) is { } package && TranslationPackages.CredentialStates(s, package, instance, config.Secrets.Has).Any(c => !c.Saved || !c.Granted))
             return new CommandResult(false, "missing-credential");
+        // F15.4: a vocabulary package needs its key for the lists (Eudic always; AnkiConnect only with "use an API key") and AnkiConnect only a local address.
+        if (VocabCatalog.Find(instance.Id) is { } vocabPackage && instance.Package == vocabPackage.PackageId && (!vocabPackage.Local || instance.Config.GetValueOrDefault("useApiKey") is "true")
+            && CredentialPackages.States(s, vocabPackage, instance, config.Secrets.Has).Any(c => !c.Saved || !c.Granted))
+            return new CommandResult(false, "missing-credential");
         var outcome = await broker.LoadAsync(new OptionsQuery(instance.Id, field.Name, field.Options!.Method, current, request.Cursor), request.Refresh);
         var view = outcome switch
         {
