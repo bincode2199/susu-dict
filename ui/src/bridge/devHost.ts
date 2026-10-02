@@ -169,6 +169,15 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     deltas: [{ area: 'settings', current: 0, backup: 0, differs: true }, { area: 'accounts', current: 1, backup: 2, differs: true }, { area: 'instances', current: 23, backup: 23, differs: false }, { area: 'enabledServices', current: 3, backup: 4, differs: true }, { area: 'prompts', current: 0, backup: 1, differs: true }],
     plugins: [{ id: 'dev.sample', backupVersion: '1.0.0', status: 'missing' }], missingPackages: ['dev.sample'], disabledInstances: ['sample'], accounts: [{ id: 'acct-deepl', label: 'DeepL', missingSecrets: ['apiKey'] }], backupSecrets: 0, keysRemoved: 1, keptFavorites: 12, keptOutbox: 2, conflicts: ['plugins-missing', 'accounts-need-authorization'] });
   const backupView = (): BackupFixture => ({ canExport: true, canImport: true, step: backupStep, fileName: backupStep === 'idle' ? undefined : 'su-su-backup.susubak', preview: backupStep === 'preview' ? backupPreview() : undefined, last: backupLast, scheduled: backupScheduled, scheduledSource: backupScheduled ? 'backup' : undefined, canUndo: false });
+  // F17.2 fixture: the About page with no real log folder, file or data (dev preview only; every clean only edits these counters).
+  type AboutFixture = NonNullable<SettingsView['about']>;
+  let aboutDiagnostics: AboutFixture['diagnostics'];
+  let aboutCleaned: AboutFixture['cleaned'];
+  const aboutData = new Map<string, number>([['caches', 4], ['logs', 3], ['screenshots', 2], ['favorites', 3], ['settings', 0], ['accounts', 2]]);
+  const aboutView = (): AboutFixture => ({ version: '1.0.0.0', build: '1.0.0', os: 'Windows (dev preview)', runtime: '.NET (dev preview)', logLocation: '%LOCALAPPDATA%\Su-Su\logs', logFiles: aboutData.get('logs') ?? 0, logBytes: 48213,
+    canOpenLogs: true, canExport: true, diagnostics: aboutDiagnostics,
+    licenses: [{ name: 'QuickJS-NG', version: 'v0.17.0', license: 'MIT', kind: 'native', ships: 'susu_quickjs.dll (static)' }, { name: 'YamlDotNet', version: '18.1.0', license: 'MIT', kind: 'nuget', ships: 'compiled in' }],
+    data: ['caches', 'logs', 'screenshots', 'favorites', 'settings', 'accounts'].map((kind) => ({ kind, count: aboutData.get(kind) ?? 0, bytes: kind === 'settings' || kind === 'accounts' || kind === 'favorites' ? 0 : (aboutData.get(kind) ?? 0) * 1024, available: true })), cleaned: aboutCleaned });
   const vocabView = (): NonNullable<SettingsView['vocab']> => ({
     favorites: 3 + favorited.size, canExport: true, rows: vocabRows, export: vocabExport,
     targets: [
@@ -203,6 +212,7 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
     settings.vocab = vocabView();
     settings.plugins = pluginsView();
     settings.backup = backupView();
+    settings.about = aboutView();
     return structuredClone(settings);
   };
 
@@ -411,6 +421,27 @@ export function createDevHost(kind: WindowKind, session: string, language: strin
         backupLast = undefined;
         ok(project());
         return;
+      case 'About.OpenLogs':
+        ok(project());
+        return;
+      case 'About.ExportDiagnostics':
+        aboutDiagnostics = { fileName: 'su-su-diagnostics.zip', logFiles: aboutData.get('logs') ?? 0, logLines: 120, droppedLines: 2, bytes: 9120 };
+        ok(project());
+        return;
+      case 'About.Dismiss':
+        aboutDiagnostics = undefined;
+        aboutCleaned = undefined;
+        ok(project());
+        return;
+      case 'Data.Clear': {
+        const kind = String(payload?.kind ?? '');
+        if (!payload?.confirm) { fail('confirm-required'); return; }
+        const removed = aboutData.get(kind) ?? 0;
+        if (kind !== 'settings') aboutData.set(kind, 0);
+        aboutCleaned = { kind, removed: kind === 'settings' ? 1 : removed, bytes: 0, skipped: 0 };
+        ok(project());
+        return;
+      }
       case 'Vocab.Sync':
         ok(project());
         return;

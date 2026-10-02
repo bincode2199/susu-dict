@@ -38,7 +38,7 @@ function press(index: number): void {
     <ul v-if="entry.parts.length" class="parts">
       <li v-for="(part, i) in entry.parts" :key="i" class="part">
         <span class="pos">{{ part.pos }}</span>
-        <span class="means">{{ part.means.join('；') }}</span>
+        <span class="means">{{ part.means.join(t('sep.semicolon')) }}</span>
       </li>
     </ul>
     <p v-if="entry.forms.length" class="forms">

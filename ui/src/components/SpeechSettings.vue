@@ -29,7 +29,7 @@ const choiceLabel = (choice: SpeechChoiceView) => {
   const notes: string[] = [];
   if (!choice.selectable && choice.reasonKey) notes.push(t(`speech.choice.${choice.reasonKey}`));
   else if (!choice.installed) notes.push(t('speech.choice.notInstalled'));
-  return notes.length ? `${serviceName(choice.instanceId)}（${notes.join('，')}）` : serviceName(choice.instanceId);
+  return notes.length ? `${serviceName(choice.instanceId)}${t('sep.open')}${notes.join(t('sep.comma'))}${t('sep.close')}` : serviceName(choice.instanceId);
 };
 const modelLabel = (id: string, timecodes: boolean) => `${id} · ${t(timecodes ? 'speech.model.timecodes' : 'speech.model.textOnly')}`;
 

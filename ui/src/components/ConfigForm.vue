@@ -103,7 +103,7 @@ async function save(): Promise<void> {
   if (result.error === 'invalid') {
     const issues = (result.value as { path: string }[] | undefined) ?? [];
     const names = issues.map((i) => i.path.split('.').pop() ?? '').map((name) => { const f = fields.value.find((x) => x.name === name); return f ? title(f) : name; });
-    message.value = t('config.invalid', { field: names.join('、') });
+    message.value = t('config.invalid', { field: names.join(t('sep.list')) });
     return;
   }
   if (result.error === 'conflict' && result.value) { message.value = t('config.conflict'); emit('settings', result.value as SettingsView); return; }

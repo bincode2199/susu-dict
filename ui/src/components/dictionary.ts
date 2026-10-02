@@ -43,10 +43,10 @@ export function entryPlainText(entry: DictionaryEntryView): string {
   const parts = entry.parts
     .map((p) => ({ pos: clean(p.pos), means: p.means.map(clean).filter(Boolean) }))
     .filter((p) => p.means.length)
-    .map((p) => (p.pos ? `${p.pos} ${p.means.join('；')}` : p.means.join('；')));
+    .map((p) => (p.pos ? `${p.pos} ${p.means.join(t('sep.semicolon'))}` : p.means.join(t('sep.semicolon'))));
   if (parts.length) groups.push(parts);
   const forms = entry.forms.filter((f) => clean(f.value)).map((f) => `${clean(f.name)}: ${clean(f.value)}`);
-  if (forms.length) groups.push([forms.join('；')]);
+  if (forms.length) groups.push([forms.join(t('sep.semicolon'))]);
   const examples = entry.examples.flatMap((e) => [clean(e.src), clean(e.dst)].filter(Boolean));
   if (examples.length) groups.push(examples);
   return groups.filter((g) => g.length).map((g) => g.join('\n')).join('\n\n');

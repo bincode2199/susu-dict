@@ -139,7 +139,7 @@ const validationFailed = computed(() => !!validation.value && !validation.value.
       <button type="button" class="btn" @click="authorize">{{ t('grant.authorize') }}</button>
     </div>
     <div v-if="pending?.kind === 'authorize'" class="confirm" role="alertdialog" :aria-label="t('grant.authorize')">
-      <span class="address">{{ pending.origins.map((origin) => t('grant.target', { origin })).join('；') }}</span>
+      <span class="address">{{ pending.origins.map((origin) => t('grant.target', { origin })).join(t('sep.semicolon')) }}</span>
       <button type="button" class="btn" @click="dropPending">{{ t('grant.cancel') }}</button>
       <button type="button" class="btn primary" :disabled="busy" @click="confirm">{{ t('grant.confirm') }}</button>
     </div>
@@ -151,7 +151,7 @@ const validationFailed = computed(() => !!validation.value && !validation.value.
       </select>
     </SettingRow>
     <div v-if="pending?.kind === 'bind'" class="confirm" role="alertdialog" :aria-label="t('account.bind', { account: pendingAccountName })">
-      <span class="address">{{ t('account.bind', { account: pendingAccountName }) }}：{{ pending.origins.map((origin) => t('grant.target', { origin })).join('；') }}</span>
+      <span class="address">{{ t('account.bindTargets', { account: t('account.bind', { account: pendingAccountName }), targets: pending.origins.map((origin) => t('grant.target', { origin })).join(t('sep.semicolon')) }) }}</span>
       <button type="button" class="btn" @click="dropPending">{{ t('grant.cancel') }}</button>
       <button type="button" class="btn primary" :disabled="busy" @click="confirm">{{ t('grant.confirm') }}</button>
     </div>

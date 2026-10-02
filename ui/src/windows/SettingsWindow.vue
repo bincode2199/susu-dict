@@ -17,15 +17,16 @@ import OcrSettings from '../components/OcrSettings.vue';
 import VocabSettings from '../components/VocabSettings.vue';
 import PluginSettings from '../components/PluginSettings.vue';
 import BackupSettings from '../components/BackupSettings.vue';
+import AboutSettings from '../components/AboutSettings.vue';
 import { t, serviceName } from '../locales/i18n';
 
 // Settings 900×700 (DESIGN 9): centered each time, 190 px navigation, content padding 20/26. F03 provides the
 // minimal pages (DEV-PLAN F03.4); pages of features not built yet are not offered. Credentials are one-way.
 const props = defineProps<{ bridge: Bridge; state: UiState }>();
-type Page = 'general' | 'hotkeys' | 'engines' | 'ai' | 'prompt' | 'ocr' | 'speech' | 'vocab' | 'plugins' | 'backup' | 'network';
+type Page = 'general' | 'hotkeys' | 'engines' | 'ai' | 'prompt' | 'ocr' | 'speech' | 'vocab' | 'plugins' | 'backup' | 'network' | 'about';
 const pages: { id: Page; icon: IconName }[] = [
   { id: 'general', icon: 'settings' }, { id: 'hotkeys', icon: 'keyboard' }, { id: 'engines', icon: 'grid' }, { id: 'ai', icon: 'sparkle' }, { id: 'prompt', icon: 'prompt' },
-  { id: 'ocr', icon: 'ocr' }, { id: 'speech', icon: 'audio' }, { id: 'vocab', icon: 'book' }, { id: 'plugins', icon: 'plus' }, { id: 'backup', icon: 'update' }, { id: 'network', icon: 'globe' },
+  { id: 'ocr', icon: 'ocr' }, { id: 'speech', icon: 'audio' }, { id: 'vocab', icon: 'book' }, { id: 'plugins', icon: 'plus' }, { id: 'backup', icon: 'update' }, { id: 'network', icon: 'globe' }, { id: 'about', icon: 'info' },
 ];
 const page = ref<Page>('general');
 const clearToken = ref(0); // bumps on page change and window hide: unsaved secret input is dropped
@@ -310,7 +311,7 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
               <Icon :name="path.ok ? 'check' : 'warning'" :size="13" />
               <span class="origin">{{ path.origin }}</span>
               <span class="tag">{{ t(`network.route.${path.route}`) }}</span>
-              <span class="hint-text">{{ path.services.map((s) => serviceName(s.split('/')[0])).join('、') }}</span>
+              <span class="hint-text">{{ path.services.map((s) => serviceName(s.split('/')[0])).join(t('sep.list')) }}</span>
               <span :class="path.ok ? 'hint-text' : 'error-text'" class="result">{{ path.ok ? t('network.test.ok', { ms: path.elapsedMs ?? 0 }) : t(`error.${path.error ?? 'network'}`) }}</span>
             </li>
           </ul>
@@ -350,6 +351,7 @@ const swap = () => { const { sourceLanguage, targetLanguage } = draft.general; d
         <VocabSettings v-if="page === 'vocab' && view.vocab" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
         <PluginSettings v-if="page === 'plugins' && view.plugins" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
         <BackupSettings v-if="page === 'backup' && view.backup" :settings="view" :bridge="bridge" :clear-token="clearToken" @settings="(next) => (state.settings = next)" />
+        <AboutSettings v-if="page === 'about' && view.about" :settings="view" :bridge="bridge" @settings="(next) => (state.settings = next)" />
 
         <ul v-if="issues.length" class="issues error-text">
           <li v-for="issue in issues" :key="issue.path + issue.code">{{ issue.path }}: {{ issue.message }}</li>
