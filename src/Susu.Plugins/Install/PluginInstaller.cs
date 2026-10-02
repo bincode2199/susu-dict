@@ -437,6 +437,7 @@ public sealed class PluginInstaller : IPluginInstallService
                 InstallJournal? journal = null;
                 try { journal = JsonSerializer.Deserialize(File.ReadAllText(JournalPath), InstallJson.Default.InstallJournal); }
                 catch (Exception e) when (e is IOException or JsonException) { }
+                if (journal is not null && !IsPlainName(journal.PackageId, journal.Version)) journal = null; // a tampered journal never steers a delete outside the packages folder
                 if (journal is not null)
                 {
                     var active = store.Active(journal.PackageId);
@@ -460,6 +461,9 @@ public sealed class PluginInstaller : IPluginInstallService
             if (changed) Changed?.Invoke();
         }
     }
+
+    private static bool IsPlainName(params string?[] names)
+        => names.All(n => !string.IsNullOrWhiteSpace(n) && n != "." && n != ".." && n.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && n.IndexOfAny(['/', '\\', ':']) < 0);
 
     private void WriteJournal(InstallJournal journal)
         => AtomicFile.WriteFlushed(JournalPath, JsonSerializer.SerializeToUtf8Bytes(journal, InstallJson.Default.InstallJournal));

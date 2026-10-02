@@ -195,14 +195,17 @@ public sealed record PackageManifest(
         parser.Consume<StreamStart>();
         if (parser.Accept<StreamEnd>(out _)) return null;
         parser.Consume<DocumentStart>();
-        var node = ReadNode(parser);
+        var node = ReadNode(parser, 0);
         parser.Consume<DocumentEnd>();
         if (!parser.Accept<StreamEnd>(out _)) throw new YamlException("multiple documents are not allowed");
         return node as YMap ?? throw new YamlException("manifest root must be a mapping");
     }
 
-    private static YNode ReadNode(IParser parser)
+    private const int MaxDepth = 32;
+
+    private static YNode ReadNode(IParser parser, int depth)
     {
+        if (depth > MaxDepth) throw new YamlException("manifest is nested too deeply");
         var current = parser.Current ?? throw new YamlException("unexpected end of input");
         if (current is AnchorAlias) throw new YamlException("aliases are not allowed");
         if (current is NodeEvent node && !node.Anchor.IsEmpty) throw new YamlException("anchors are not allowed");
@@ -213,7 +216,7 @@ public sealed record PackageManifest(
             {
                 parser.MoveNext();
                 var items = new List<YNode>();
-                while (!parser.TryConsume<SequenceEnd>(out _)) items.Add(ReadNode(parser));
+                while (!parser.TryConsume<SequenceEnd>(out _)) items.Add(ReadNode(parser, depth + 1));
                 return new YSeq(items);
             }
             case MappingStart:
@@ -223,11 +226,11 @@ public sealed record PackageManifest(
                 var keys = new HashSet<string>(StringComparer.Ordinal);
                 while (!parser.TryConsume<MappingEnd>(out _))
                 {
-                    var keyNode = ReadNode(parser);
+                    var keyNode = ReadNode(parser, depth + 1);
                     string key = keyNode is YScalar s ? s.Value : throw new YamlException("mapping keys must be scalars");
                     if (key == "<<") throw new YamlException("merge keys are not allowed");
                     if (!keys.Add(key)) throw new YamlException($"duplicate key '{key}'");
-                    entries.Add(new(key, ReadNode(parser)));
+                    entries.Add(new(key, ReadNode(parser, depth + 1)));
                 }
                 return new YMap(entries);
             }
@@ -286,7 +289,7 @@ public static class SafePackage
         var issues = new List<ManifestIssue>();
         string prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var files = new List<FileInfo>();
-        try { files = new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories).ToList(); }
+        try { files = EnumerateWithoutFollowingLinks(new DirectoryInfo(root), prefix, issues); }
         catch (IOException e) { issues.Add(new ManifestIssue("$", "io", e.Message)); return issues; }
 
         if (files.Count > MaxFiles) issues.Add(new ManifestIssue("$", "too-many-files", $"{files.Count} files exceeds the {MaxFiles} limit"));
@@ -297,7 +300,7 @@ public static class SafePackage
             string full = Path.GetFullPath(file.FullName);
             string relative = full[prefix.Length..].Replace('\\', '/');
             if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { issues.Add(new ManifestIssue(relative, "path-escape", "resolves outside the package")); continue; }
-            if (relative.Split('/').Any(segment => DeviceNames.Contains(segment.Split(':')[0], StringComparer.OrdinalIgnoreCase)))
+            if (relative.Split('/').Any(segment => DeviceNames.Contains(segment.Split(':')[0].Split('.')[0].TrimEnd(' '), StringComparer.OrdinalIgnoreCase)))
                 issues.Add(new ManifestIssue(relative, "device-name", "reserved device name in path"));
             if (relative.Contains(':')) issues.Add(new ManifestIssue(relative, "alternate-stream", "alternate data streams are rejected"));
             if (file.Attributes.HasFlag(FileAttributes.ReparsePoint)) issues.Add(new ManifestIssue(relative, "reparse-point", "symlinks/junctions/hardlinked reparse points are rejected"));
@@ -307,6 +310,26 @@ public static class SafePackage
         }
         if (total > MaxTotalBytes) issues.Add(new ManifestIssue("$", "too-large", $"total {total} bytes exceeds the {MaxTotalBytes} limit"));
         return issues;
+    }
+
+    /// <summary>Lists the files under a folder but never descends into a junction or symlinked folder: each one is reported as a reparse-point issue instead, so a link cannot pull outside files into check, pack or install.</summary>
+    private static List<FileInfo> EnumerateWithoutFollowingLinks(DirectoryInfo start, string prefix, List<ManifestIssue> issues)
+    {
+        var files = new List<FileInfo>();
+        var pending = new Stack<DirectoryInfo>();
+        pending.Push(start);
+        while (pending.Count > 0)
+        {
+            var dir = pending.Pop();
+            files.AddRange(dir.EnumerateFiles());
+            foreach (var sub in dir.EnumerateDirectories())
+            {
+                if (sub.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    issues.Add(new ManifestIssue(Path.GetFullPath(sub.FullName)[prefix.Length..].Replace('\\', '/'), "reparse-point", "symlinks/junctions/hardlinked reparse points are rejected"));
+                else pending.Push(sub);
+            }
+        }
+        return files;
     }
 
     /// <summary>Canonical (path, sha256) list sorted by path, ordinal — the list a package signature covers.</summary>

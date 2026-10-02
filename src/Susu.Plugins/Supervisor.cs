@@ -148,6 +148,9 @@ public sealed class Supervisor<TSession> : IDisposable where TSession : class, I
             idleCts?.Cancel(); // the session it was timing is already gone; nothing left to release
             idleCts = null;
         }
+        // The crashed session still holds its container profile and the read grants on the packages folder; release them on another thread
+        // (Dispose joins the reader thread, and this callback may run on it).
+        _ = Task.Run(() => { try { source.Dispose(); } catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException) { } });
         _ = RestartAsync();
     }
 

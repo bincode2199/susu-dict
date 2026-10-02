@@ -41,6 +41,12 @@ internal static class CaseFile
 
     public static List<TestCase> Parse(string text)
     {
+        try { return ParseCore(text); }
+        catch (ArgumentException e) { throw new CaseFileException("$: duplicate or invalid key: " + e.Message.Split('\n')[0]); } // System.Text.Json reports a duplicate key only when the object is first enumerated
+    }
+
+    private static List<TestCase> ParseCore(string text)
+    {
         JsonNode? root;
         try { root = JsonNode.Parse(text, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }); }
         catch (JsonException e) { throw new CaseFileException($"not valid JSON: {e.Message}"); }

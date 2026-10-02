@@ -386,7 +386,9 @@ public class SupervisorTests
         await SettleUntil(() => sessions.Count == 2);
         Assert.Equal(2, sessions.Count);
         Assert.NotSame(sessions[0], sessions[1]);
-        Assert.False(sessions[0].Disposed); // the crashed session already disconnected itself; Supervisor did not also Dispose it here
+        // F16 fix: the crashed session is disposed too, so its container profile and read grants on the packages folder are released (it used to leak them)
+        await SettleUntil(() => sessions[0].Disposed);
+        Assert.True(sessions[0].Disposed);
     }
 
     [Fact]
