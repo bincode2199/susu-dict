@@ -174,7 +174,8 @@ public sealed record SettingsView(
     VocabSettingsView? Vocab = null,
     PluginsView? Plugins = null,
     BackupView? Backup = null,
-    AboutView? About = null);
+    AboutView? About = null,
+    UpdateView? Update = null);
 
 [TsExport("ui")]
 public sealed record SettingsIssueView(string Path, string Code, string Message, int Line);
@@ -581,3 +582,22 @@ public sealed record DataCleanResultView(string Kind, string? Error, int Removed
 /// <summary>Data.Clear. Confirm must be true: the page asks the user first, and the host refuses a request without it.</summary>
 [TsExport("ui")]
 public sealed record DataCleanRequest(string Kind, bool Confirm);
+
+/// <summary>
+/// The application update section of the About page (F18.2). State: none | checking | upToDate | available | downloading | ready | installing | failed |
+/// rolledBack | committed. Error is a stable key (signature-invalid, hash-mismatch, rollback, disk-full, ...); the page maps it to a text. CanCheck: an update
+/// source is configured (none is by default, and the page says so). Offer carries no URL or path. InFlight: tasks an install would interrupt.
+/// KeyringEmbedded: false in an unsigned build (no release key is embedded, so no update can verify).
+/// </summary>
+[TsExport("ui")]
+public sealed record UpdateView(string State, string CurrentVersion, UpdateOfferView? Offer, string? Error, bool CanCheck, bool AutoCheck, string? LastCheck, int InFlight, bool KeyringEmbedded);
+
+[TsExport("ui")]
+public sealed record UpdateOfferView(string Version, long Size, string Notes);
+
+/// <summary>Update.Install. AcknowledgedInFlight: the user confirmed that running tasks will be interrupted.</summary>
+[TsExport("ui")]
+public sealed record UpdateInstallRequest(bool AcknowledgedInFlight);
+
+[TsExport("ui")]
+public sealed record UpdateAutoCheckRequest(bool Enabled);

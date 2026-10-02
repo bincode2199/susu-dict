@@ -42,6 +42,11 @@ export const UI_COMMANDS = {
   AboutExportDiagnostics: 'About.ExportDiagnostics',
   AboutDismiss: 'About.Dismiss',
   DataClear: 'Data.Clear',
+  UpdateCheck: 'Update.Check',
+  UpdateDownload: 'Update.Download',
+  UpdateInstall: 'Update.Install',
+  UpdateDiscard: 'Update.Discard',
+  UpdateAutoCheck: 'Update.AutoCheck',
   SecretWriteNew: 'Secret.WriteNew',
   SecretDelete: 'Secret.Delete',
   SecretExportEncrypted: 'Secret.ExportEncrypted',
@@ -686,6 +691,7 @@ export interface SettingsView {
   plugins?: PluginsView;
   backup?: BackupView;
   about?: AboutView;
+  update?: UpdateView;
 }
 
 export interface SpeakCardRequest {
@@ -917,6 +923,32 @@ export interface UiSnapshot {
   ocr?: OcrView;
   voice?: VoiceView;
   transcribe?: TranscribeView;
+}
+
+export interface UpdateAutoCheckRequest {
+  enabled: boolean;
+}
+
+export interface UpdateInstallRequest {
+  acknowledgedInFlight: boolean;
+}
+
+export interface UpdateOfferView {
+  version: string;
+  size: number;
+  notes: string;
+}
+
+export interface UpdateView {
+  state: string;
+  currentVersion: string;
+  offer?: UpdateOfferView;
+  error?: string;
+  canCheck: boolean;
+  autoCheck: boolean;
+  lastCheck?: string;
+  inFlight: number;
+  keyringEmbedded: boolean;
 }
 
 export interface ValidateProviderRequest {

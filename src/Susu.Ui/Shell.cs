@@ -496,6 +496,11 @@ public sealed partial class ShellCoordinator
             case UiCommands.AboutExportDiagnostics: return await ExportDiagnosticsAsync();
             case UiCommands.AboutDismiss: return DismissAbout();
             case UiCommands.DataClear: return await ClearDataAsync(Read(payload, ContractsJson.Default.DataCleanRequest));
+            case UiCommands.UpdateCheck: return await CheckAppUpdateAsync();
+            case UiCommands.UpdateDownload: return await DownloadAppUpdateAsync();
+            case UiCommands.UpdateInstall: return InstallAppUpdate(Read(payload, ContractsJson.Default.UpdateInstallRequest));
+            case UiCommands.UpdateDiscard: return DiscardAppUpdate();
+            case UiCommands.UpdateAutoCheck: return SetAppUpdateAutoCheck(Read(payload, ContractsJson.Default.UpdateAutoCheckRequest));
             case UiCommands.PluginPick: return await PickPluginAsync();
             case UiCommands.PluginConfirm: return await ConfirmPluginAsync(Read(payload, ContractsJson.Default.PluginTokenRequest));
             case UiCommands.PluginDiscard: return DiscardPlugin(Read(payload, ContractsJson.Default.PluginTokenRequest));
@@ -1133,7 +1138,7 @@ public sealed partial class ShellCoordinator
             new PromptView(s.Prompt.Level, s.Prompt.Profile, [.. s.Prompt.Scope], [.. PromptCatalog.Levels.Select(l => l.Id)], [.. PromptCatalog.AiInstances],
                 [.. s.Prompts.Select(p => new PromptProfileView(p.Id, p.Name, p.Template))], PromptCatalog.DefaultTemplate, [.. PromptTemplate.Variables]),
             new SpeechView(SpeechSlotOf(s, SpeechSlot.Tts), SpeechSlotOf(s, SpeechSlot.Asr), SpeechSlotOf(s, SpeechSlot.VideoAsr), s.Speech.VideoTranslator, VideoTranslatorChoices(s)),
-            OcrSettingsOf(s), ProjectVocab(s), ProjectPlugins(), ProjectBackup(), ProjectAbout());
+            OcrSettingsOf(s), ProjectVocab(s), ProjectPlugins(), ProjectBackup(), ProjectAbout(), ProjectUpdate());
     }
 
     private static readonly Dictionary<SpeechSlot, string> speechSlotNames = new() { [SpeechSlot.Tts] = "tts", [SpeechSlot.Asr] = "asr", [SpeechSlot.VideoAsr] = "videoAsr" };

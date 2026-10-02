@@ -60,6 +60,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         if (InstallerMode.IsInstallerCommand(args)) return InstallerMode.Run(args); // F18.1: installer/uninstaller helper commands, before any service starts
+        if (UpdateHost.IsUpdateCommand(args)) return UpdateHost.Run(args); // F18.2: update helper and probe commands, before any service starts
         var mode = StartupMode.Parse(args);
         switch (mode.Kind)
         {
@@ -102,6 +103,7 @@ internal static class MainMode
             return 3;
         }
 
+        if (RecoverUpdate(paths, mode.DataRoot, log)) return 0; // F18.2: an interrupted application update is finished (or rolled back by the helper) before anything else runs
         int rolledBack = new ConfigTransaction(paths).Recover();
         if (rolledBack > 0) log.Event("config.recovered", ("count", rolledBack));
         // F17.1: a confirmed backup import is switched here, after the journal is recovered and before settings and secrets are read.
@@ -324,6 +326,22 @@ internal static class MainMode
         coordinator.DataClean = new DataCleanService(paths, clock, config, secrets, leases, keptScreenshots.Store, favorites);
         coordinator.PluginInstaller = pluginInstaller;
         coordinator.PluginUpdates = new Susu.Plugins.Install.PluginUpdateService(pluginInstaller, source: null, Path.Combine(paths.UserPlugins, ".downloads")); // no update feed is specified yet (DEV-PLAN F16.2): no source, so the page offers no check
+        // F18.2: application update. No source is registered unless update-source.json names an https manifest (none is by default); the embedded production key slot is empty
+        // in this build, so even a configured source reports 'no trusted keys' instead of offering anything. Checks may run on the shared schedule; install only on the user's command.
+        int InFlightNow() => (coordinator.IsRecording ? 1 : 0) + (coordinator.VideoJobs?.Active is not null ? 1 : 0)
+            + (translation.Supervisor is { } flightSupervisor && flightSupervisor.TryGetCurrent(out var flightCurrent) ? flightCurrent!.InFlightCalls().Count : 0);
+        string installFolder = AppContext.BaseDirectory.TrimEnd('\\');
+        var assemblyVersion = typeof(Program).Assembly.GetName().Version;
+        string appVersion = assemblyVersion is null ? "0.0.0" : $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{Math.Max(0, assemblyVersion.Build)}";
+        var appUpdater = new Susu.Plugins.AppUpdate.AppUpdater(installFolder, paths.Database, paths.Updates, new ProcessUpdateEnvironment(instanceName, mode.DataRoot));
+        var updateTrust = new Susu.Plugins.AppUpdate.UpdateTrustStore(Path.Combine(paths.Updates, "trust.json"), Susu.Plugins.AppUpdate.UpdateKeyring.Production);
+        var updatePrefs = new Susu.Plugins.AppUpdate.UpdatePrefs(Path.Combine(paths.Updates, "schedule.json"));
+        Susu.Abstractions.IAppUpdateSource? appUpdateSource = Susu.Plugins.AppUpdate.UpdateSourceConfig.Load(paths.Updates) is { } manifestUrl
+            ? new Susu.Plugins.AppUpdate.SignedManifestAppUpdateSource(manifestUrl, new Susu.Plugins.AppUpdate.HttpUpdateTransport(new HttpClient { Timeout = TimeSpan.FromMinutes(10) }),
+                new Susu.Plugins.AppUpdate.UpdateVerifier(updateTrust), updateTrust) : null;
+        var appUpdates = new Susu.Plugins.AppUpdate.AppUpdateService(appVersion, appUpdateSource, appUpdater, updatePrefs, clock, InFlightNow,
+            new ProcessUpdateLauncher(installFolder, paths.Updates, mode.DataRoot), keyringEmbedded: !Susu.Plugins.AppUpdate.UpdateKeyring.Production.IsEmpty);
+        coordinator.AppUpdates = appUpdates;
         coordinator.PluginPicker = new Win32PluginPackagePicker();
         coordinator.MediaPicker = new Win32MediaPicker(mediaTokens);
         coordinator.SubtitleSavePicker = new Win32SubtitleSavePicker();
@@ -342,8 +360,7 @@ internal static class MainMode
         coordinator.Timing += (kind, phase, ms) => log.Event("timing", ("window", kind.ToString()), ("phase", phase), ("durationMs", Math.Round(ms, 1)));
         dispatcher.ActivateRequested += coordinator.OnActivateRequest;
         // F18.1: the installer asks the running instance to exit (or how many tasks are in flight) through the instance's own message window.
-        dispatcher.InFlightProvider = () => (coordinator.IsRecording ? 1 : 0) + (coordinator.VideoJobs?.Active is not null ? 1 : 0)
-            + (translation.Supervisor is { } supervisor && supervisor.TryGetCurrent(out var current) ? current!.InFlightCalls().Count : 0);
+        dispatcher.InFlightProvider = InFlightNow;
         tray.DoubleClick += coordinator.OnTrayDoubleClick;
         tray.MenuRequested += coordinator.OnTrayMenu;
         // F12.3: a recording that continues in a minimized (hidden) voice window stays visible as the icon's tooltip (DESIGN 窗口关闭).
@@ -356,6 +373,19 @@ internal static class MainMode
         if (!tray.Add()) log.Event("tray.add-failed");
         coordinator.Start();
         vocabService.Start();
+        // F18.2 / F16.2: one low-priority serial schedule for the application and plugin update checks (15 s after start, then at most every 24 h). Check only.
+        using var updateSchedule = new CancellationTokenSource();
+        if (appUpdates.Available || coordinator.PluginUpdates?.Available == true)
+        {
+            var checks = new List<Func<CancellationToken, Task>>();
+            if (appUpdates.Available) checks.Add(async token => { await appUpdates.CheckAsync(automatic: true, token).ConfigureAwait(false); });
+            if (coordinator.PluginUpdates is { Available: true } pluginUpdates) checks.Add(async token => { await pluginUpdates.CheckAsync(token).ConfigureAwait(false); });
+            _ = Task.Run(async () =>
+            {
+                try { await new Susu.Plugins.AppUpdate.UpdateSchedule(clock, updatePrefs, checks).RunAsync(updateSchedule.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+            });
+        }
         var failed = coordinator.HotkeyResults.Where(r => !r.Value).Select(r => r.Key).ToList();
         if (failed.Count > 0)
             tray.Notify("Su-Su", config.State.Effective.General.UiLanguage == "en" ? "A hotkey could not be registered. Choose another one in Settings." : "有快捷键注册失败，请在设置中更换。");
@@ -374,6 +404,7 @@ internal static class MainMode
 #endif
 
         dispatcher.Run();
+        updateSchedule.Cancel();
 
         coordinator.ReleaseAudio(); // a recording still running (or a minimized one) is discarded and the microphone released (REC02)
         coordinator.VideoJobs?.CancelActive(); // F14.2: a running video job stops its upload and releases its slices
@@ -469,6 +500,35 @@ internal static class MainMode
         try { return OperatingSystem.IsWindows() ? Microsoft.Win32.Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography", "MachineGuid", null) as string : null; }
         catch (Exception e) when (e is System.Security.SecurityException or IOException or UnauthorizedAccessException) { return null; }
     }
+
+    /// <summary>
+    /// F18.2: at start, an update journal that is not at rest is recovered. Stages that did not touch the install folder are recovered here; a half-replaced install folder is restored
+    /// by the helper (a copy of this executable, because the files are in use), and this start ends so the helper can run. Returns true when the helper was started.
+    /// </summary>
+    private static bool RecoverUpdate(AppPaths paths, string? dataRoot, RedactingLog log)
+    {
+        try
+        {
+            UpdateHostCleanup(paths);
+            using var gate = UpdateHost.TryLock(dataRoot);
+            if (gate is null) return false; // a helper is running right now: it owns the journal
+            string installDir = AppContext.BaseDirectory.TrimEnd('\\');
+            var updater = new Susu.Plugins.AppUpdate.AppUpdater(installDir, paths.Database, paths.Updates, new ProcessUpdateEnvironment(InstanceName(dataRoot), dataRoot));
+            if (updater.NeedsFileRecovery())
+            {
+                gate.ReleaseMutex();
+                bool started = new ProcessUpdateLauncher(installDir, paths.Updates, dataRoot).Launch("--recover-update");
+                log.Event("update.recover-helper", ("started", started));
+                return started;
+            }
+            var result = updater.Recover();
+            if (result.Action is not "none") log.Event("update.recovered", ("action", result.Action), ("stage", result.Stage ?? ""));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ApplicationException) { log.Event("update.recover-failed", ("code", e.GetType().Name)); }
+        return false;
+    }
+
+    private static void UpdateHostCleanup(AppPaths paths) => ProcessUpdateLauncher.CleanHelpers(paths.Updates);
 
     /// <summary>One instance per user; a separate data root (tests, development) is its own instance.</summary>
     internal static string InstanceName(string? dataRoot)

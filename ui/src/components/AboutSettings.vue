@@ -2,6 +2,7 @@
 import { computed, nextTick, ref } from 'vue';
 import { UI_COMMANDS, type CommandResult, type DataCleanView, type SettingsView } from '@protocol/ui';
 import SettingRow from './SettingRow.vue';
+import UpdateSettings from './UpdateSettings.vue';
 import { t } from '../locales/i18n';
 
 // About, diagnostics and data clean (F17.2). The page never receives a path: the host opens the log folder and the save dialog itself. The diagnostics
@@ -63,6 +64,8 @@ const cleanLabel = (key: string, kind: string) => `${t(key).replace('…', '')} 
     <SettingRow :title="t('about.version')"><span data-about-version>{{ about.version }}</span></SettingRow>
     <SettingRow :title="t('about.build')"><span data-about-build>{{ about.build }}</span></SettingRow>
     <SettingRow :title="t('about.platform')"><span class="small" data-about-platform>{{ about.os }} · {{ about.runtime }}</span></SettingRow>
+
+    <UpdateSettings v-if="settings.update" :settings="settings" :bridge="bridge" @settings="(next) => emit('settings', next)" />
 
     <h3>{{ t('about.logs.title') }}</h3>
     <SettingRow :title="t('about.logs.location')" :hint="t('about.logs.hint', { files: about.logFiles, size: sizeText(about.logBytes) })">

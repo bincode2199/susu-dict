@@ -473,6 +473,17 @@ public sealed class AppUpdater(string installDirectory, string databasePath, str
     // ===== recovery =====
 
     /// <summary>
+    /// True when recovery has to rewrite the install folder (a replacement started and did not commit, a rollback was interrupted, or the journal is damaged next to a
+    /// backup pair). The running app cannot do that to its own files; it starts the helper in recovery mode instead of calling <see cref="Recover"/>.
+    /// </summary>
+    public bool NeedsFileRecovery()
+    {
+        var journal = Read();
+        if (journal is null) return File.Exists(BackupIndexPath) && (File.Exists(JournalPath) || File.Exists(JournalPath + ".prev"));
+        return journal.Stage is UpdateStages.Replacing or UpdateStages.Replaced or UpdateStages.Migrating or UpdateStages.Migrated or UpdateStages.HealthChecking or UpdateStages.Healthy or UpdateStages.RollingBack;
+    }
+
+    /// <summary>
     /// Run at every start of the app and of the helper, before anything else uses the install folder. Never throws.
     /// Downloading: the partial download is cleared. Staged: kept (the user may still install it). Exiting and BackedUp: nothing was replaced, back to staged.
     /// Replacing through Healthy, RollingBack: rolled back as a pair. Committed: cleanup only. An unreadable journal with a backup index rolls back as well.

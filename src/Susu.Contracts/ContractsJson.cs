@@ -95,6 +95,8 @@ namespace Susu.Contracts;
 [JsonSerializable(typeof(BackupTokenRequest))]
 [JsonSerializable(typeof(AboutView))]
 [JsonSerializable(typeof(DataCleanRequest))]
+[JsonSerializable(typeof(UpdateInstallRequest))]
+[JsonSerializable(typeof(UpdateAutoCheckRequest))]
 [JsonSerializable(typeof(SubmitTextRequest))]
 [JsonSerializable(typeof(ToggleCardRequest))]
 [JsonSerializable(typeof(SelectLanguageRequest))]
