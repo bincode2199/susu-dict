@@ -84,11 +84,18 @@ if ($signing) {
 }
 
 # ---- manifest ----
+# SHA-256 via .NET, not Get-FileHash: a Windows PowerShell child that inherits PSModulePath from pwsh 7 can fail to load Microsoft.PowerShell.Utility.
+function Get-Sha256([string]$Path) {
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [System.IO.File]::OpenRead($Path)
+  try { return ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() }
+  finally { $stream.Dispose(); $sha.Dispose() }
+}
 $files = Get-ChildItem $stageFull -Recurse -File | Sort-Object FullName | ForEach-Object {
   [ordered]@{
     path   = $_.FullName.Substring($stageFull.Length).TrimStart('\', '/').Replace('\', '/')
     size   = $_.Length
-    sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    sha256 = Get-Sha256 $_.FullName
   }
 }
 [ordered]@{ product = 'Su-Su'; version = $Version; signed = $signing; files = @($files) } |
@@ -113,6 +120,6 @@ if (-not $signing) { $defines += '/DUNSIGNED' }
 & $nsis /V2 @defines (Join-Path $PSScriptRoot 'installer/susu.nsi')
 if ($LASTEXITCODE -ne 0) { throw "makensis failed: $LASTEXITCODE" }
 if ($signing) { Invoke-Sign $installer }
-$hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+$hash = Get-Sha256 $installer
 Set-Content -Path "$installer.sha256" -Value "$hash  $(Split-Path $installer -Leaf)" -Encoding ASCII
 Write-Host "Installer: $installer`nSHA-256: $hash"

@@ -50,6 +50,7 @@ public class F18InstallerTests
     private static (int Exit, string Output) RunBuildScript(string publish, string stage, string licenses, Dictionary<string, string>? env = null, params string[] extra)
     {
         var info = new ProcessStartInfo("powershell.exe") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        info.Environment.Remove("PSModulePath"); // a pwsh parent's PSModulePath breaks Windows PowerShell 5.1 module loading
         foreach (string a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(RepoRoot(), "tools", "build-installer.ps1"),
             "-Version", "1.2.3", "-PublishDir", publish, "-StageDir", stage, "-LicensesDir", licenses, "-StageOnly" }) info.ArgumentList.Add(a);
         foreach (string a in extra) info.ArgumentList.Add(a);

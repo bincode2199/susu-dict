@@ -119,6 +119,7 @@ public partial class F18VerificationTests
     private static string[] RunScript(string publish, string stage, string version, params string[] extra)
     {
         var info = new ProcessStartInfo("powershell.exe") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        info.Environment.Remove("PSModulePath"); // a pwsh parent's PSModulePath breaks Windows PowerShell 5.1 module loading
         foreach (string a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(RepoRoot(), "tools", "build-installer.ps1"), "-Version", version, "-PublishDir", publish, "-StageDir", stage,
             "-LicensesDir", Path.Combine(RepoRoot(), "LICENSES"), "-StageOnly" }) info.ArgumentList.Add(a);
         foreach (string a in extra) info.ArgumentList.Add(a);
