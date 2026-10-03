@@ -33,7 +33,7 @@ public static class TypeScriptGenerator
             else text.Append($"export const UI_VERSION = {ProtocolVersions.Ui};\n").Append(UiCommandConstants());
             foreach (var type in needed.Values) text.Append('\n').Append(Declare(type));
             if (group == "plugin") text.Append(PluginModule);
-            files[group == "plugin" ? "susu-plugin.d.ts" : $"{group}.ts"] = text.ToString();
+            files[group == "plugin" ? "susu-plugin.d.ts" : $"{group}.ts"] = text.ToString().Replace("\r\n", "\n"); // raw-string preambles take the source file's CRLF under autocrlf
         }
         return files;
     }
