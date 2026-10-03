@@ -1621,7 +1621,8 @@ public sealed class F16VerificationTests : IDisposable
         // reserved name and alternate stream files
         // Windows Server maps "aux.*" to the AUX device for ordinary paths, so create it with the extended-length prefix,
         // which stores the name literally on every Windows version.
-        File.WriteAllText(@"\\?\" + Path.GetFullPath(Path.Combine(dir, "aux.txt.bak")), "x");
+        // Normalize only the directory: GetFullPath on a path ending in "aux.*" rewrites it to \\.\aux on Windows Server 2025.
+        File.WriteAllText(@"\\?\" + Path.GetFullPath(dir).TrimEnd('\\') + @"\aux.txt.bak", "x");
         var dev = Run(Cli(), "pack", dir, "--out", Path.Combine(root, "dev.susuext"));
         if (dev.Exit == 0)
         {
