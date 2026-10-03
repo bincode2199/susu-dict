@@ -326,6 +326,7 @@ public sealed class PluginInstaller : IPluginInstallService
                 if (Directory.Exists(finalDir)) SafeUnzip.TryDelete(finalDir); // leftover of an interrupted run; never an active version (it must be newer)
                 Directory.Move(staged.Directory, finalDir);
                 moved = true;
+                ReinheritAccess(finalDir);
 
                 fault?.Invoke("switch");
                 store.Activate(id, version, staged.Identity.Key, staged.Hash);
@@ -348,6 +349,26 @@ public sealed class PluginInstaller : IPluginInstallService
             }
             return new PluginInstallOutcome(true, null, id, version, []);
         }
+    }
+
+    /// <summary>
+    /// A same-volume move keeps the staged folder's DACL, whose inherited entries came from staging, not from the packages folder the sandbox is granted
+    /// read access on. Reset every entry to inherit from its new parent so a grant added to the packages folder reaches this version.
+    /// </summary>
+    private static void ReinheritAccess(string directory)
+    {
+        try
+        {
+            foreach (string path in Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories).Prepend(directory))
+            {
+                FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
+                var security = info is DirectoryInfo d ? (System.Security.AccessControl.FileSystemSecurity)d.GetAccessControl() : ((FileInfo)info).GetAccessControl();
+                security.SetAccessRuleProtection(false, false);
+                if (info is DirectoryInfo dir) dir.SetAccessControl((System.Security.AccessControl.DirectorySecurity)security);
+                else ((FileInfo)info).SetAccessControl((System.Security.AccessControl.FileSecurity)security);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException) { } // best effort; the load probe reports a version the sandbox still cannot read
     }
 
     private sealed class HealthFailedException(string? detail) : Exception(detail);
