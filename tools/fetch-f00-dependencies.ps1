@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
-New-Item -ItemType Directory -Force .tools/metadata | Out-Null
+New-Item -ItemType Directory -Force .tools/metadata, .tools/downloads | Out-Null
 foreach ($package in @('microsoft.data.sqlite','yamldotnet','jint','nsec.cryptography','microsoft.web.webview2')) {
     $data = Invoke-RestMethod "https://api.nuget.org/v3-flatcontainer/$package/index.json"
     $stable = @($data.versions | Where-Object { $_ -notmatch '-' })
