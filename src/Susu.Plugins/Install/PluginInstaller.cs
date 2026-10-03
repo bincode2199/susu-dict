@@ -343,6 +343,7 @@ public sealed class PluginInstaller : IPluginInstallService
             {
                 bool restored = Rollback(id, previous, finalDir, moved, switched);
                 SafeUnzip.TryDelete(staged.Directory);
+                if (e is HealthFailedException { Message.Length: > 0 } hf) return new PluginInstallOutcome(false, "install.healthFailed", null, null, [new PluginIssue("health", hf.Message)]); // the probe's reason is the only clue when a sandbox load fails
                 return Fail(e is HealthFailedException ? "install.healthFailed" : restored ? "install.activationFailed" : "install.rollbackFailed");
             }
             return new PluginInstallOutcome(true, null, id, version, []);

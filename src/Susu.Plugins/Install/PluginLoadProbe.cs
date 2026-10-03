@@ -23,6 +23,6 @@ public static class PluginLoadProbe
                 }
                 finally { session.Shutdown(2000); }
             }
-            catch (Exception e) when (e is not OutOfMemoryException) { return new HealthResult(false, e.GetType().Name); }
+            catch (Exception e) when (e is not OutOfMemoryException) { return new HealthResult(false, e.GetType().Name + ": " + e.Message); }
         };
 }

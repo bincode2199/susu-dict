@@ -116,7 +116,7 @@ public sealed class PluginUpdateSandboxTests : IDisposable
         var update = installer.StageUpdate(Zip("v12.susuext", "1.2.0", Source("v12")));
         Assert.True(update.Ok);
         var applied = installer.Install(update.Token!);
-        Assert.True(applied.Ok, applied.Error);
+        Assert.True(applied.Ok, applied.Error + " " + string.Join("; ", applied.Issues.Select(i => i.Path + "=" + i.Code)));
         Assert.Equal(1, applied.Interrupted);
         var hangResult = await hang.WaitAsync(TimeSpan.FromSeconds(15), ct);
         Assert.Equal(Susu.Contracts.IpcMessageType.Failed, hangResult.Type);

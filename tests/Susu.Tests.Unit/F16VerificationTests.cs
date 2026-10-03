@@ -1312,7 +1312,7 @@ public sealed class F16VerificationTests : IDisposable
 
         // discard one, acknowledge the other: only now does the host restart, the in-flight call fails as cancelled, and the new version serves
         var applied = rig.Installer.Install(signerChange.Token!, acknowledged: true);
-        Assert.True(applied.Ok, applied.Error);
+        Assert.True(applied.Ok, applied.Error + " " + string.Join("; ", applied.Issues.Select(i => i.Path + "=" + i.Code)));
         Assert.Equal(1, applied.Interrupted);
         var cancelled = await hang.WaitAsync(TimeSpan.FromSeconds(15), ct);
         Assert.Equal(IpcMessageType.Failed, cancelled.Type);
@@ -1352,7 +1352,7 @@ public sealed class F16VerificationTests : IDisposable
 
         var update = rig.Installer.StageUpdate(Signed(env, "a2.susuext", Id, "1.1.0", "a2", PackageFactory.SeedB));
         var applied = rig.Installer.Install(update.Token!);
-        Assert.True(applied.Ok, applied.Error);
+        Assert.True(applied.Ok, applied.Error + " " + string.Join("; ", applied.Issues.Select(i => i.Path + "=" + i.Code)));
         Assert.Equal(1, applied.Interrupted); // exactly the changed package's call
 
         var aResult = await hangA.WaitAsync(TimeSpan.FromSeconds(15), Ct);
