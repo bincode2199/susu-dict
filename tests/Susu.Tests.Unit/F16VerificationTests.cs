@@ -1619,7 +1619,9 @@ public sealed class F16VerificationTests : IDisposable
         File.Delete(Path.Combine(dir, "big.bin"));
 
         // reserved name and alternate stream files
-        File.WriteAllText(Path.Combine(dir, "aux.txt.bak"), "x");
+        // Windows Server maps "aux.*" to the AUX device for ordinary paths, so create it with the extended-length prefix,
+        // which stores the name literally on every Windows version.
+        File.WriteAllText(@"\\?\" + Path.GetFullPath(Path.Combine(dir, "aux.txt.bak")), "x");
         var dev = Run(Cli(), "pack", dir, "--out", Path.Combine(root, "dev.susuext"));
         if (dev.Exit == 0)
         {
