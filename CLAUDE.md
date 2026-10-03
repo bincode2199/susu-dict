@@ -2,6 +2,10 @@
 
 Project docs start at [README.md](README.md); current state is in [docs/evidence/PROGRESS.md](docs/evidence/PROGRESS.md). These rules keep module work inside the usage budget. F05's coding agent ran 370 turns in one context that grew to 645k tokens without compaction; re-reading that context each turn cost about 4x what the same work needed.
 
+## Physical machine: stay inside the project folder
+
+On the physical Windows machine, every operation stays inside the project folder. Anything that must use another folder, or that installs, changes or updates the system or other software, needs the user's manual confirmation first. This applies to every agent; include it in every sub-agent prompt.
+
 ## Master agent: keep sub-agent contexts short
 
 - Start a **fresh coding agent per sub-item** (e.g. F05.1, F05.2, then one per gap batch), not one agent per module. Do the same for testing when a pass is long.

@@ -1,4 +1,4 @@
-name: Windows NativeAOT build and probes
+﻿name: Windows NativeAOT build and probes
 on: [push, pull_request, workflow_dispatch]
 jobs:
   build:
@@ -16,12 +16,6 @@ jobs:
       - name: Restore locked dependencies
         shell: pwsh
         run: ./tools/dev.ps1 restore
-      - name: Unit and contract tests
-        shell: pwsh
-        run: |
-          ./tools/dev.ps1 build
-          ./tools/dev.ps1 test
-          dotnet run --project tools/Susu.ContractsGen -c Release --no-build -- . --check
       - name: Fetch pinned native source
         shell: pwsh
         run: ./tools/fetch-f00-dependencies.ps1
@@ -41,6 +35,20 @@ jobs:
       - name: Publish NativeAOT susu.exe (release, no fixtures)
         shell: pwsh
         run: node tools/run-clean-env.mjs pwsh -NoProfile -File tools/dev.ps1 publish -Project src/Susu.Host -OutputDirectory artifacts/app
+      - name: Publish susu-plugin.exe and stage susu.exe where the tests look for them
+        shell: pwsh
+        run: |
+          node tools/run-clean-env.mjs pwsh -NoProfile -File tools/dev.ps1 publish -Project tools/Susu.PluginCli -OutputDirectory tools/Susu.PluginCli/bin/Release/net10.0/win-x64/publish
+          New-Item -ItemType Directory -Force src/Susu.Host/bin/Release/net10.0/win-x64/publish | Out-Null
+          Copy-Item artifacts/app/* src/Susu.Host/bin/Release/net10.0/win-x64/publish -Recurse -Force
+      # Tests run after the native and NativeAOT outputs exist: real-sandbox, QuickJS, selection-helper
+      # and CLI tests use them and do not skip when they are missing.
+      - name: Unit and contract tests
+        shell: pwsh
+        run: |
+          ./tools/dev.ps1 build
+          ./tools/dev.ps1 test
+          dotnet run --project tools/Susu.ContractsGen -c Release --no-build -- . --check
       - name: Shell lifecycle smoke (F03)
         shell: pwsh
         run: |
@@ -57,6 +65,16 @@ jobs:
         run: ./artifacts/probes/Susu.Probes.exe --x-matrix artifacts/probes/x-matrix.json
       - name: License inventory
         run: node tools/license-inventory.mjs artifacts/probes/license-inventory.json tools/Susu.Probes/packages.lock.json
+      - name: Build per-user installer (F18.1, unsigned)
+        shell: pwsh
+        run: |
+          ./tools/build-installer.ps1 -Version 0.1.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: susu-installer
+          path: |
+            artifacts/installer/*.exe
+            artifacts/installer/stage/staged-manifest.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
