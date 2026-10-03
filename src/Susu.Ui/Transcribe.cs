@@ -183,9 +183,17 @@ public sealed partial class ShellCoordinator
     private void OnVideoState(VideoJob job)
     {
         if (!ReferenceEquals(job, videoJob)) return;
-        if (job.State.Phase != VideoJobPhase.AwaitingConfirm) uploadView = null;
-        SetTranscribeView(JobView(job));
+        // The job raises StateChanged from several threads outside its own lock. Read the state and publish the view under one lock so a
+        // callback holding an older state cannot overwrite the view built from a newer (e.g. terminal) one.
+        lock (videoStateGate)
+        {
+            if (!ReferenceEquals(job, videoJob)) return;
+            if (job.State.Phase != VideoJobPhase.AwaitingConfirm) uploadView = null;
+            SetTranscribeView(JobView(job));
+        }
     }
+
+    private readonly object videoStateGate = new();
 
     private void OnVideoCue(VideoJob job, VideoCue cue)
     {

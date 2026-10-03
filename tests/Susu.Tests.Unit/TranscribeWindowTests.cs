@@ -393,7 +393,7 @@ public sealed class TranscribeWindowTests
         rig.Translate = (n, call) => new SubtitleBatchOutcome.Failure(new ProviderError(ErrorKind.Auth));
         await rig.StartToConfirmAsync();
         rig.T(UiCommands.ConfirmTranscription, new TranscribeConfirmRequest(true));
-        Assert.True(await rig.WaitPhase("failed"));
+        Assert.True(await rig.WaitPhase("failed"), $"phase={rig.Phase} err={rig.Shell.TranscribeWindowView?.ErrorCode}/{rig.Shell.TranscribeWindowView?.ErrorKind} cues={rig.Shell.TranscribeWindowView?.CueCount}");
         var view = rig.Shell.TranscribeWindowView!;
         Assert.Equal(ErrorKind.Auth, view.ErrorKind);
         Assert.Equal(2, view.CueCount);
