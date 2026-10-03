@@ -33,6 +33,7 @@ jobs:
           pnpm run build
           pnpm run build:probe
       - name: Publish NativeAOT susu.exe (release, no fixtures)
+        id: publish_app
         shell: pwsh
         run: node tools/run-clean-env.mjs pwsh -NoProfile -File tools/dev.ps1 publish -Project src/Susu.Host -OutputDirectory artifacts/app
       - name: Publish susu-plugin.exe and stage susu.exe where the tests look for them
@@ -65,11 +66,16 @@ jobs:
         run: ./artifacts/probes/Susu.Probes.exe --x-matrix artifacts/probes/x-matrix.json
       - name: License inventory
         run: node tools/license-inventory.mjs artifacts/probes/license-inventory.json tools/Susu.Probes/packages.lock.json
+      # Built whenever the app published, even if tests failed, so the installer can be tried on a
+      # physical machine. The run still reports the test failure; such a build is not a release.
       - name: Build per-user installer (F18.1, unsigned)
+        id: installer
+        if: ${{ !cancelled() && steps.publish_app.outcome == 'success' }}
         shell: pwsh
         run: |
           ./tools/build-installer.ps1 -Version 0.1.0
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
         with:
           name: susu-installer
           path: |
