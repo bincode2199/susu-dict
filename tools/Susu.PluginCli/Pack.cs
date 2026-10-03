@@ -52,11 +52,19 @@ internal static class Pack
         }
 
         var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
-        foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+        try
         {
-            string relative = Path.GetRelativePath(dir, file).Replace('\\', '/');
-            if (IsAuthorOnly(relative) || relative == PackageTrust.SignatureFileName) continue; // a stale signature never survives a repack
-            files[relative] = File.ReadAllBytes(file);
+            foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                string relative = Path.GetRelativePath(dir, file).Replace('\\', '/');
+                if (IsAuthorOnly(relative) || relative == PackageTrust.SignatureFileName) continue; // a stale signature never survives a repack
+                files[relative] = File.ReadAllBytes(file);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine($"pack: cannot read the package folder: {e.Message}; nothing was written");
+            return 1;
         }
         if (seed is not null)
         {
@@ -69,16 +77,22 @@ internal static class Pack
 
         outFile ??= manifest.Version is null ? $"{manifest.Id}.susuext" : $"{manifest.Id}-{manifest.Version}.susuext";
         outFile = Path.GetFullPath(outFile);
-        if (File.Exists(outFile)) File.Delete(outFile);
-        using (var stream = File.Create(outFile))
-        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create))
+        try
         {
+            if (File.Exists(outFile)) File.Delete(outFile);
+            using var stream = File.Create(outFile);
+            using var zip = new ZipArchive(stream, ZipArchiveMode.Create);
             foreach (var (name, bytes) in files)
             {
                 var entry = zip.CreateEntry(name, CompressionLevel.Optimal);
                 using var s = entry.Open();
                 s.Write(bytes);
             }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"pack: cannot write {outFile}: {e.Message}");
+            return 2;
         }
         Console.WriteLine($"pack: {outFile} ({files.Count} files, {new FileInfo(outFile).Length} bytes){(seed is null ? ", unsigned" : ", signed")}");
         return 0;

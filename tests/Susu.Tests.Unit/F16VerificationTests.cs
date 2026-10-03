@@ -1624,6 +1624,7 @@ public sealed class F16VerificationTests : IDisposable
         // Normalize only the directory: GetFullPath on a path ending in "aux.*" rewrites it to \\.\aux on Windows Server 2025.
         File.WriteAllText(@"\\?\" + Path.GetFullPath(dir).TrimEnd('\\') + @"\aux.txt.bak", "x");
         var dev = Run(Cli(), "pack", dir, "--out", Path.Combine(root, "dev.susuext"));
+        Assert.False(Crashed(dev.Exit));
         if (dev.Exit == 0)
         {
             var env = NewEnv();

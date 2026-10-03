@@ -297,16 +297,25 @@ public static class SafePackage
         var seenLower = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
-            string full = Path.GetFullPath(file.FullName);
+            // The enumerated FullName is already absolute; Path.GetFullPath would rewrite a reserved name such as aux.txt to \\.\aux.txt on
+            // newer Windows and break the prefix slice, so the path is sliced as listed and no file is touched before the device-name check.
+            string full = file.FullName;
+            if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { issues.Add(new ManifestIssue(full, "path-escape", "resolves outside the package")); continue; }
             string relative = full[prefix.Length..].Replace('\\', '/');
-            if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { issues.Add(new ManifestIssue(relative, "path-escape", "resolves outside the package")); continue; }
             if (relative.Split('/').Any(segment => DeviceNames.Contains(segment.Split(':')[0].Split('.')[0].TrimEnd(' '), StringComparer.OrdinalIgnoreCase)))
+            {
                 issues.Add(new ManifestIssue(relative, "device-name", "reserved device name in path"));
+                continue; // reading it through an ordinary path would hit the device, not the file
+            }
             if (relative.Contains(':')) issues.Add(new ManifestIssue(relative, "alternate-stream", "alternate data streams are rejected"));
-            if (file.Attributes.HasFlag(FileAttributes.ReparsePoint)) issues.Add(new ManifestIssue(relative, "reparse-point", "symlinks/junctions/hardlinked reparse points are rejected"));
-            if (!seenLower.Add(relative)) issues.Add(new ManifestIssue(relative, "case-duplicate", "path duplicates another entry except for case"));
-            if (file.Length > MaxFileBytes) issues.Add(new ManifestIssue(relative, "too-large", $"{file.Length} bytes exceeds the {MaxFileBytes} limit"));
-            total += file.Length;
+            try
+            {
+                if (file.Attributes.HasFlag(FileAttributes.ReparsePoint)) issues.Add(new ManifestIssue(relative, "reparse-point", "symlinks/junctions/hardlinked reparse points are rejected"));
+                if (!seenLower.Add(relative)) issues.Add(new ManifestIssue(relative, "case-duplicate", "path duplicates another entry except for case"));
+                if (file.Length > MaxFileBytes) issues.Add(new ManifestIssue(relative, "too-large", $"{file.Length} bytes exceeds the {MaxFileBytes} limit"));
+                total += file.Length;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { issues.Add(new ManifestIssue(relative, "io", e.Message)); }
         }
         if (total > MaxTotalBytes) issues.Add(new ManifestIssue("$", "too-large", $"total {total} bytes exceeds the {MaxTotalBytes} limit"));
         return issues;
