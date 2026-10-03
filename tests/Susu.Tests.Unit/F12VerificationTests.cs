@@ -242,7 +242,7 @@ public class F12VerificationTests
             using var doc = JsonDocument.Parse(bodies[0].Body);
             Assert.Equal(recorded, Convert.FromBase64String(doc.RootElement.GetProperty("contents")[0].GetProperty("parts")[1].GetProperty("inlineData").GetProperty("data").GetString()!));
         }
-        else Assert.Contains(Encoding.Latin1.GetString(recorded), Encoding.Latin1.GetString(bodies[0].Body));
+        else Assert.True(bodies[0].Body.AsSpan().IndexOf(recorded.AsSpan()) >= 0, "the multipart body does not carry the recorder's exact WAV bytes"); // bytes, not a culture-sensitive string search over NULs and Latin-1 letters
         Assert.DoesNotContain(ApiKey, Encoding.UTF8.GetString(bodies[0].Body));
         Assert.False(File.Exists(recordedPath)); // the job released the recording
         await rig.AssertNoFilesLeftAsync();
